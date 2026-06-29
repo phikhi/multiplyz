@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
+import { BRAND_NAME } from "@/config/brand";
+import { LOCALE, strings } from "@/strings";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "multiplyz",
-  description: "Jeu de maths ludique.",
+  title: BRAND_NAME,
+  description: strings.meta.description,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr">
+    <html lang={LOCALE}>
       <body>{children}</body>
     </html>
   );
