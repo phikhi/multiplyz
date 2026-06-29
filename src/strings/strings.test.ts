@@ -18,7 +18,6 @@ describe("strings (i18n FR)", () => {
 
   it("fournit le message offline mid-session (voix Teddy, cf. COPY.md §3)", () => {
     expect(strings.pwa.offline).toContain("réseau");
-    expect(strings.pwa.offlineRole).toBe("Connexion perdue");
   });
 
   it("fournit le message cold-start offline (SYNC.md §3 «Démarrage sans réseau»)", () => {

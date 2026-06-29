@@ -50,13 +50,12 @@ export function OfflineBanner() {
    * Capture l'état réseau au premier rendu côté client.
    * Distingue cold-start (offline depuis le début) de mid-session (perte en cours).
    * Valeur par défaut SSR = true (évite le mismatch — le client corrige à l'hydratation).
-   * c8 ignore : branche SSR `typeof window === "undefined"` non émulable par jsdom.
    */
-  /* c8 ignore start */
-  const [startedOnline] = useState<boolean>(() =>
-    typeof window !== "undefined" ? navigator.onLine : true,
-  );
-  /* c8 ignore stop */
+  const [startedOnline] = useState<boolean>(() => {
+    /* c8 ignore next 2 — branche SSR (`window` indéfini) non émulable par jsdom */
+    if (typeof window === "undefined") return true;
+    return navigator.onLine;
+  });
 
   const message = isOnline
     ? ""
