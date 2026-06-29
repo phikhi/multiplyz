@@ -15,4 +15,9 @@ describe("strings (i18n FR)", () => {
     expect(strings.app.booting).toBe("L'application démarre.");
     expect(strings.meta.description).toContain("Teddy");
   });
+
+  it("fournit le message offline (voix Teddy, cf. COPY.md §3)", () => {
+    expect(strings.pwa.offline).toContain("réseau");
+    expect(strings.pwa.offlineRole).toBe("Connexion perdue");
+  });
 });

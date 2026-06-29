@@ -14,6 +14,15 @@ export const fr = {
     /** Écran de démarrage (placeholder — UI réelle en #11). */
     booting: "L'application démarre.",
   },
+  pwa: {
+    /**
+     * Message offline — voix de Teddy (cf. COPY.md §3 «Hors-ligne»).
+     * Posture : douce, pas de panique, promesse de reprise.
+     */
+    offline: "Oups, plus de réseau — on reprend dès que ça revient 🌐",
+    /** Label aria de la région de statut offline (accessible, registre neutre). */
+    offlineRole: "Connexion perdue",
+  },
 } as const;
 
 export type Strings = typeof fr;

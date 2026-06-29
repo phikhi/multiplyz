@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { BRAND_NAME } from "@/config/brand";
 import { LOCALE, strings } from "@/strings";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { Baloo_2, Nunito } from "next/font/google";
 import "./globals.css";
 
@@ -32,7 +34,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       className={`${baloo2.variable} ${nunito.variable}`}
       suppressHydrationWarning
     >
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* PWA : bannière douce si coupure réseau (cf. SYNC.md §3, strings.pwa.offline) */}
+        <OfflineBanner />
+        {/* PWA : enregistrement du service worker custom (cf. public/sw.js) */}
+        <ServiceWorkerRegistration />
+      </body>
     </html>
   );
 }
