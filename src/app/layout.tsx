@@ -7,16 +7,16 @@ import "./globals.css";
 const baloo2 = Baloo_2({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  // Override --font-family-display (défini dans tokens.css) avec l'URL optimisée.
-  variable: "--font-family-display",
+  // Fournit --font-next-display, référencé par --font-family-display via globals.css.
+  variable: "--font-next-display",
   display: "swap",
 });
 
 const nunito = Nunito({
   subsets: ["latin"],
   weight: ["400", "600", "700"],
-  // Override --font-family-body (défini dans tokens.css) avec l'URL optimisée.
-  variable: "--font-family-body",
+  // Fournit --font-next-body, référencé par --font-family-body via globals.css.
+  variable: "--font-next-body",
   display: "swap",
 });
 

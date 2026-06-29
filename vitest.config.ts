@@ -19,12 +19,8 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.{test,spec}.{ts,tsx}",
+        // layout.tsx = boilerplate framework (rend <html>/<body>, non testable via RTL).
         "src/app/layout.tsx",
-        // Page démo de scaffold (#11) et son composant de bascule :
-        // visuels purs validés par Playwright (captures light/dark).
-        // Seront remplacés par les écrans produit dans les epics suivants.
-        "src/app/page.tsx",
-        "src/components/ThemeToggle.tsx",
       ],
       // Gate armé : 100 % sur le périmètre couvert. La logique critique
       // (moteur #3 / éco / serveur) reste à 100 % ; l'UI pourra ajuster

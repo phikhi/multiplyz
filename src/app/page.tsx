@@ -12,6 +12,9 @@ const COPY = {
   },
 } as const;
 
+// Échantillons de polices — centralisé en #14 (i18n).
+const FONT_SAMPLE = { display: "Baloo 2", body: "Nunito" } as const;
+
 // Couleurs à afficher comme swatches (utilise var(--…) de tokens.css)
 const COLOR_SWATCHES = [
   { label: "bg-primary", cssVar: "--color-bg-primary" },
@@ -65,14 +68,10 @@ const FONT_SIZE_TOKENS = [
 
 export default function DesignTokensPage() {
   return (
+    // Classes @theme : bg-bg, text-text, font-body prouvent le branchement Tailwind v4.
     <div
-      style={{
-        backgroundColor: "var(--color-bg-primary)",
-        color: "var(--color-text-primary)",
-        fontFamily: "var(--font-family-body)",
-        minHeight: "100dvh",
-        padding: "var(--space-6)",
-      }}
+      className="bg-bg text-text font-body"
+      style={{ minHeight: "100dvh", padding: "var(--space-6)" }}
     >
       {/* Header */}
       <header
@@ -87,22 +86,18 @@ export default function DesignTokensPage() {
       >
         <div>
           <h1
+            className="font-display text-primary"
             style={{
-              fontFamily: "var(--font-family-display)",
               fontSize: "var(--font-size-2xl)",
               fontWeight: "var(--font-weight-bold)",
               margin: 0,
-              color: "var(--color-accent-primary)",
             }}
           >
             {COPY.title}
           </h1>
           <p
-            style={{
-              fontSize: "var(--font-size-sm)",
-              color: "var(--color-text-secondary)",
-              margin: "var(--space-1) 0 0",
-            }}
+            className="text-text-muted"
+            style={{ fontSize: "var(--font-size-sm)", margin: "var(--space-1) 0 0" }}
           >
             {COPY.subtitle}
           </p>
@@ -123,12 +118,11 @@ export default function DesignTokensPage() {
         <section aria-labelledby="section-colors">
           <h2
             id="section-colors"
+            className="font-display text-text"
             style={{
-              fontFamily: "var(--font-family-display)",
               fontSize: "var(--font-size-lg)",
               fontWeight: "var(--font-weight-semibold)",
               marginBottom: "var(--space-4)",
-              color: "var(--color-text-primary)",
             }}
           >
             {COPY.sections.colors}
@@ -136,15 +130,15 @@ export default function DesignTokensPage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(9rem, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(var(--space-10), 1fr))",
               gap: "var(--space-3)",
             }}
           >
             {COLOR_SWATCHES.map(({ label, cssVar }) => (
               <div
                 key={cssVar}
+                className="rounded-md"
                 style={{
-                  borderRadius: "var(--border-radius-md)",
                   overflow: "hidden",
                   border: "1px solid var(--color-border-primary)",
                   boxShadow: "var(--shadow-sm)",
@@ -152,18 +146,13 @@ export default function DesignTokensPage() {
               >
                 <div
                   aria-hidden="true"
-                  style={{
-                    height: "var(--space-8)",
-                    backgroundColor: `var(${cssVar})`,
-                  }}
+                  style={{ height: "var(--space-8)", backgroundColor: `var(${cssVar})` }}
                 />
                 <div
+                  className="bg-surface font-mono text-text-muted"
                   style={{
                     padding: "var(--space-2) var(--space-3)",
-                    backgroundColor: "var(--color-bg-secondary)",
                     fontSize: "var(--font-size-xs)",
-                    color: "var(--color-text-secondary)",
-                    fontFamily: "var(--font-family-mono)",
                   }}
                 >
                   {label}
@@ -177,37 +166,25 @@ export default function DesignTokensPage() {
         <section aria-labelledby="section-spacing">
           <h2
             id="section-spacing"
+            className="font-display text-text"
             style={{
-              fontFamily: "var(--font-family-display)",
               fontSize: "var(--font-size-lg)",
               fontWeight: "var(--font-weight-semibold)",
               marginBottom: "var(--space-4)",
-              color: "var(--color-text-primary)",
             }}
           >
             {COPY.sections.spacing}
           </h2>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-3)",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
             {SPACE_TOKENS.map((token) => (
               <div
                 key={token}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "var(--space-4)",
-                }}
+                style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}
               >
                 <span
+                  className="font-mono text-text-muted"
                   style={{
-                    fontFamily: "var(--font-family-mono)",
                     fontSize: "var(--font-size-xs)",
-                    color: "var(--color-text-secondary)",
                     width: "var(--space-8)",
                     flexShrink: 0,
                   }}
@@ -216,10 +193,10 @@ export default function DesignTokensPage() {
                 </span>
                 <div
                   aria-hidden="true"
+                  className="bg-primary"
                   style={{
                     height: "var(--space-4)",
                     width: `var(${token})`,
-                    backgroundColor: "var(--color-accent-primary)",
                     borderRadius: "var(--border-radius-sm)",
                   }}
                 />
@@ -232,23 +209,16 @@ export default function DesignTokensPage() {
         <section aria-labelledby="section-typography">
           <h2
             id="section-typography"
+            className="font-display text-text"
             style={{
-              fontFamily: "var(--font-family-display)",
               fontSize: "var(--font-size-lg)",
               fontWeight: "var(--font-weight-semibold)",
               marginBottom: "var(--space-4)",
-              color: "var(--color-text-primary)",
             }}
           >
             {COPY.sections.typography}
           </h2>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-4)",
-            }}
-          >
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
             {FONT_SIZE_TOKENS.map(({ label, cssVar }) => (
               <div
                 key={cssVar}
@@ -260,10 +230,9 @@ export default function DesignTokensPage() {
                 }}
               >
                 <span
+                  className="font-mono text-text-muted"
                   style={{
-                    fontFamily: "var(--font-family-mono)",
                     fontSize: "var(--font-size-xs)",
-                    color: "var(--color-text-secondary)",
                     width: "var(--space-7)",
                     flexShrink: 0,
                   }}
@@ -271,25 +240,20 @@ export default function DesignTokensPage() {
                   {label}
                 </span>
                 <span
+                  className="font-display text-text"
                   style={{
-                    fontFamily: "var(--font-family-display)",
                     fontSize: `var(${cssVar})`,
                     fontWeight: "var(--font-weight-bold)",
-                    color: "var(--color-text-primary)",
                     lineHeight: "var(--line-height-tight)",
                   }}
                 >
-                  Baloo 2
+                  {FONT_SAMPLE.display}
                 </span>
                 <span
-                  style={{
-                    fontFamily: "var(--font-family-body)",
-                    fontSize: `var(${cssVar})`,
-                    color: "var(--color-text-secondary)",
-                    lineHeight: "var(--line-height-tight)",
-                  }}
+                  className="font-body text-text-muted"
+                  style={{ fontSize: `var(${cssVar})`, lineHeight: "var(--line-height-tight)" }}
                 >
-                  Nunito
+                  {FONT_SAMPLE.body}
                 </span>
               </div>
             ))}
@@ -300,12 +264,11 @@ export default function DesignTokensPage() {
         <section aria-labelledby="section-radius">
           <h2
             id="section-radius"
+            className="font-display text-text"
             style={{
-              fontFamily: "var(--font-family-display)",
               fontSize: "var(--font-size-lg)",
               fontWeight: "var(--font-weight-semibold)",
               marginBottom: "var(--space-4)",
-              color: "var(--color-text-primary)",
             }}
           >
             {COPY.sections.radius}
@@ -330,20 +293,17 @@ export default function DesignTokensPage() {
               >
                 <div
                   aria-hidden="true"
+                  className="bg-primary"
                   style={{
                     width: "var(--space-8)",
                     height: "var(--space-8)",
-                    backgroundColor: "var(--color-accent-primary)",
                     borderRadius: `var(${cssVar})`,
                     opacity: "0.85",
                   }}
                 />
                 <span
-                  style={{
-                    fontFamily: "var(--font-family-mono)",
-                    fontSize: "var(--font-size-xs)",
-                    color: "var(--color-text-secondary)",
-                  }}
+                  className="font-mono text-text-muted"
+                  style={{ fontSize: "var(--font-size-xs)" }}
                 >
                   {label}
                 </span>

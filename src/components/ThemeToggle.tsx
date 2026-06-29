@@ -9,10 +9,10 @@ const LABEL_LIGHT = "Mode clair";
 const LABEL_DARK = "Mode sombre";
 const LABEL_TOGGLE = "Basculer le thème";
 
-// Lazy initializer : s'exécute côté client seulement (pas de window côté serveur).
-function getInitialTheme(): Theme {
+// Exporté pour les tests unitaires — logique pure, sans dépendance React.
+export function getInitialTheme(): Theme {
   if (typeof window === "undefined") return "light";
-  const stored = document.documentElement.dataset.theme as Theme | undefined;
+  const stored = document.documentElement.dataset.theme;
   if (stored === "light" || stored === "dark") return stored;
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
@@ -31,6 +31,7 @@ export function ThemeToggle() {
       aria-label={LABEL_TOGGLE}
       aria-pressed={theme === "dark"}
       onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+      className="mz-theme-toggle"
       suppressHydrationWarning
       style={{
         minWidth: "var(--tap-target-min)",

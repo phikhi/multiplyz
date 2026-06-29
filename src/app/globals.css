@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "../../tokens.css";
 
+/* Fait pointer les tokens polices vers les variables next/font (CLS + métriques fallback).
+   Doit venir APRÈS @import tokens.css pour prendre le dessus dans la cascade (:root même spécificité). */
+:root {
+  --font-family-display: var(--font-next-display), system-ui, "Segoe UI", sans-serif;
+  --font-family-body: var(--font-next-body), system-ui, "Segoe UI", sans-serif;
+}
+
 /* Mapping Tailwind v4 @theme → aliases sur les variables tokens.css.
    @theme inline : les utilitaires référencent la var() directement (pas d'indirection).
    Source de vérité = tokens.css ; on ne répète AUCUNE valeur en dur. */
@@ -53,4 +60,16 @@ html,
 body {
   margin: 0;
   padding: 0;
+}
+
+body {
+  font-family: var(--font-family-body);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+}
+
+/* Focus-visible via tokens (a11y — pas de valeur en dur) */
+.mz-theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
