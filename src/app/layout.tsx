@@ -27,7 +27,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang={LOCALE} className={`${baloo2.variable} ${nunito.variable}`} suppressHydrationWarning>
+    <html
+      lang={LOCALE}
+      className={`${baloo2.variable} ${nunito.variable}`}
+      suppressHydrationWarning
+    >
       <body>{children}</body>
     </html>
   );
