@@ -15,4 +15,14 @@ describe("strings (i18n FR)", () => {
     expect(strings.app.booting).toBe("L'application démarre.");
     expect(strings.meta.description).toContain("Teddy");
   });
+
+  it("fournit le message offline mid-session (voix Teddy, cf. COPY.md §3)", () => {
+    expect(strings.pwa.offline).toContain("réseau");
+    expect(strings.pwa.offlineRole).toBe("Connexion perdue");
+  });
+
+  it("fournit le message cold-start offline (SYNC.md §3 «Démarrage sans réseau»)", () => {
+    expect(strings.pwa.coldStart).toContain("internet");
+    expect(strings.pwa.coldStart).toContain("jouer");
+  });
 });

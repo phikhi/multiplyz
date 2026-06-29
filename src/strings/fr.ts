@@ -14,6 +14,20 @@ export const fr = {
     /** Écran de démarrage (placeholder — UI réelle en #11). */
     booting: "L'application démarre.",
   },
+  pwa: {
+    /**
+     * Message perte de réseau MID-SESSION (cf. COPY.md §3, SYNC.md §3).
+     * Réseau coupé pendant la session — posture douce, reprise implicite.
+     */
+    offline: "Oups, plus de réseau — on reprend dès que ça revient 🌐",
+    /**
+     * Message COLD-START hors-ligne (cf. SYNC.md §3 «Démarrage sans réseau»).
+     * Démarrage alors que la connexion est déjà absente — invite à se connecter.
+     */
+    coldStart: "Connecte-toi à internet pour jouer 🌐",
+    /** Label aria de la région live (registre neutre, lu par les AT). */
+    offlineRole: "Connexion perdue",
+  },
 } as const;
 
 export type Strings = typeof fr;

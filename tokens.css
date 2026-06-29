@@ -38,6 +38,9 @@
   --color-status-warning:    #FFB020;
   --color-status-error:      #FF6B6B; /* corail doux, jamais agressif */
   --color-status-info:       #4DA3FF;
+  /* Texte sur fond warning (ambre clair dans les 2 thèmes) — valeur sombre fixe,
+     ne suit pas le thème. Assure le contraste AA (≥ 4.5:1) sur fond ambre. */
+  --color-on-warning:        #29243D;
 
   --color-surface-overlay:   rgba(41, 36, 61, 0.45);
 
