@@ -7,3 +7,10 @@ test-results/
 node_modules/
 pnpm-lock.yaml
 *.md
+
+# Hors scope #10 : design system (tranche 0, repris en #11)
+design-system.html
+tokens.css
+
+# Réécrit automatiquement par Next (next build)
+tsconfig.json

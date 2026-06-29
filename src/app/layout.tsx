@@ -6,9 +6,7 @@ export const metadata: Metadata = {
   description: "Jeu de maths ludique.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="fr">
       <body>{children}</body>
