@@ -69,10 +69,14 @@ describe("getDb", () => {
 });
 
 describe("runMigrations", () => {
-  it("applique le schéma et reste idempotente (2e run sans erreur)", () => {
-    const db = createDatabase(freshDbPath());
+  it("applique le schéma et reste idempotente sur une connexion ré-ouverte", () => {
+    const path = freshDbPath();
 
-    runMigrations(db);
+    // 1er "run" : nouvelle connexion → applique la migration.
+    runMigrations(createDatabase(path));
+    // 2e "run" : connexion ré-ouverte sur le même fichier (fidèle à 2 process
+    // `db:migrate` successifs) → no-op, pas d'erreur.
+    const db = createDatabase(path);
     expect(() => runMigrations(db)).not.toThrow();
 
     // Round-trip réel sur la table meta créée par la migration.

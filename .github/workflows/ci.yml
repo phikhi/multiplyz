@@ -23,6 +23,11 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test:coverage
       - run: pnpm build
+      - name: db:migrate idempotent (CLI bout-en-bout, 2x sur la même DB de test)
+        run: |
+          DB="${RUNNER_TEMP}/ci-migrate.sqlite"
+          DATABASE_PATH="$DB" pnpm db:migrate
+          DATABASE_PATH="$DB" pnpm db:migrate
 
   e2e:
     runs-on: ubuntu-latest

@@ -29,4 +29,15 @@ describe("GET /api/health", () => {
     expect(res.status).toBe(503);
     await expect(res.json()).resolves.toEqual({ ok: false });
   });
+
+  it("répond 503 { ok: false } quand la couche DB throw (injoignable / SQLITE_BUSY)", async () => {
+    get.mockImplementation(() => {
+      throw new Error("database is locked");
+    });
+
+    const res = GET();
+
+    expect(res.status).toBe(503);
+    await expect(res.json()).resolves.toEqual({ ok: false });
+  });
 });
