@@ -32,7 +32,8 @@
 | Reviewer **QA/Test** | test-automator | couverture, E2E, qualité des tests |
 | Reviewer **Game-design** | agent specs | cohérence ludique/pédago vs ENGINE/PRODUCT/MAP |
 | **Product Owner** | agent produit | valide **critères d'acceptation** + fidélité produit vs specs |
-| **Humain (toi)** | — | **autorité finale**, validation + **merge** |
+| **Humain (toi)** | — | **arbitre du drift** + autorité finale ; peut révoquer la délégation. Ne merge plus en routine (cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md)) |
+| **Agent orchestrateur** | — | **merge** (reviews scope+PO ✅ + CI verte + branche à jour) + **accepte les ADR dans le contrat** (ADR 0003) |
 
 → L'agent auteur demande review **aux rôles pertinents selon le scope** + **PO** systématique.
 
@@ -62,8 +63,8 @@
 PR ouverte → reviewers (scope + PO) commentent en inline
    ├─ changes requested → l'agent auteur corrige, re-push, re-demande review
    └─ boucle TANT QUE le DoD n'est pas atteint
-→ toutes reviews ✅ + checks CI ✅ → colonne "Human gate"
-→ TOI : validation finale → MERGE
+→ toutes reviews ✅ + checks CI ✅ → **l'agent orchestrateur merge** (squash + delete-branch), rebase la PR suivante, **rapporte** au proprio
+→ escalade au proprio **uniquement si drift** (cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md)) ou itérations > 5
 ```
 - **Anti-boucle infinie** : limite d'itérations (ex. **5**) → au-delà, **escalade à toi**.
 - Les reviewers commentent **sur la PR** (inline) ; l'auteur **résout** chaque commentaire.
@@ -139,8 +140,8 @@ Une story n'est **prenable** par un agent que si :
 
 ## 16. Garde-fous des agents (permissions & budget)
 
-- Les agents **ne peuvent pas** : merger, **force-push `main`**, modifier la branch protection, lire/écrire les secrets, sortir de leur **worktree/scope**.
-- **Merge = humain uniquement**.
+- Les agents **dev** ne peuvent pas : merger leur propre PR, **force-push `main`**, modifier la branch protection, lire/écrire les secrets, sortir de leur **worktree/scope**.
+- **Merge = agent orchestrateur** dès reviews scope+PO ✅ + CI verte + branche à jour (cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md)). **Jamais** force-push `main` / secrets / branch-protection. **Drift → proprio**. Le proprio peut reprendre la main / révoquer.
 - **Budget tokens** par story/epic ⚙️ → éviter l'emballement de la flotte ; escalade si dépassé.
 
 ## 17. Custom agents & skills à créer (tranche 0)
@@ -162,13 +163,13 @@ Une story n'est **prenable** par un agent que si :
 - **ADR** (`docs/adr/NNNN-titre.md`) : tout choix d'archi. Format court — **Contexte · Décision · Alternatives · Conséquences · Statut · Type · Liens**. Statuts : `proposed / accepted / superseded / rejected`. Type : `arch | data | deps | security | pedago | product`.
 - **Technical Design / RFC** (`docs/design/<id>.md`) : pour les epics/stories **`needs-design`** (complexes) — approche, alternatives, impacts, plan de test. **Avant** de coder. Revu par **architect-review** + reviewers du scope + **PO**.
 - **ADR obligatoire (gate)** si la décision : modifie une **spec contrat** (PLAN/ENGINE/STACK/AUTH/SYNC/MAP/ECONOMY/ART), le **modèle de données**, ajoute une **dépendance**, ou est **transverse**. Sinon non requis.
-- **Mineur vs majeur** :
-  - **Mineur** (local, réversible, pas de changement de contrat) → l'agent **`architect-review`** peut **accepter** en autonomie.
-  - **Majeur** (contrat / data / dépendance / sécurité / coût / transverse) → reste `proposed` jusqu'à **ton sign-off** (humain).
+- **Dans le contrat vs drift** (cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md)) :
+  - **Dans le contrat** (HOW dans le WHAT établi — archi / data / dépendance / refacto / config) → l'agent orchestrateur **accepte** en autonomie (mineurs **et** majeurs) + met à jour la spec.
+  - **Drift** (touche/contredit décisions verrouillées PLAN / pédagogie ENGINE / éco / sécurité / scope) → reste `proposed` jusqu'au **sign-off propriétaire**.
 - **La review SIGNALE, l'ADR DÉCIDE** : un reviewer qui détecte un sujet d'archi **n'arbitre pas dans la PR** → ouvre un ADR / issue `needs-design` (hors PR). La PR est **bloquée/splittée** si elle sort du design validé.
 - **Retro → décisions** : douleur récurrente / dette → propose un **ADR** ou un **epic de refacto**.
 - **Sync specs** : un ADR **accepté** → **met à jour la spec contrat** concernée + lien vers l'ADR. Les specs restent **canoniques** ; l'ADR garde le **pourquoi/historique** (`superseded` chaîne les décisions).
-- **Qui** : `architect-review` rédige/instruit ADR & designs ; `product-owner` pour le type produit ; `game-design` pour la pédagogie ; **toi = sign-off majeur**.
+- **Qui** : `architect-review` rédige/instruit ADR & designs ; `product-owner` pour le type produit ; `game-design` pour la pédagogie ; l'**agent orchestrateur accepte dans le contrat** ; **toi = sign-off drift uniquement** (ADR 0003).
 
 ## 19. Skills (playbooks) des agents
 
@@ -198,7 +199,7 @@ Les agents utilisent les **skills installés comme playbooks canoniques** (ne pa
 | Couverture | **100 % logique critique** + pragmatique UI |
 | Orchestration | **Claude Code natif** (Agent + Workflow + hooks) + GitHub Actions |
 | Reviewers | Backend · Frontend+A11y · Security · QA/Test · Game-design · **Product Owner** |
-| Merge | **Gate humain** (toi) après reviews + checks verts |
+| Merge | **Agent orchestrateur** après reviews scope+PO ✅ + checks verts + branche à jour ; proprio = drift/révocation (ADR 0003) |
 | Anti-drift | Critères d'acceptation + required checks + scope-guard + PO |
 | DoR | Story prenable seulement si critères/scope/deps/estim. OK |
 | Auto-apprentissage | **`LEARNINGS.md`** versionné + **promotion** en règles dures |
@@ -210,7 +211,7 @@ Les agents utilisent les **skills installés comme playbooks canoniques** (ne pa
 | Décisions | **ADR** (`docs/adr/`) + **Technical Design** (`docs/design/`) pour `needs-design` |
 | ADR obligatoire | si contrat (specs)/data/deps/transverse |
 | Review vs décision | review **signale**, **ADR décide** (hors PR) |
-| Autorité ADR | architecte = **mineurs** ; **toi = majeurs** ; ADR accepté → spec mise à jour |
+| Autorité ADR | agent accepte **dans le contrat** (mineurs+majeurs) ; **proprio = drift** ; ADR accepté → spec mise à jour (ADR 0003) |
 | Playbooks | Skills **Next** (`next-dev-loop`, `next-cache-components-*`) ; `expo:*`/`stripe:*` **exclus** |
 | Vérif runtime | **`next-dev-loop` obligatoire** avant PR |
 | Cache Components | **différé** à une story perf dédiée |

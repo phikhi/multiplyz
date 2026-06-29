@@ -42,11 +42,11 @@ Next.js (App Router, **runtime Node**, pas edge) + React + TS + **Tailwind v4** 
 - **Epic → Story** sur **GitHub** (Issues + Project). Chaque story = **critères d'acceptation** + DoD.
 - Dev en **git worktree** isolé. **Toute tâche se termine par une PR** documentée + **captures Playwright**.
 - **DoD** : lint + tests (**100 % logique critique**, pragmatique UI) + type-check/build + critères d'acceptation + **reviews agents approuvées** (Backend · Frontend+A11y · Security · QA/Test · Game-design · **Product Owner**).
-- **Boucle de review** jusqu'au DoD, puis **gate humain (le proprio) avant merge**.
+- **Boucle de review** jusqu'au DoD, puis **l'agent orchestrateur merge** (reviews scope+PO ✅ + CI verte + branche à jour) ; le proprio = **arbitre du drift**, peut révoquer/reprendre la main (cf. `docs/adr/0003-agent-merge-et-accepte-adr.md`).
 - **Gates en dur, ne jamais contourner** : GitHub Actions required checks + branch protection + CODEOWNERS + hooks `settings.json` (pre-PR + scope-guard).
 - **Anti-drift** : les specs sont le **contrat** ; tout écart = rejeté en review. Rester dans le scope de la story.
 - **Avant de coder** : lire **`LEARNINGS.md`** (leçons accumulées) + les specs du scope. **Découverte hors scope** → issue `discovered` (jamais absorbée). **Fin de story** → rétro → `LEARNINGS.md`.
-- **Décisions d'archi** : si ça touche une **spec contrat / data / dépendance / transverse** → **ADR** (`docs/adr/`) + design doc si `needs-design`. La review **signale**, l'**ADR décide** (hors PR). Mineur = architecte autonome ; **majeur = ton sign-off**. ADR accepté → **la spec est mise à jour** (canonique).
+- **Décisions d'archi** : si ça touche une **spec contrat / data / dépendance / transverse** → **ADR** (`docs/adr/`) + design doc si `needs-design`. La review **signale**, l'**ADR décide** (hors PR). **Dans le contrat** (HOW dans le WHAT) = l'agent orchestrateur accepte en autonomie (mineurs+majeurs) ; **drift** (décisions verrouillées PLAN / pédagogie / éco / sécurité / scope) = **ton sign-off**. ADR accepté → **la spec est mise à jour** (canonique).
 - **Skills = playbooks** (ne pas improviser) : **`next-dev-loop` obligatoire avant PR** (vérif runtime) ; `next-cache-components-*` pour la perf (différé) ; `frontend-design`/`design-tokens` pour l'UI ; `code-review`/`design-review`/`security-review` en review ; `brief-to-tasks` pour le découpage. **Exclure `expo:*` (natif) et `stripe:*` (pas de paiement).**
 
 ## Ordre de build (cf. `PLAN.md`)
