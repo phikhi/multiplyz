@@ -2,27 +2,32 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { DB_BUSY_TIMEOUT_MS, resolveDatabasePath } from "./config";
+import { getDatabaseConfig } from "./config";
 import * as schema from "./schema";
 
 /** Type de la connexion Drizzle applicative (source de vérité serveur). */
 export type AppDatabase = ReturnType<typeof createDatabase>;
 
 /**
- * Ouvre une connexion SQLite via better-sqlite3 et applique les PRAGMA requis :
- * - `journal_mode = WAL` : lectures concurrentes pendant une écriture
+ * Ouvre une connexion SQLite via better-sqlite3 et applique les PRAGMA requis,
+ * dérivés de la config centrale (ADR 0002) :
+ * - `journal_mode` (WAL) : lectures concurrentes pendant une écriture
  *   (daemon web + worker IA partagent le fichier — cf. STACK.md).
- * - `busy_timeout` : attendre au lieu d'échouer sur `SQLITE_BUSY` (⚙️ config).
+ * - `busy_timeout` (`SQLITE_BUSY_TIMEOUT_MS`) : attendre au lieu d'échouer sur
+ *   `SQLITE_BUSY`.
  *
- * `:memory:` sert aux tests (base éphémère, pas de fichier ni de dossier).
+ * `databasePath` surcharge uniquement le chemin (tests). `:memory:` = base
+ * éphémère (pas de fichier ni de dossier).
  */
-export function createDatabase(databasePath: string = resolveDatabasePath()) {
-  if (databasePath !== ":memory:") {
-    mkdirSync(dirname(databasePath), { recursive: true });
+export function createDatabase(databasePath?: string) {
+  const { path, busyTimeoutMs, journalMode } = getDatabaseConfig();
+  const file = databasePath ?? path;
+  if (file !== ":memory:") {
+    mkdirSync(dirname(file), { recursive: true });
   }
-  const sqlite = new Database(databasePath);
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma(`busy_timeout = ${DB_BUSY_TIMEOUT_MS}`);
+  const sqlite = new Database(file);
+  sqlite.pragma(`journal_mode = ${journalMode}`);
+  sqlite.pragma(`busy_timeout = ${busyTimeoutMs}`);
   return drizzle(sqlite, { schema });
 }
 
