@@ -34,7 +34,7 @@ Ajouter un profil enfant depuis l'accueil (modèle DB déjà compatible). Chaque
 
 ### 1.6 Multi-appareils / réseau
 - **Réseau requis pour jouer** (online-first ; pas d'offline-first). Cf. [SYNC.md](./SYNC.md).
-- Reprise sur n'importe quel appareil : aller à l'URL → **nom + PIN** (état serveur Turso fait foi). Cf. [AUTH.md](./AUTH.md).
+- Reprise sur n'importe quel appareil : aller à l'URL → **nom + PIN** (état serveur SQLite fait foi). Cf. [AUTH.md](./AUTH.md).
 - Coupure réseau en partie → message doux + reprise au retour (retry court). Progression **monotone** (jamais de régression).
 
 ---
