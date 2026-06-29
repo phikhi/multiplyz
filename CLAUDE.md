@@ -52,7 +52,7 @@ Next.js (App Router, **runtime Node**, pas edge) + React + TS + **Tailwind v4** 
 1. scaffold → 2. auth-lite → 3. **moteur math** (cœur, valider en 1er) → 4. étayages visuels → 5. couche jeu/carte → 6. pipeline mondes IA → 7. espace parent → 8. PWA/responsive.
 
 ## Build / run
-- **À compléter après le scaffold.** Prévu : `npm run dev`, `npm run build`, migrations Drizzle, worker daemon (jobs de génération).
+- **À compléter après le scaffold.** Prévu : `pnpm dev`, `pnpm build`, migrations Drizzle, worker daemon (jobs de génération).
 - Déploiement : Forge sur VPS OVH (daemon Node + Nginx + HTTPS) + worker daemon séparé.
 
 ## Rappels

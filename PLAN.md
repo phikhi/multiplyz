@@ -102,7 +102,7 @@ Comme les thèmes sont **générés en continu**, ce n'est pas un dossier figé 
 
 ## Ordre de construction (tranches verticales)
 
-1. **Scaffold** : Next.js + TS + Tailwind + PWA + connexion Turso + schéma Drizzle + migrations.
+1. **Scaffold** : Next.js + TS + Tailwind + PWA + SQLite local (better-sqlite3, WAL) + schéma Drizzle + migrations.
 2. **Auth-lite** : créer profil + PIN, login, cookie de session, sélecteur de profil.
 3. **Moteur math (sans habillage)** — *tranche la plus risquée et la plus précieuse, à valider en premier* : génération **infinie** de niveaux à partir des calculs (**4 compétences** : compléments à 10, addition, soustraction, multiplication) + modèle de maîtrise + révision espacée + **mesure du temps de réponse** + **échelle d'élargissement** (plus grands nombres) + un écran de jeu nu (boutons) + persistance (`attempts`).
 4. **Visuels d'étayage** par compétence (dix-cases, matrice, droite numérique).
@@ -114,7 +114,7 @@ Comme les thèmes sont **générés en continu**, ce n'est pas un dossier figé 
 
 ## Vérification
 
-- `npm run dev` → navigateur : créer un profil, jouer un niveau, **rater un calcul** → voir le visuel → refaire. Confirmer que la maîtrise **persiste dans Turso** (requête DB).
+- `pnpm dev` → navigateur : créer un profil, jouer un niveau, **rater un calcul** → voir le visuel → refaire. Confirmer que la maîtrise **persiste dans SQLite** (requête DB).
 - **Multi-appareils** : se reconnecter sur tél avec même profil+PIN → la progression reprend.
 - **Pédagogie** : rater volontairement des calculs précis (ex. 6×8) → vérifier qu'ils **reviennent plus tôt** aux niveaux suivants.
 - **Infini** : enchaîner beaucoup de niveaux → toujours un niveau suivant, jamais d'écran de fin ; vérifier que de **nouveaux mondes se génèrent** (buffer) et que le fallback s'active si la génération est coupée.
