@@ -4,6 +4,7 @@
 
 ## Frontend
 - **Next.js** (App Router) + **React** + **TypeScript**
+  - Version courante : **16.3.0-preview.5** (pinned preview — cf. [ADR 0004](./docs/adr/0004-next-16-3-preview.md)). À migrer vers 16.3.0 stable dès parution npm.
 - **Tailwind CSS v4** (`@theme`) branché sur **`tokens.css`** (variables CSS, light/dark)
 - Polices **Baloo 2** + **Nunito** via `next/font/google`
 - État client : **Zustand**
