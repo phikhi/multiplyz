@@ -52,7 +52,7 @@ export function OfflineBanner() {
    * Valeur par défaut SSR = true (évite le mismatch — le client corrige à l'hydratation).
    */
   const [startedOnline] = useState<boolean>(() =>
-    /* c8 ignore next — arche SSR uniquement (typeof window === "undefined") non émulable par jsdom */
+    /* c8 ignore next — branche SSR uniquement (typeof window === "undefined") non émulable par jsdom */
     typeof window !== "undefined" ? navigator.onLine : true,
   );
 
