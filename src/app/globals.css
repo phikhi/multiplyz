@@ -1,0 +1,13 @@
+/* Reset structurel minimal du scaffold (#10).
+   Le système visuel (Tailwind v4 + tokens.css) est branché en #11. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
