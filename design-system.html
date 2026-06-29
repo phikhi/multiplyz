@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>multiplyz — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Source de vérité des tokens -->
+<link rel="stylesheet" href="./tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    transition: background var(--duration-normal) var(--easing-default),
+                color var(--duration-normal) var(--easing-default);
+  }
+  h1, h2, h3 { font-family: var(--font-family-display); line-height: var(--line-height-tight); }
+  h1 { font-size: var(--font-size-3xl); margin: 0; }
+  h2 { font-size: var(--font-size-xl); margin: var(--space-8) 0 var(--space-4); }
+  h3 { font-size: var(--font-size-md); color: var(--color-text-secondary); margin: var(--space-5) 0 var(--space-3); }
+  .wrap { max-width: var(--max-width-page); margin: 0 auto; padding: var(--space-6) var(--space-5) var(--space-12); }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-4);
+    background: color-mix(in srgb, var(--color-bg-secondary) 88%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--color-border-primary);
+    padding: var(--space-4) var(--space-5);
+  }
+  header .sub { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+  .toggle { display: flex; gap: var(--space-2); }
+  .toggle button {
+    font-family: var(--font-family-body); font-weight: var(--font-weight-bold);
+    border: 1px solid var(--color-border-primary); background: var(--color-bg-secondary);
+    color: var(--color-text-primary); border-radius: var(--border-radius-full);
+    padding: var(--space-2) var(--space-4); cursor: pointer; font-size: var(--font-size-sm);
+  }
+  .toggle button[aria-pressed="true"] { background: var(--color-accent-primary); color: #fff; border-color: transparent; }
+
+  .grid { display: grid; gap: var(--space-4); }
+  .cols-swatch { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .cols-cards { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+  /* swatches */
+  .swatch { border: 1px solid var(--color-border-primary); border-radius: var(--border-radius-md); overflow: hidden; background: var(--card-bg); }
+  .swatch .chip { height: 64px; }
+  .swatch .meta { padding: var(--space-3); }
+  .swatch .name { font-weight: var(--font-weight-bold); font-size: var(--font-size-sm); }
+  .swatch .hex { color: var(--color-text-secondary); font-size: var(--font-size-xs); font-family: var(--font-family-mono); }
+
+  .card { background: var(--card-bg); border-radius: var(--card-radius); box-shadow: var(--card-shadow); padding: var(--space-5); }
+
+  /* type ramp */
+  .ramp > div { border-bottom: 1px dashed var(--color-border-primary); padding: var(--space-2) 0; }
+  .ramp small { color: var(--color-text-tertiary); font-family: var(--font-family-mono); font-size: var(--font-size-xs); }
+
+  /* spacing */
+  .space-row { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-2); }
+  .space-bar { height: 16px; background: var(--color-accent-primary); border-radius: var(--border-radius-sm); }
+  .space-row code { font-size: var(--font-size-xs); color: var(--color-text-secondary); width: 120px; }
+
+  /* radius / shadow boxes */
+  .box { background: var(--color-accent-secondary); width: 100%; height: 72px; display: grid; place-items: center; color: #06403c; font-weight: var(--font-weight-bold); }
+  .shadowbox { background: var(--card-bg); height: 88px; border-radius: var(--border-radius-lg); display: grid; place-items: center; color: var(--color-text-secondary); font-size: var(--font-size-sm); }
+
+  /* buttons */
+  .btn { font-family: var(--font-family-display); font-weight: var(--font-weight-bold); font-size: var(--font-size-md);
+    border: none; border-radius: var(--border-radius-lg); padding: var(--space-3) var(--space-6); cursor: pointer;
+    transition: transform var(--duration-fast) var(--easing-bounce), background var(--duration-fast); }
+  .btn:active { transform: scale(0.96); }
+  .btn-primary { background: var(--color-accent-primary); color: #fff; box-shadow: var(--shadow-md); }
+  .btn-primary:hover { background: var(--color-accent-primary-hover); }
+  .btn-secondary { background: var(--color-bg-secondary); color: var(--color-text-primary); border: 2px solid var(--color-border-primary); }
+  .btn-gold { background: var(--color-reward-gold); color: #5a4500; box-shadow: var(--shadow-md); }
+
+  /* answer buttons */
+  .answers { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-4); max-width: 360px; }
+  .answer { min-height: var(--answer-min-size); background: var(--answer-bg); border: 2px solid var(--answer-border);
+    color: var(--answer-text); border-radius: var(--answer-radius); font-family: var(--font-family-numeric);
+    font-size: var(--font-size-2xl); cursor: pointer; transition: transform var(--duration-fast) var(--easing-bounce); }
+  .answer:active { transform: scale(0.96); }
+  .answer.correct { background: var(--answer-correct-bg); border-color: var(--color-feedback-correct); }
+  .answer.retry { background: var(--answer-retry-bg); border-color: var(--color-feedback-retry); }
+
+  /* keypad */
+  .keypad { display: grid; grid-template-columns: repeat(3, 64px); gap: var(--space-2); }
+  .key { height: 64px; background: var(--keypad-key-bg); color: var(--keypad-key-text); border: none;
+    border-radius: var(--keypad-key-radius); font-family: var(--font-family-numeric); font-size: var(--font-size-xl); cursor: pointer; }
+  .key:active { transform: scale(0.94); }
+
+  /* topbar */
+  .topbar { display: inline-flex; gap: var(--space-4); background: var(--topbar-bg); border: 1px solid var(--color-border-primary);
+    border-radius: var(--border-radius-full); padding: var(--space-2) var(--space-5); box-shadow: var(--shadow-sm); font-weight: var(--font-weight-bold); }
+  .topbar .coin { color: var(--topbar-coin); }
+  .topbar .shard { color: var(--topbar-shard); }
+
+  /* stars */
+  .stars { font-size: var(--font-size-2xl); }
+  .stars .on { color: var(--color-star); }
+  .stars .off { color: var(--color-star-empty); }
+
+  /* feedback chips */
+  .chip-fb { display: inline-flex; align-items: center; gap: var(--space-2); border-radius: var(--border-radius-full);
+    padding: var(--space-2) var(--space-4); font-weight: var(--font-weight-bold); }
+  .chip-ok { background: var(--color-feedback-correct-bg); color: var(--color-feedback-correct); }
+  .chip-retry { background: var(--color-feedback-retry-bg); color: var(--color-feedback-retry); }
+
+  /* equation */
+  .equation { font-family: var(--font-family-numeric); font-size: var(--font-size-equation); font-weight: var(--font-weight-bold); text-align: center; }
+
+  /* mini mockup screen */
+  .screen { max-width: var(--max-width-play); margin: 0 auto; background: var(--world-bg-tint); color: var(--color-text-primary);
+    border: 1px solid var(--color-border-primary); border-radius: var(--border-radius-xl); padding: var(--space-6); box-shadow: var(--shadow-md); }
+  .progress { height: 14px; background: var(--color-bg-tertiary); border-radius: var(--border-radius-full); overflow: hidden; }
+  .progress > i { display: block; height: 100%; width: 45%; background: var(--world-accent, var(--color-accent-secondary)); }
+
+  .note { color: var(--color-text-secondary); font-size: var(--font-size-sm); margin-top: var(--space-2); }
+  footer { color: var(--color-text-tertiary); font-size: var(--font-size-sm); margin-top: var(--space-10); text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <strong style="font-family:var(--font-family-display);font-size:var(--font-size-lg)">multiplyz 🧸 — Design System</strong>
+    <div class="sub">Kawaii pastel lumineux + accents vifs · tokens.css</div>
+  </div>
+  <div class="toggle" id="themeToggle">
+    <button data-theme-btn="light" aria-pressed="true">☀️ Clair</button>
+    <button data-theme-btn="dark" aria-pressed="false">🌙 Sombre</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h1>Design System</h1>
+  <p class="note">Page vivante : elle lit directement <code>tokens.css</code>. Change le thème en haut à droite — tout s'adapte. Les hex affichés sont calculés en temps réel.</p>
+
+  <!-- COULEURS -->
+  <h2>🎨 Couleurs</h2>
+  <h3>Fonds & texte</h3>
+  <div class="grid cols-swatch" data-swatches="surface"></div>
+  <h3>Accents & actions</h3>
+  <div class="grid cols-swatch" data-swatches="accent"></div>
+  <h3>Statuts</h3>
+  <div class="grid cols-swatch" data-swatches="status"></div>
+  <h3>Jeu & récompenses</h3>
+  <div class="grid cols-swatch" data-swatches="game"></div>
+
+  <!-- TYPO -->
+  <h2>🔤 Typographie</h2>
+  <div class="card ramp">
+    <div style="font-family:var(--font-family-display);font-weight:700">Baloo 2 — titres & chiffres <small>--font-family-display</small></div>
+    <div style="font-family:var(--font-family-body)">Nunito — corps de texte, lisible pour un enfant. <small>--font-family-body</small></div>
+    <div style="font-size:var(--font-size-4xl)">Aa 64 <small>--font-size-4xl</small></div>
+    <div style="font-size:var(--font-size-2xl)">Aa 36 <small>--font-size-2xl</small></div>
+    <div style="font-size:var(--font-size-xl)">Aa 28 <small>--font-size-xl</small></div>
+    <div style="font-size:var(--font-size-lg)">Aa 22 <small>--font-size-lg</small></div>
+    <div style="font-size:var(--font-size-base)">Aa 16 — base <small>--font-size-base</small></div>
+    <div style="font-size:var(--font-size-sm)">Aa 14 <small>--font-size-sm</small></div>
+  </div>
+  <h3>Calcul affiché (gros chiffres)</h3>
+  <div class="card"><div class="equation">6 × 8 = ?</div><p class="note" style="text-align:center">--font-size-equation (72px) · --font-family-numeric</p></div>
+
+  <!-- ESPACEMENT -->
+  <h2>📏 Espacement (base 16)</h2>
+  <div class="card" id="spacing"></div>
+
+  <!-- RAYONS -->
+  <h2>⬜ Rayons</h2>
+  <div class="grid cols-cards">
+    <div class="box" style="border-radius:var(--border-radius-sm)">sm</div>
+    <div class="box" style="border-radius:var(--border-radius-md)">md</div>
+    <div class="box" style="border-radius:var(--border-radius-lg)">lg</div>
+    <div class="box" style="border-radius:var(--border-radius-xl)">xl</div>
+  </div>
+
+  <!-- OMBRES -->
+  <h2>🌥️ Ombres</h2>
+  <div class="grid cols-cards">
+    <div class="shadowbox" style="box-shadow:var(--shadow-sm)">shadow-sm</div>
+    <div class="shadowbox" style="box-shadow:var(--shadow-md)">shadow-md</div>
+    <div class="shadowbox" style="box-shadow:var(--shadow-lg)">shadow-lg</div>
+  </div>
+
+  <!-- COMPOSANTS -->
+  <h2>🧩 Composants</h2>
+
+  <h3>Boutons</h3>
+  <div style="display:flex;gap:var(--space-4);flex-wrap:wrap;align-items:center">
+    <button class="btn btn-primary">Continuer →</button>
+    <button class="btn btn-secondary">Passer</button>
+    <button class="btn btn-gold">Ouvrir l'œuf 🥚</button>
+  </div>
+
+  <h3>Boutons-réponses (QCM) + états</h3>
+  <div class="answers">
+    <button class="answer">42</button>
+    <button class="answer correct">48 ✓</button>
+    <button class="answer retry">54</button>
+    <button class="answer">36</button>
+  </div>
+  <p class="note">Correct = vert doux · « pas encore » = ambre. Toujours doublé d'une icône (daltonisme).</p>
+
+  <h3>Pavé numérique</h3>
+  <div class="keypad">
+    <button class="key">7</button><button class="key">8</button><button class="key">9</button>
+    <button class="key">4</button><button class="key">5</button><button class="key">6</button>
+    <button class="key">1</button><button class="key">2</button><button class="key">3</button>
+    <button class="key">⌫</button><button class="key">0</button><button class="key">✓</button>
+  </div>
+
+  <h3>Top bar & étoiles</h3>
+  <div style="display:flex;gap:var(--space-6);flex-wrap:wrap;align-items:center">
+    <div class="topbar"><span class="coin">🪙 120</span><span class="shard">✨ 40</span></div>
+    <div class="stars"><span class="on">★</span><span class="on">★</span><span class="off">★</span></div>
+  </div>
+
+  <h3>Feedback (voix de Teddy)</h3>
+  <div style="display:flex;gap:var(--space-4);flex-wrap:wrap">
+    <span class="chip-fb chip-ok">✓ Dans le mille !</span>
+    <span class="chip-fb chip-retry">↻ Presque ! On regarde…</span>
+  </div>
+
+  <!-- MOCKUP + PER-MONDE -->
+  <h2>🖼️ Mini-écran de jeu (+ démo per-monde)</h2>
+  <div style="margin-bottom:var(--space-4);display:flex;gap:var(--space-2);flex-wrap:wrap" id="worldToggle">
+    <button class="toggle-world btn btn-secondary" data-world="">Neutre</button>
+    <button class="toggle-world btn btn-secondary" data-world="ocean">🌊 Océan</button>
+    <button class="toggle-world btn btn-secondary" data-world="forest">🌳 Forêt</button>
+    <button class="toggle-world btn btn-secondary" data-world="magic">✨ Magie</button>
+  </div>
+  <div class="screen" id="mockup">
+    <div class="progress"><i></i></div>
+    <p class="note">niveau 4/10</p>
+    <div class="equation" style="margin:var(--space-5) 0">7 + 5 = ?</div>
+    <div class="answers" style="margin:0 auto">
+      <button class="answer">10</button>
+      <button class="answer">12</button>
+      <button class="answer">13</button>
+      <button class="answer">11</button>
+    </div>
+    <p class="note" style="text-align:center;margin-top:var(--space-4)">🧸 « On y arrive, équipe ! »</p>
+  </div>
+  <p class="note">La démo per-monde ne change que <code>--world-accent</code> / <code>--world-bg-tint</code> (barre de progression + fond). Les actions gardent le violet primaire pour la cohérence.</p>
+
+  <footer>multiplyz · styleguide vivant · édite <code>tokens.css</code> et recharge</footer>
+</div>
+
+<script>
+  // ---- Theme toggle ----
+  const root = document.documentElement;
+  const btns = document.querySelectorAll('[data-theme-btn]');
+  function setTheme(t){
+    root.setAttribute('data-theme', t);
+    btns.forEach(b => b.setAttribute('aria-pressed', b.dataset.themeBtn === t));
+    renderHex(); // hex changent avec le thème
+  }
+  btns.forEach(b => b.addEventListener('click', () => setTheme(b.dataset.themeBtn)));
+
+  // ---- Color swatches ----
+  const groups = {
+    surface: [
+      ['--color-bg-primary','Fond principal'],['--color-bg-secondary','Surface / carte'],
+      ['--color-bg-tertiary','Champ / well'],['--color-text-primary','Texte principal'],
+      ['--color-text-secondary','Texte secondaire'],['--color-text-tertiary','Texte tertiaire'],
+      ['--color-border-primary','Bordure'],['--color-border-focus','Focus'],
+    ],
+    accent: [
+      ['--color-accent-primary','Action (violet)'],['--color-accent-primary-hover','Action hover'],
+      ['--color-accent-primary-active','Action active'],['--color-accent-secondary','Turquoise'],
+      ['--color-text-link','Lien'],
+    ],
+    status: [
+      ['--color-status-success','Succès'],['--color-status-warning','Attention'],
+      ['--color-status-error','Erreur (douce)'],['--color-status-info','Info'],
+    ],
+    game: [
+      ['--color-reward-gold','Or (étoiles)'],['--color-coin','Pièce'],['--color-shard','Éclat'],
+      ['--color-reward-coral','Corail'],['--color-feedback-correct','Feedback ✓'],['--color-feedback-retry','Feedback ↻'],
+    ],
+  };
+  function makeSwatch(varName, label){
+    const el = document.createElement('div'); el.className = 'swatch';
+    el.innerHTML = `<div class="chip" style="background:var(${varName})"></div>
+      <div class="meta"><div class="name">${label}</div>
+      <div class="hex" data-var="${varName}"></div>
+      <div class="hex" style="opacity:.7">${varName}</div></div>`;
+    return el;
+  }
+  Object.entries(groups).forEach(([key, list]) => {
+    const host = document.querySelector(`[data-swatches="${key}"]`);
+    list.forEach(([v,l]) => host.appendChild(makeSwatch(v,l)));
+  });
+  function renderHex(){
+    document.querySelectorAll('.hex[data-var]').forEach(node => {
+      const val = getComputedStyle(root).getPropertyValue(node.dataset.var).trim();
+      node.textContent = val;
+    });
+  }
+
+  // ---- Spacing scale ----
+  const spacing = document.getElementById('spacing');
+  [['--space-1','4px'],['--space-2','8px'],['--space-3','12px'],['--space-4','16px'],
+   ['--space-5','24px'],['--space-6','32px'],['--space-7','48px'],['--space-8','64px'],
+   ['--space-9','96px'],['--space-10','128px']].forEach(([v,px]) => {
+    const row = document.createElement('div'); row.className = 'space-row';
+    row.innerHTML = `<code>${v} (${px})</code><div class="space-bar" style="width:var(${v})"></div>`;
+    spacing.appendChild(row);
+  });
+
+  // ---- Per-world demo ----
+  // un monde ne pose QUE --world-accent ; le tint dérive (color-mix) → theme-safe
+  const worldDefs = {
+    ocean:  { '--world-accent':'#2BB7E6' },
+    forest: { '--world-accent':'#5BBF73' },
+    magic:  { '--world-accent':'#B57BEF' },
+  };
+  const mockup = document.getElementById('mockup');
+  document.querySelectorAll('.toggle-world').forEach(b => b.addEventListener('click', () => {
+    mockup.removeAttribute('style');
+    const def = worldDefs[b.dataset.world];
+    if(def) Object.entries(def).forEach(([k,val]) => mockup.style.setProperty(k,val));
+  }));
+
+  renderHex();
+</script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+# Gate humain : toute PR requiert la review du propriétaire avant merge.
+# NB : les agents reviewers ne sont PAS des comptes GitHub → leur déclenchement
+# est orchestré (Claude lance les agents + poste les commentaires), pas via CODEOWNERS.
+* @phikhi

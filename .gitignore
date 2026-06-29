@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Production / build
+build/
+dist/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# SQLite (DB locale — jamais commitée)
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite-wal
+*.sqlite-shm
+/data/
+
+# Tests / coverage
+coverage/
+playwright-report/
+test-results/
+.playwright-mcp/
+
+# Assets générés (IA) — sur disque VPS, pas dans le repo
+/public/generated/
+/storage/
+
+# Artefacts locaux
+multiplyz-ds-*.png
+
+# Claude Code (local)
+.claude/settings.local.json
+
+# OS / éditeur
+.DS_Store
+*.log
+.idea/
+.vscode/

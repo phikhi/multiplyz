@@ -1,0 +1,279 @@
+/* =============================================================
+   multiplyz — Design tokens (source de vérité)
+   Philosophie : Kawaii pastel lumineux + accents vifs (cf. ART.md)
+   - Base pastel apaisante (concentration 15–20 min)
+   - Accents vifs réservés aux récompenses / actions / feedback +
+   - Action primaire = VIOLET (contraste fiable sur blanc)
+   - Erreur = corail doux (jamais effrayant pour un enfant)
+   Light + dark. Per-monde = contrat de variables en bas.
+   ============================================================= */
+
+:root {
+  /* ---------- COULEURS — fonds ---------- */
+  --color-bg-primary:        #FAF7FF; /* fond principal (lavande crème) */
+  --color-bg-secondary:      #FFFFFF; /* cartes / surfaces */
+  --color-bg-tertiary:       #F1ECFB; /* champs / wells */
+  --color-bg-inverse:        #29243D; /* fond inversé */
+
+  /* ---------- COULEURS — texte ---------- */
+  --color-text-primary:      #352F4D; /* texte principal (prune ardoise) */
+  --color-text-secondary:    #6C6588;
+  --color-text-tertiary:     #A39CBC; /* placeholder / désactivé */
+  --color-text-inverse:      #FFFFFF;
+  --color-text-link:         #5B39E0;
+
+  /* ---------- COULEURS — bordures ---------- */
+  --color-border-primary:    #E7E0F6;
+  --color-border-secondary:  #F1ECFB;
+  --color-border-focus:      #19C3B6;
+
+  /* ---------- COULEURS — accents (action) ---------- */
+  --color-accent-primary:        #7A5AF8; /* CTA (violet), texte blanc OK */
+  --color-accent-primary-hover:  #6A47F0;
+  --color-accent-primary-active: #5B39E0;
+  --color-accent-secondary:      #19C3B6; /* turquoise (highlights, focus) */
+
+  /* ---------- COULEURS — statuts (doux) ---------- */
+  --color-status-success:    #2FB457;
+  --color-status-warning:    #FFB020;
+  --color-status-error:      #FF6B6B; /* corail doux, jamais agressif */
+  --color-status-info:       #4DA3FF;
+
+  --color-surface-overlay:   rgba(41, 36, 61, 0.45);
+
+  /* ---------- COULEURS — jeu / récompenses ---------- */
+  --color-reward-gold:       #FFC93C; /* étoiles, pièces */
+  --color-reward-coral:      #FF6F61; /* cœurs, accents fun */
+  --color-coin:              #FFC93C;
+  --color-shard:             #19C3B6; /* éclats (cyan/turquoise) */
+  --color-star:              #FFC93C;
+  --color-star-empty:        #E7E0F6;
+
+  /* feedback en jeu (toujours doublé d'une icône → daltonisme) */
+  --color-feedback-correct:     #2FB457;
+  --color-feedback-correct-bg:  #E3F8EC;
+  --color-feedback-retry:       #FFB020; /* "pas encore" — jamais rouge */
+  --color-feedback-retry-bg:    #FFF4DE;
+
+  /* ---------- ESPACEMENT (base 16px, pas de 4px) ---------- */
+  --space-0:  0;
+  --space-1:  0.25rem; /*  4px */
+  --space-2:  0.5rem;  /*  8px */
+  --space-3:  0.75rem; /* 12px */
+  --space-4:  1rem;    /* 16px */
+  --space-5:  1.5rem;  /* 24px */
+  --space-6:  2rem;    /* 32px */
+  --space-7:  3rem;    /* 48px */
+  --space-8:  4rem;    /* 64px */
+  --space-9:  6rem;    /* 96px */
+  --space-10: 8rem;    /* 128px */
+  --space-11: 12rem;   /* 192px */
+  --space-12: 16rem;   /* 256px */
+
+  /* ---------- TYPOGRAPHIE ---------- */
+  --font-family-display: "Baloo 2", system-ui, "Segoe UI", sans-serif; /* titres + chiffres */
+  --font-family-body:    "Nunito", system-ui, "Segoe UI", sans-serif;  /* corps */
+  --font-family-numeric: "Baloo 2", system-ui, sans-serif;             /* calculs */
+  --font-family-mono:    ui-monospace, "SF Mono", monospace;
+
+  --font-size-xs:   0.75rem;  /* 12 */
+  --font-size-sm:   0.875rem; /* 14 */
+  --font-size-base: 1rem;     /* 16 */
+  --font-size-md:   1.125rem; /* 18 */
+  --font-size-lg:   1.375rem; /* 22 */
+  --font-size-xl:   1.75rem;  /* 28 */
+  --font-size-2xl:  2.25rem;  /* 36 */
+  --font-size-3xl:  3rem;     /* 48 */
+  --font-size-4xl:  4rem;     /* 64 */
+  --font-size-equation: 4.5rem; /* 72 — calcul affiché en grand */
+
+  --font-weight-normal:   400;
+  --font-weight-medium:   500;
+  --font-weight-semibold: 600;
+  --font-weight-bold:     700;
+
+  --line-height-tight:   1.15;
+  --line-height-normal:  1.5;
+  --line-height-relaxed: 1.7;
+
+  --letter-spacing-tight:  -0.01em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide:   0.04em;
+
+  /* ---------- LAYOUT ---------- */
+  --max-width-content: 42rem;  /* lecture confortable */
+  --max-width-wide:    64rem;
+  --max-width-page:    75rem;
+  --max-width-play:    34rem;  /* zone de jeu centrée (tablette portrait) */
+
+  --border-radius-sm:   0.625rem; /* 10 */
+  --border-radius-md:   1rem;     /* 16 */
+  --border-radius-lg:   1.5rem;   /* 24 — cartes, boutons */
+  --border-radius-xl:   2rem;     /* 32 */
+  --border-radius-full: 9999px;
+
+  /* ombres douces, légèrement teintées violet */
+  --shadow-sm:    0 1px 2px rgba(53, 47, 77, 0.06);
+  --shadow-md:    0 6px 16px rgba(122, 90, 248, 0.12);
+  --shadow-lg:    0 16px 40px rgba(122, 90, 248, 0.18);
+  --shadow-focus: 0 0 0 4px rgba(25, 195, 182, 0.40);
+
+  /* ---------- MOTION ---------- */
+  --duration-instant: 50ms;
+  --duration-fast:    150ms;
+  --duration-normal:  250ms;
+  --duration-slow:    400ms;
+  --duration-slower:  600ms;
+
+  --easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-in:      cubic-bezier(0.4, 0, 1, 1);
+  --easing-out:     cubic-bezier(0, 0, 0.2, 1);
+  --easing-bounce:  cubic-bezier(0.34, 1.56, 0.64, 1); /* "juice" enfant */
+
+  /* ---------- TOKENS COMPOSANTS ---------- */
+  /* bouton-réponse (QCM) */
+  --answer-bg:          var(--color-bg-secondary);
+  --answer-border:      var(--color-border-primary);
+  --answer-text:        var(--color-text-primary);
+  --answer-radius:      var(--border-radius-lg);
+  --answer-min-size:    4.5rem; /* 72px — grande cible tactile */
+  --answer-correct-bg:  var(--color-feedback-correct-bg);
+  --answer-retry-bg:    var(--color-feedback-retry-bg);
+
+  /* pavé numérique */
+  --keypad-key-bg:      var(--color-bg-tertiary);
+  --keypad-key-text:    var(--color-text-primary);
+  --keypad-key-radius:  var(--border-radius-md);
+
+  /* carte / surface générique */
+  --card-bg:      var(--color-bg-secondary);
+  --card-radius:  var(--border-radius-lg);
+  --card-shadow:  var(--shadow-md);
+
+  /* top bar (pièces / éclats) */
+  --topbar-bg:     var(--color-bg-secondary);
+  --topbar-coin:   var(--color-coin);
+  --topbar-shard:  var(--color-shard);
+
+  /* cible tactile mini (a11y) */
+  --tap-target-min: 2.75rem; /* 44px */
+
+  /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
+     Chaque monde généré pose ces 3 variables (via [data-world] ou
+     style inline). Défaut = neutre. Le reste du système ne change pas. */
+  --world-accent:   var(--color-accent-secondary);
+  /* tint = wash translucide de l'accent SUR la surface du thème courant →
+     reste lisible en light ET dark. Un monde ne pose que --world-accent. */
+  --world-bg-tint:  color-mix(in srgb, var(--world-accent) 10%, var(--color-bg-secondary));
+  --world-surface:  var(--color-bg-secondary);
+}
+
+/* =============================================================
+   DARK MODE — plum profond chaud, contraste adouci (pas de noir pur)
+   ============================================================= */
+[data-theme="dark"] {
+  --color-bg-primary:        #1C1830;
+  --color-bg-secondary:      #272240;
+  --color-bg-tertiary:       #322C4E;
+  --color-bg-inverse:        #FAF7FF;
+
+  --color-text-primary:      #ECE8F7; /* off-white, pas blanc pur */
+  --color-text-secondary:    #B5AED0;
+  --color-text-tertiary:     #837C9E;
+  --color-text-inverse:      #29243D;
+  --color-text-link:         #B7A6FF;
+
+  --color-border-primary:    #3A3458;
+  --color-border-secondary:  #2E2948;
+  --color-border-focus:      #3FD9CC;
+
+  --color-accent-primary:        #9B82FF;
+  --color-accent-primary-hover:  #AD97FF;
+  --color-accent-primary-active: #8B6FF5;
+  --color-accent-secondary:      #3FD9CC;
+
+  --color-status-success:    #4ECB73;
+  --color-status-warning:    #FFC04D;
+  --color-status-error:      #FF8A8A;
+  --color-status-info:       #6FB4FF;
+
+  --color-surface-overlay:   rgba(8, 6, 16, 0.60);
+
+  --color-reward-gold:       #FFD45E;
+  --color-reward-coral:      #FF8576;
+  --color-coin:              #FFD45E;
+  --color-shard:             #3FD9CC;
+  --color-star:              #FFD45E;
+  --color-star-empty:        #3A3458;
+
+  --color-feedback-correct:     #4ECB73;
+  --color-feedback-correct-bg:  #1E3B2A;
+  --color-feedback-retry:       #FFC04D;
+  --color-feedback-retry-bg:    #3A3018;
+
+  /* ombres dark : noir transparent, pas la teinte violette claire */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md:    0 6px 16px rgba(0, 0, 0, 0.40);
+  --shadow-lg:    0 16px 40px rgba(0, 0, 0, 0.50);
+  --shadow-focus: 0 0 0 4px rgba(63, 217, 204, 0.45);
+}
+
+/* Préférence système, sauf si l'utilisateur a explicitement choisi "light" */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg-primary:        #1C1830;
+    --color-bg-secondary:      #272240;
+    --color-bg-tertiary:       #322C4E;
+    --color-bg-inverse:        #FAF7FF;
+
+    --color-text-primary:      #ECE8F7;
+    --color-text-secondary:    #B5AED0;
+    --color-text-tertiary:     #837C9E;
+    --color-text-inverse:      #29243D;
+    --color-text-link:         #B7A6FF;
+
+    --color-border-primary:    #3A3458;
+    --color-border-secondary:  #2E2948;
+    --color-border-focus:      #3FD9CC;
+
+    --color-accent-primary:        #9B82FF;
+    --color-accent-primary-hover:  #AD97FF;
+    --color-accent-primary-active: #8B6FF5;
+    --color-accent-secondary:      #3FD9CC;
+
+    --color-status-success:    #4ECB73;
+    --color-status-warning:    #FFC04D;
+    --color-status-error:      #FF8A8A;
+    --color-status-info:       #6FB4FF;
+
+    --color-surface-overlay:   rgba(8, 6, 16, 0.60);
+
+    --color-reward-gold:       #FFD45E;
+    --color-reward-coral:      #FF8576;
+    --color-coin:              #FFD45E;
+    --color-shard:             #3FD9CC;
+    --color-star:              #FFD45E;
+    --color-star-empty:        #3A3458;
+
+    --color-feedback-correct:     #4ECB73;
+    --color-feedback-correct-bg:  #1E3B2A;
+    --color-feedback-retry:       #FFC04D;
+    --color-feedback-retry-bg:    #3A3018;
+
+    --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.30);
+    --shadow-md:    0 6px 16px rgba(0, 0, 0, 0.40);
+    --shadow-lg:    0 16px 40px rgba(0, 0, 0, 0.50);
+    --shadow-focus: 0 0 0 4px rgba(63, 217, 204, 0.45);
+  }
+}
+
+/* Respect de la réduction de mouvement */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-instant: 0ms;
+    --duration-fast:    0ms;
+    --duration-normal:  0ms;
+    --duration-slow:    0ms;
+    --duration-slower:  0ms;
+  }
+}
