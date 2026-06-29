@@ -2,12 +2,21 @@ import { describe, expect, it } from "vitest";
 import manifest from "./manifest";
 import { BRAND_NAME } from "@/config/brand";
 import { PWA_BG_COLOR, PWA_THEME_COLOR } from "@/config/pwa";
+import { strings } from "@/strings";
 
 describe("manifest (PWA)", () => {
   it("retourne un manifest valide avec le nom de la marque", () => {
     const m = manifest();
     expect(m.name).toBe(BRAND_NAME);
     expect(m.short_name).toBe(BRAND_NAME);
+  });
+
+  it("définit un id stable /", () => {
+    expect(manifest().id).toBe("/");
+  });
+
+  it("la description est sourcée depuis strings.meta.description (pas de littéral)", () => {
+    expect(manifest().description).toBe(strings.meta.description);
   });
 
   it("définit display standalone et lang fr", () => {
@@ -23,15 +32,25 @@ describe("manifest (PWA)", () => {
   });
 
   it("définit start_url /", () => {
-    const m = manifest();
-    expect(m.start_url).toBe("/");
+    expect(manifest().start_url).toBe("/");
   });
 
-  it("inclut les deux icônes (192 et 512)", () => {
-    const m = manifest();
-    const icons = m.icons ?? [];
-    expect(icons).toHaveLength(2);
-    expect(icons[0]).toMatchObject({ src: "/icon-192.png", sizes: "192x192", type: "image/png" });
-    expect(icons[1]).toMatchObject({ src: "/icon-512.png", sizes: "512x512", type: "image/png" });
+  it("inclut l'icône 192×192", () => {
+    const icons = manifest().icons ?? [];
+    expect(icons).toContainEqual(
+      expect.objectContaining({ src: "/icon-192.png", sizes: "192x192", type: "image/png" }),
+    );
+  });
+
+  it("inclut une icône 512×512 purpose:any", () => {
+    const icons = manifest().icons ?? [];
+    expect(icons).toContainEqual(expect.objectContaining({ src: "/icon-512.png", purpose: "any" }));
+  });
+
+  it("inclut une icône 512×512 purpose:maskable", () => {
+    const icons = manifest().icons ?? [];
+    expect(icons).toContainEqual(
+      expect.objectContaining({ src: "/icon-512.png", purpose: "maskable" }),
+    );
   });
 });

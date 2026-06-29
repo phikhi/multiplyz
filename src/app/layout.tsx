@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { BRAND_NAME } from "@/config/brand";
+import { PWA_THEME_COLOR } from "@/config/pwa";
 import { LOCALE, strings } from "@/strings";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
@@ -25,6 +26,24 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: BRAND_NAME,
   description: strings.meta.description,
+  icons: {
+    // Apple touch icon (iPad/iPhone home screen)
+    apple: "/icon-192.png",
+  },
+  other: {
+    // PWA hints pour iOS / Safari
+    "apple-mobile-web-app-capable": "yes",
+    "apple-mobile-web-app-status-bar-style": "default",
+    "apple-mobile-web-app-title": BRAND_NAME,
+  },
+};
+
+/**
+ * Viewport + thème couleur (Next.js 14+ : themeColor sort de Metadata vers Viewport).
+ * themeColor sourcé de src/config/pwa.ts (pas de magic number).
+ */
+export const viewport: Viewport = {
+  themeColor: PWA_THEME_COLOR,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

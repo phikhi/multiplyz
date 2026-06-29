@@ -16,11 +16,16 @@ export const fr = {
   },
   pwa: {
     /**
-     * Message offline — voix de Teddy (cf. COPY.md §3 «Hors-ligne»).
-     * Posture : douce, pas de panique, promesse de reprise.
+     * Message perte de réseau MID-SESSION (cf. COPY.md §3, SYNC.md §3).
+     * Réseau coupé pendant la session — posture douce, reprise implicite.
      */
     offline: "Oups, plus de réseau — on reprend dès que ça revient 🌐",
-    /** Label aria de la région de statut offline (accessible, registre neutre). */
+    /**
+     * Message COLD-START hors-ligne (cf. SYNC.md §3 «Démarrage sans réseau»).
+     * Démarrage alors que la connexion est déjà absente — invite à se connecter.
+     */
+    coldStart: "Connecte-toi à internet pour jouer 🌐",
+    /** Label aria de la région live (registre neutre, lu par les AT). */
     offlineRole: "Connexion perdue",
   },
 } as const;
