@@ -25,8 +25,6 @@ export const fr = {
      * Démarrage alors que la connexion est déjà absente — invite à se connecter.
      */
     coldStart: "Connecte-toi à internet pour jouer 🌐",
-    /** Label aria de la région live (registre neutre, lu par les AT). */
-    offlineRole: "Connexion perdue",
   },
 } as const;
 
