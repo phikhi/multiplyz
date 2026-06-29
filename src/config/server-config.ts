@@ -70,6 +70,25 @@ function parsePositiveInt(raw: string | undefined, fallback: number): number {
 }
 
 /**
+ * Bloc DB de la config, isolé en fonction pure. Source unique des ⚙️ DB
+ * (`DATABASE_PATH`, `SQLITE_BUSY_TIMEOUT_MS`, `journalMode`) — cf. ADR 0002.
+ *
+ * Volontairement SANS la validation des secrets (`GEMINI_API_KEY`) : la couche
+ * SQLite, le script de migration et drizzle-kit tournent HORS runtime Next et
+ * ne doivent pas exiger la clé image pour lire le chemin / le busy_timeout.
+ */
+export function loadDatabaseConfig(env: Env): DatabaseConfig {
+  return {
+    path: env.DATABASE_PATH?.trim() || CONFIG_DEFAULTS.database.path,
+    busyTimeoutMs: parsePositiveInt(
+      env.SQLITE_BUSY_TIMEOUT_MS,
+      CONFIG_DEFAULTS.database.busyTimeoutMs,
+    ),
+    journalMode: CONFIG_DEFAULTS.database.journalMode,
+  };
+}
+
+/**
  * Construit la config typée depuis un environnement. Fonction pure (testable).
  * En mode `production`, lève `ConfigError` si une variable requise manque (fail-fast).
  */
@@ -92,14 +111,7 @@ export function loadConfig(env: Env): AppConfig {
 
   return {
     mode,
-    database: {
-      path: env.DATABASE_PATH?.trim() || CONFIG_DEFAULTS.database.path,
-      busyTimeoutMs: parsePositiveInt(
-        env.SQLITE_BUSY_TIMEOUT_MS,
-        CONFIG_DEFAULTS.database.busyTimeoutMs,
-      ),
-      journalMode: CONFIG_DEFAULTS.database.journalMode,
-    },
+    database: loadDatabaseConfig(env),
     imageModel: {
       apiKey: env.GEMINI_API_KEY ?? "",
       model: env.IMAGE_MODEL?.trim() || CONFIG_DEFAULTS.imageModel.model,

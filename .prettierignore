@@ -14,3 +14,6 @@ tokens.css
 
 # Réécrit automatiquement par Next (next build)
 tsconfig.json
+
+# Migrations versionnées générées par drizzle-kit (SQL + meta)
+drizzle/
