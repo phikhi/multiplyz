@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 const baseURL = `http://localhost:${PORT}`;
 
 export default defineConfig({
@@ -16,7 +16,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "pnpm dev",
+    command: `pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
