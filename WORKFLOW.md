@@ -1,6 +1,6 @@
 # multiplyz — Workflow de développement (agentique)
 
-> Cycle de dev : Epic → Story → dev multi-agents (worktrees) → review multi-agents en boucle → **gate humain** → merge.
+> Cycle de dev : Epic → Story → dev multi-agents (worktrees) → review multi-agents en boucle → **merge par l'agent orchestrateur** (proprio = gate anti-drift, cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md)).
 > Tout centralisé sur **GitHub** (Issues + Project). Garde-fous **en dur** anti-drift.
 
 ---
@@ -12,7 +12,7 @@
   - description + **critères d'acceptation** testables (format *Given/When/Then*),
   - **scope** via labels (`scope:backend|frontend|security|qa|game-design|product`),
   - **checklist DoD**, dépendances (`blocked-by`), estimation.
-- **Project board** : `To do → In progress → In review → Human gate → Done` (automations : PR liée déplace la carte).
+- **Project board** : `To do → In progress → In review → Done` (merge agent dès reviews+CI ✅ ; automations : PR liée déplace la carte).
 - **Templates** : issue *story* + **PR template** (checklist DoD).
 - **CODEOWNERS** : route les reviews vers les bons rôles selon le chemin des fichiers.
 
@@ -72,7 +72,7 @@ PR ouverte → reviewers (scope + PO) commentent en inline
 ## 7. Gates & Hooks « en dur » (anti-drift)
 
 - **GitHub Actions (required checks)** : `lint · typecheck · test+coverage(seuils) · build · e2e(Playwright)`. PR **non mergeable** si rouge.
-- **Branch protection** sur `main` : checks verts **+ review humaine (toi) obligatoire** + branche à jour + **pas de push direct**.
+- **Branch protection** sur `main` : checks verts (`quality`+`e2e`) **+ branche à jour (`strict`) + PR obligatoire + pas de push/force-push direct**. (Review GitHub humaine **non requise** — 0 approval, le self-approval est impossible en solo ; le merge agent + le gate anti-drift remplacent, cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md).)
 - **CODEOWNERS** : review obligatoire des bons rôles par chemin.
 - **Hooks Claude Code** (`settings.json`) : pre-PR local (lint/test/coverage) + **scope-guard** (l'agent ne touche que les fichiers de sa story).
 - **Critères d'acceptation testables** dans l'issue : la story n'est *Done* que s'ils passent.
@@ -96,7 +96,7 @@ PR ouverte → reviewers (scope + PO) commentent en inline
 
 - `git init` + repo GitHub + remote.
 - Project board + labels + **issue/PR templates** + **CODEOWNERS**.
-- **GitHub Actions** (lint/typecheck/test+coverage/build/e2e) + **branch protection** (checks + ta review).
+- **GitHub Actions** (lint/typecheck/test+coverage/build/e2e) + **branch protection** (checks + PR obligatoire + `strict`).
 - **Hooks** `settings.json` (pre-PR + scope-guard).
 - Seuils de couverture (100 % critique / pragmatique UI) configurés dans l'outil de test.
 - **`docs/adr/`** + **`docs/design/`** + templates (ADR, Technical Design) + **`LEARNINGS.md`** initial.
@@ -136,7 +136,7 @@ Une story n'est **prenable** par un agent que si :
 
 - **Migrations Drizzle** : versionnées, dans la PR, jouées en **CI** (DB de test) + au deploy ; **pas de migration destructive sans backup** du fichier SQLite ; revue par le reviewer Backend.
 - **Secrets/env** : `.env` jamais commité ; **GitHub Secrets** (CI) + **Forge env** (prod). Clés : modèle image, chemin DB…
-- **Validation E2E** : **pas de staging** → **E2E Playwright en CI** + **captures systématiques** dans la PR ; ton **gate humain** se fait sur la **PR + captures**. (Staging ajoutable plus tard.)
+- **Validation E2E** : **pas de staging** → **E2E Playwright en CI** + **captures systématiques** dans la PR ; le proprio peut **auditer a posteriori** sur la **PR + captures** (gate = anti-drift, le merge n'attend pas, cf. [ADR 0003](docs/adr/0003-agent-merge-et-accepte-adr.md)). (Staging ajoutable plus tard.)
 
 ## 16. Garde-fous des agents (permissions & budget)
 
