@@ -16,6 +16,7 @@
 ## Base de données
 - **SQLite — fichier local sur le VPS**, **mode WAL**
 - **Drizzle ORM** + **better-sqlite3** (migrations versionnées)
+- **Config** : les ⚙️ DB (`busy_timeout`, chemin) viennent du **module config central** (`src/config/server-config.ts`), pas de constantes dans la couche DB — cf. [ADR 0002](./docs/adr/0002-config-centrale-possede-params-db.md)
 - **Backups** = copie du fichier (+ snapshot VPS)
 - *Pourquoi pas Turso/MySQL* : VPS persistant + 1 famille (faible charge) → SQLite local = simple, rapide, gratuit, suffisant. (Online-first → pas besoin de la sync de Turso.)
 - Tables : `profiles · mastery · attempts · progress · collection · worlds · characters · wallet · cosmetics(+owned) · inventory_items · daily · ledger · jobs`
