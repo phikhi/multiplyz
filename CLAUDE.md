@@ -34,8 +34,9 @@ Next.js (App Router, **runtime Node**, pas edge) + React + TS + **Tailwind v4** 
 - **Économie** : jamais d'argent réel, **ne bloque jamais l'apprentissage**, doublon → éclats, dépenses **online only**.
 - **Sécurité** : PIN **hashé** (argon2/bcrypt), **rate-limit**, single-tenant famille. Jamais de PIN en clair / côté client.
 - **Assets IA** : prompt de base **verrouillé** (ART), un monde ne pose que `--world-accent`, **Teddy depuis photos réelles**, QA kid-safe + fallback.
-- **A11y** : feedback **doublé d'icône** (daltonisme), cibles ≥ 44 px, `prefers-reduced-motion`.
+- **A11y** : feedback **doublé d'icône** (daltonisme), cibles ≥ 44 px, `prefers-reduced-motion`. Couleur de statut = token texte **constant** (`--color-on-warning`…), jamais un token qui s'inverse par thème (contraste).
 - **Paramètres `⚙️`** (notés dans les specs) = à **calibrer**, centralisés dans un fichier de config, jamais figés en dur sans raison.
+- **Tests/CI** : seuils coverage **armés** (`thresholds` + `all:true`) — un `exclude` ne doit **jamais vider le scope** (100% vacuous = gate creux) ; exclude réservé au boilerplate framework non testable. **`pnpm format`** relancé après tout **rebase/résolution de conflit** avant push.
 
 ## Workflow de dev (OBLIGATOIRE — cf. `WORKFLOW.md`)
 - **Epic → Story** sur **GitHub** (Issues + Project). Chaque story = **critères d'acceptation** + DoD.
@@ -52,7 +53,8 @@ Next.js (App Router, **runtime Node**, pas edge) + React + TS + **Tailwind v4** 
 1. scaffold → 2. auth-lite → 3. **moteur math** (cœur, valider en 1er) → 4. étayages visuels → 5. couche jeu/carte → 6. pipeline mondes IA → 7. espace parent → 8. PWA/responsive.
 
 ## Build / run
-- **À compléter après le scaffold.** Prévu : `pnpm dev`, `pnpm build`, migrations Drizzle, worker daemon (jobs de génération).
+- **Node 22 obligatoire** (`.nvmrc`, `engines >=22.12`) → `nvm use 22` avant tout `pnpm`. Le défaut Node 21 **casse vitest** (vite 7 ESM, `ERR_REQUIRE_ESM`). pnpm via `packageManager` (pinné).
+- Scripts : `pnpm dev` · `pnpm build` · `pnpm start` (daemon) · `pnpm db:migrate` · lint/typecheck/test:coverage/test:e2e (gates CI = `quality` + `e2e`).
 - Déploiement : Forge sur VPS OVH (daemon Node + Nginx + HTTPS) + worker daemon séparé.
 
 ## Rappels
