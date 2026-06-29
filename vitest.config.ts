@@ -17,8 +17,11 @@ export default defineConfig({
       reporter: ["text", "html", "lcov", "json-summary"],
       all: true,
       include: ["src/**/*.{ts,tsx}"],
-      // layout.tsx = boilerplate framework (rend <html>/<body>, non testable via RTL).
-      exclude: ["src/**/*.{test,spec}.{ts,tsx}", "src/app/layout.tsx"],
+      exclude: [
+        "src/**/*.{test,spec}.{ts,tsx}",
+        // layout.tsx = boilerplate framework (rend <html>/<body>, non testable via RTL).
+        "src/app/layout.tsx",
+      ],
       // Gate armé : 100 % sur le périmètre couvert. La logique critique
       // (moteur #3 / éco / serveur) reste à 100 % ; l'UI pourra ajuster
       // des seuils par chemin si pragmatique (cf. WORKFLOW §5).

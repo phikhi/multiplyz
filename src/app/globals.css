@@ -1,5 +1,55 @@
-/* Reset structurel minimal du scaffold (#10).
-   Le système visuel (Tailwind v4 + tokens.css) est branché en #11. */
+@import "tailwindcss";
+@import "../../tokens.css";
+
+/* Fait pointer les tokens polices vers les variables next/font (CLS + métriques fallback).
+   Doit venir APRÈS @import tokens.css pour prendre le dessus dans la cascade (:root même spécificité). */
+:root {
+  --font-family-display: var(--font-next-display), system-ui, "Segoe UI", sans-serif;
+  --font-family-body: var(--font-next-body), system-ui, "Segoe UI", sans-serif;
+}
+
+/* Mapping Tailwind v4 @theme → aliases sur les variables tokens.css.
+   @theme inline : les utilitaires référencent la var() directement (pas d'indirection).
+   Source de vérité = tokens.css ; on ne répète AUCUNE valeur en dur. */
+@theme inline {
+  /* Fonds */
+  --color-bg: var(--color-bg-primary);
+  --color-surface: var(--color-bg-secondary);
+  --color-well: var(--color-bg-tertiary);
+
+  /* Texte */
+  --color-text: var(--color-text-primary);
+  --color-text-muted: var(--color-text-secondary);
+  --color-text-faint: var(--color-text-tertiary);
+
+  /* Accents */
+  --color-primary: var(--color-accent-primary);
+  --color-accent: var(--color-accent-secondary);
+
+  /* Statuts */
+  --color-success: var(--color-status-success);
+  --color-warning: var(--color-status-warning);
+  --color-error: var(--color-status-error);
+  --color-info: var(--color-status-info);
+
+  /* Récompenses */
+  --color-gold: var(--color-reward-gold);
+  --color-coral: var(--color-reward-coral);
+
+  /* Rayons */
+  --radius-sm: var(--border-radius-sm);
+  --radius-md: var(--border-radius-md);
+  --radius-card: var(--border-radius-lg);
+  --radius-xl: var(--border-radius-xl);
+  --radius-full: var(--border-radius-full);
+
+  /* Polices */
+  --font-display: var(--font-family-display);
+  --font-body: var(--font-family-body);
+  --font-mono: var(--font-family-mono);
+}
+
+/* Reset structurel minimal */
 *,
 *::before,
 *::after {
@@ -10,4 +60,16 @@ html,
 body {
   margin: 0;
   padding: 0;
+}
+
+body {
+  font-family: var(--font-family-body);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+}
+
+/* Focus-visible via tokens (a11y — pas de valeur en dur) */
+.mz-theme-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
 }
