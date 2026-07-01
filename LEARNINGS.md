@@ -178,3 +178,27 @@
 - Observation : 5 reviewers indépendants (backend/security/frontend+a11y/qa/PO) en // → **5× APPROVE au 1er tour**, uniquement nits/forward-looking. 3 findings de **consensus** appliqués avant merge car in-contract et bon marché (filtre kind, easing tokenisé, test garde timing) ; findings forward-looking **routés en issues** (#43 entrée Parent + verrou kind #7, #44 GC sessions) + commentaire #32 (rate-limit via `headers()` IP) plutôt qu'absorbés.
 - Leçon : appliquer les fixes de consensus in-contract tant que le worktree est chaud (une itération), router le hors-scope en issues (anti-drift), merge autonome de l'orchestrateur (story in-contract, CI verte, branche à jour).
 - Action : rappel process (confirme la discipline reviewers indépendants + anti-drift).
+
+---
+
+## Rétro story #32 — épic #2 Auth-lite (2.4 rate-limit + backoff, PR #46)
+
+### 2026-07-01 — [schema/coverage] Clé composite en PK texte encodée → évite le callback d'extras drizzle (PR #46)
+- Problème : une table de compteurs (rate-limit par profil/IP) veut une clé composite `(scope, key)`. Un **PK composite** ou un **UNIQUE index** en drizzle passe par le 3ᵉ argument callback de `sqliteTable` → jamais invoqué au runtime → casse le gate 100 % fonctions (LEARNINGS #34).
+- Leçon : encoder la clé composite dans **une seule colonne PK texte** (`"<scope>:<clé>"`, ex. `"profile:5"` / `"ip:1.2.3.4"`), l'assemblage se faisant dans une fonction pure testée (`attemptKey`). Aucun callback d'extras → schéma couvrable à 100 %, et l'upsert `onConflictDoUpdate` cible ce PK simple.
+- Action : rappel (pattern pour toute table clé-valeur / compteur / jonction sous gate 100 % fonctions).
+
+### 2026-07-01 — [security/deploy] Rate-limit par IP : X-Real-IP de confiance, pas le 1er maillon de XFF (PR #46, finding backend majeur)
+- Problème : lire le **1er maillon** de `X-Forwarded-For` suppose que Nginx **écrase** l'en-tête. Or le template Nginx/Forge par défaut **ajoute** (`$proxy_add_x_forwarded_for`) le `remote_addr` réel APRÈS la valeur cliente → le 1er élément est **contrôlable par le client** → rate-limit par IP contournable (fausse IP/req) ou empoisonnable (bloquer une IP tierce). Le garde **par profil** reste efficace (défense primaire).
+- Leçon : côté serveur, préférer **`X-Real-IP`** (posé par Nginx à `$remote_addr`, non-spoofable), `X-Forwarded-For` en repli seulement. Une hypothèse d'en-tête de proxy est une **exigence de déploiement** à tracer (issue infra), pas un acquis.
+- Action : `resolveClientIp` (X-Real-IP prioritaire). Exigence Nginx tracée #47 (avant prod). Rappel.
+
+### 2026-07-01 — [e2e] Comportement dépendant du temps réel = pas d'E2E (flaky), couvrir en unitaire avec horloge injectée (PR #46)
+- Problème : démontrer le backoff en E2E échoue — la fenêtre est **courte** (base 1 s) et expire pendant la navigation (reload ~1 s) → la tentative « bloquée » ne l'est plus → test flaky sur un gate. Message d'échec identique (générique) → aucune UI distincte à capturer.
+- Leçon : un comportement **temporel** se teste avec une **horloge injectée** (`now` en paramètre) en unitaire/intégration, pas en E2E wall-clock. Documenter le non-test (commentaire NB) plutôt que de laisser un trou muet. Vérifier que la nouvelle logique n'introduit pas de flaky dans l'E2E existant (ici : happy-path n'utilise que le bon PIN → reset au succès → compteurs jamais accumulés).
+- Action : rappel (tout `now`/délai/expiration → injection d'horloge + test déterministe).
+
+### 2026-07-01 — [auth] Anatomie d'un backoff proportionné (PR #46)
+- Problème/rappel : garde-fou anti-brute-force **sans** verrou permanent (c'est un enfant).
+- Leçon : (1) **bloquer AVANT le `verify`** (aucun coût argon2 consommé sur cible bloquée) ; (2) n'**enregistrer** un échec que sur une tentative **réellement** vérifiée (le chemin bloqué ne prolonge pas le délai → le backoff court depuis le dernier échec réel) ; (3) **reset au succès uniquement** (un attaquant ne remet pas le compteur à zéro sans le bon PIN) ; (4) bloqué → `null` **générique** indiscernable (anti-énum) ; (5) seuil = bloqué dès `failures >= threshold` (les `threshold` premières tentatives tolérées) ; (6) courbe **plafonnée** (jamais de verrou permanent). Path **générique** (seuil/scope paramétrés) → réutilisable (#2.5 code-secours).
+- Action : rappel (réappliquer tel quel à toute vérif de secret rate-limitée).
