@@ -11,8 +11,8 @@ import type { AttemptState } from "./rate-limit";
  * suppression de la ligne (au succès).
  */
 
-/** Portée d'un compteur : par profil ou par IP (AUTH.md §4). */
-export type AttemptScope = "profile" | "ip";
+/** Portée d'un compteur : par profil, par IP, ou par récupération (AUTH.md §4, §5). */
+export type AttemptScope = "profile" | "ip" | "recovery";
 
 /** Clé de ligne d'un compteur — `"<scope>:<clé>"` (cf. schéma `pin_attempts`). */
 export function attemptKey(scope: AttemptScope, key: string): string {

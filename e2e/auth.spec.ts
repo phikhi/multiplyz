@@ -23,7 +23,15 @@ function digit(d: string) {
   return strings.pinPad.digit.replace("{d}", d);
 }
 
-/** Saisit un PIN (auto-soumission au 4ᵉ chiffre côté sélecteur). */
+// Code de secours capté à l'onboarding (aléatoire), réutilisé par la récupération
+// PIN parent (#2.5) — même foyer single-tenant sérialisé.
+let recoveryCode = "";
+
+/**
+ * Saisit un PIN sur le pavé partagé (composant contrôlé, sans auto-submit). La
+ * connexion (#2.3) câble l'auto-soumission au 4ᵉ chiffre côté page ; l'onboarding
+ * (#2.2) et la récupération (#2.5) exigent un clic explicite ensuite.
+ */
 async function enterPin(page: import("@playwright/test").Page, pin: string) {
   for (const d of pin) {
     await page.getByRole("button", { name: digit(d) }).click();
@@ -39,7 +47,7 @@ test.beforeAll(async () => {
 // retries pour ce bloc → échec franc et lisible plutôt qu'un retry trompeur.
 test.describe.configure({ retries: 0 });
 
-test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3)", () => {
+test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → récup #2.5)", () => {
   test("foyer vide → écran 1er usage (capture)", async ({ page }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
@@ -73,7 +81,10 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3)", () =>
     await expect(
       page.getByRole("heading", { level: 1, name: strings.onboarding.recovery.title }),
     ).toBeVisible();
-    await expect(page.getByText(/^[A-Z0-9]{8}$/)).toBeVisible();
+    const code = page.getByText(/^[A-Z0-9]{8}$/);
+    await expect(code).toBeVisible();
+    // Capté pour la récupération PIN parent (#2.5).
+    recoveryCode = (await code.textContent()) ?? "";
 
     await page.screenshot({ path: "docs/captures/30-recovery.png", fullPage: true });
   });
@@ -139,4 +150,29 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3)", () =>
   // (la fenêtre expire pendant la navigation) = flaky sur un gate. La courbe et le
   // blocage sont couverts de façon **déterministe** (horloge injectée) en unitaire :
   // `rate-limit.test.ts`, `pin-attempts.test.ts`, `login.test.ts` (guardedAuthenticateChild).
+
+  test("récupération PIN parent via code de secours → nouveau code (capture)", async ({ page }) => {
+    const rec = strings.recovery;
+    expect(recoveryCode).toMatch(/^[A-Z0-9]{8}$/); // capté à l'onboarding
+
+    // Étape 1 : saisir le code de secours.
+    await page.goto("/parent/recuperation");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("heading", { level: 1, name: rec.title })).toBeVisible();
+    await page.getByRole("textbox").fill(recoveryCode);
+    await page.getByRole("button", { name: rec.verify }).click();
+
+    // Étape 2 : nouveau PIN parent (≠ PIN enfant 1234) via le pavé.
+    await expect(page.getByRole("heading", { level: 1, name: rec.newPinTitle })).toBeVisible();
+    await enterPin(page, "1111");
+    await page.getByRole("button", { name: rec.submit }).click();
+
+    // Étape 3 : nouveau code de secours régénéré, affiché une fois.
+    await expect(page.getByRole("heading", { level: 1, name: rec.done.title })).toBeVisible();
+    const fresh = page.getByText(/^[A-Z0-9]{8}$/);
+    await expect(fresh).toBeVisible();
+    expect(await fresh.textContent()).not.toBe(recoveryCode); // ancien code consommé
+
+    await page.screenshot({ path: "docs/captures/33-recuperation.png", fullPage: true });
+  });
 });

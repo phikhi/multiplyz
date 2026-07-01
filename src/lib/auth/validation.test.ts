@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   NAME_MAX_LENGTH,
   PIN_LENGTH,
+  RECOVERY_CODE_LENGTH,
   isValidName,
   isValidPin,
+  isValidRecoveryCodeFormat,
   parentPinDiffersFromChild,
   sanitizeName,
+  sanitizeRecoveryCode,
 } from "./validation";
 
 describe("isValidPin", () => {
@@ -81,5 +84,31 @@ describe("isValidName", () => {
     expect(isValidName(`${"x".repeat(19)}   y`)).toBe(false);
     // 18 'x' + espaces + 'y' → compacté "xx...x y" = 20 → accepté.
     expect(isValidName(`${"x".repeat(18)}   y`)).toBe(true);
+  });
+});
+
+describe("sanitizeRecoveryCode", () => {
+  it("met en majuscules et retire espaces/tirets (saisie parent libre)", () => {
+    expect(sanitizeRecoveryCode(" ab2-cd 3k ")).toBe("AB2CD3K");
+  });
+});
+
+describe("isValidRecoveryCodeFormat", () => {
+  it("accepte 8 caractères de l'alphabet lisible (après normalisation)", () => {
+    expect(isValidRecoveryCodeFormat("abcd2345")).toBe(true);
+    expect(isValidRecoveryCodeFormat(" ABCD-2345 ")).toBe(true); // 8 après retrait du tiret/espaces
+  });
+
+  it("rejette une mauvaise longueur", () => {
+    expect(isValidRecoveryCodeFormat("ABC234")).toBe(false);
+    expect(isValidRecoveryCodeFormat("ABCD23456")).toBe(false);
+  });
+
+  it("rejette un caractère ambigu hors alphabet (0/1/I/L/O)", () => {
+    expect(isValidRecoveryCodeFormat("ABCD2340")).toBe(false); // '0' interdit
+  });
+
+  it("RECOVERY_CODE_LENGTH reste 8 (constante verrouillée AUTH §5)", () => {
+    expect(RECOVERY_CODE_LENGTH).toBe(8);
   });
 });

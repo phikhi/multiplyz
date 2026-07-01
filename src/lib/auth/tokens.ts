@@ -1,20 +1,19 @@
 import { randomBytes, randomInt } from "node:crypto";
 import { hashSecret, verifySecret } from "./pin";
+import { RECOVERY_ALPHABET, RECOVERY_CODE_LENGTH } from "./validation";
 
 /**
  * Génération des tokens de session opaques et du code de secours (AUTH.md §3,
  * §5). Aléa CSPRNG. Le token de session est stocké tel quel (source de vérité
- * serveur) ; le code de secours n'est stocké que **haché**.
+ * serveur) ; le code de secours n'est stocké que **haché**. Longueur/alphabet du
+ * code de secours = source pure partagée (`validation.ts`).
  */
 
 /** Octets d'un token de session opaque (256 bits d'entropie). */
 export const OPAQUE_TOKEN_BYTES = 32;
 
-/** Longueur du code de secours (AUTH.md §5 : 8 caractères). */
-export const RECOVERY_CODE_LENGTH = 8;
-
-// Alphabet lisible : sans caractères ambigus (0/O, 1/I/L) pour la saisie parent.
-const RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+// Re-export (compat) : la longueur du code de secours vit désormais dans `validation`.
+export { RECOVERY_CODE_LENGTH } from "./validation";
 
 /**
  * Token de session opaque (aléa CSPRNG, base64url). Posé dans le cookie

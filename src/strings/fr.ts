@@ -143,6 +143,45 @@ export const fr = {
     /** Déconnexion (formulé pour un enfant : « changer de joueur »). */
     logout: "Changer de joueur",
   },
+  /**
+   * Récupération du code parent via code de secours (AUTH.md §5). Écran
+   * **parent** → registre **neutre/vouvoiement** (COPY.md §5, pas la voix de
+   * Teddy). Message d'échec du code **générique** (rate-limité, AUTH.md §4).
+   */
+  recovery: {
+    /** Étape 1 — saisie du code de secours. */
+    title: "Code parent oublié",
+    intro:
+      "Saisissez le code de secours noté lors de la configuration pour définir un nouveau code parent.",
+    codeLabel: "Code de secours",
+    codePlaceholder: "8 caractères",
+    verify: "Vérifier",
+    verifying: "Vérification…",
+    /** Étape 2 — nouveau PIN parent (pavé partagé). */
+    newPinTitle: "Nouveau code parent",
+    newPinHint: "4 chiffres, différent du code de l'enfant.",
+    /** Libellé accessible du groupe pavé PIN. */
+    pinLabel: "Nouveau code parent",
+    submit: "Enregistrer",
+    submitting: "Enregistrement…",
+    back: "Retour",
+    /** Étape 3 — nouveau code de secours régénéré, affiché une seule fois. */
+    done: {
+      title: "Code parent mis à jour",
+      intro: "Voici un nouveau code de secours. Notez-le : il ne sera affiché qu'une seule fois.",
+      cta: "Terminé",
+    },
+    /**
+     * Erreurs (clés = `RecoveryErrorCode` + repli réseau `GENERIC`). Registre
+     * neutre, factuel. `CODE_INVALID` reste **générique** (code faux OU backoff).
+     */
+    errors: {
+      CODE_INVALID: "Code de secours incorrect.",
+      PIN_INVALID: "Le code parent doit faire 4 chiffres.",
+      PARENT_PIN_SAME: "Le code parent doit être différent de celui de l'enfant.",
+      GENERIC: "Une erreur est survenue. Réessayez.",
+    },
+  },
 } as const;
 
 export type Strings = typeof fr;
