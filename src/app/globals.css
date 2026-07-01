@@ -73,3 +73,23 @@ body {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
+
+/* Secouage doux du pavé PIN sur code refusé (no-shame, WIREFRAMES §1b).
+   Amplitude = token d'espacement, durée = token → passe à 0ms sous
+   prefers-reduced-motion (cf. tokens.css) : aucune valeur en dur, a11y respectée. */
+@keyframes mz-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(calc(-1 * var(--space-2)));
+  }
+  75% {
+    transform: translateX(var(--space-2));
+  }
+}
+
+.mz-shake {
+  animation: mz-shake var(--duration-normal) ease-in-out;
+}

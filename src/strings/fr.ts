@@ -111,9 +111,37 @@ export const fr = {
       GENERIC: "Oups, ça n'a pas marché. On réessaie ?",
     },
   },
-  /** Écran d'accueil quand le foyer est déjà configuré (placeholder #2.3). */
-  home: {
-    ready: "Ton foyer est prêt. La sélection de profil arrive bientôt !",
+  /**
+   * Connexion (AUTH.md §2, WIREFRAMES §1). Sélecteur de profil + pavé PIN, voix
+   * de Teddy (tutoiement, no-shame). `{prénom}` interpolé à l'exécution. Le
+   * message d'erreur est **générique** (anti-énumération, AUTH.md §4) : jamais
+   * « profil inexistant » vs « PIN faux ».
+   */
+  login: {
+    /** Titre du sélecteur (WIREFRAMES §1a). */
+    title: "Qui joue aujourd'hui ?",
+    /** Gabarit ARIA d'une carte de profil (`{prénom}` = prénom du profil). */
+    profileOption: "Jouer avec {prénom}",
+    /** Titre du pavé PIN, personnalisé (WIREFRAMES §1b). */
+    pinTitle: "Salut {prénom} ! Ton code 🔑",
+    /** Libellé accessible du groupe pavé PIN. */
+    pinLabel: "Ton code secret",
+    /** Bouton retour vers la liste des profils. */
+    back: "Choisir un autre profil",
+    /** Vérification en cours (après saisie complète). */
+    checking: "Un instant…",
+    /** Échec **générique** (mauvais code OU profil inconnu) — no-shame. */
+    error: "Oups, on réessaie ?",
+  },
+  /**
+   * Écran de jeu (placeholder protégé #2.3 — l'écran réel arrive épic #3+). Voix
+   * de Teddy. Accessible uniquement avec une session enfant valide.
+   */
+  play: {
+    /** Accueil après connexion réussie. */
+    greeting: "Te voilà ! Ton aventure arrive très bientôt 🎉",
+    /** Déconnexion (formulé pour un enfant : « changer de joueur »). */
+    logout: "Changer de joueur",
   },
 } as const;
 

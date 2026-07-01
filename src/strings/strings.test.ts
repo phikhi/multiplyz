@@ -65,4 +65,18 @@ describe("strings (i18n FR)", () => {
     // Clés = codes de la server action (contrat UI ↔ serveur).
     expect(strings.onboarding.errors.PARENT_PIN_SAME).toContain("différent");
   });
+
+  it("connexion = gabarits prénom interpolables + erreur générique no-shame", () => {
+    expect(strings.login.profileOption).toContain("{prénom}");
+    expect(strings.login.pinTitle).toContain("{prénom}");
+    // Message d'échec générique (anti-énumération) : jamais « faux »/« erreur ».
+    expect(strings.login.error.toLowerCase()).not.toContain("faux");
+    expect(strings.login.error.toLowerCase()).not.toContain("erreur");
+    expect(strings.login.error.toLowerCase()).not.toContain("inexistant");
+  });
+
+  it("écran de jeu placeholder = voix Teddy + déconnexion", () => {
+    expect(strings.play.greeting.length).toBeGreaterThan(0);
+    expect(strings.play.logout.length).toBeGreaterThan(0);
+  });
 });
