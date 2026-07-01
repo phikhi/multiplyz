@@ -45,6 +45,35 @@
 
 ---
 
+## Rétro story #29 — épic #2 Auth-lite (2.1 fondation, PR #34)
+
+### 2026-07-01 — [db/coverage] Le callback table-extras de drizzle casse le gate 100 % fonctions (PR #34)
+- Problème : le 3ᵉ argument de `sqliteTable(name, cols, (t) => [index/uniqueIndex/check(...)])` n'est **jamais invoqué au runtime** (seul drizzle-kit l'appelle au `generate`) → v8 le compte comme fonction **non couverte** → gate `functions: 100` rouge, `all:true`. `getTableConfig(t).indexes` **ne le couvre pas**. À l'inverse, le callback FK `.references(() => other.id)` **est** couvrable en forçant `getTableConfig(t).foreignKeys[0].reference()` dans un test.
+- Leçon : sous gate 100 % fonctions, **éviter le callback extras** (index/check) dans le schéma. Faire respecter ces contraintes **au niveau requête** (ex. unicité prénom insensible à la casse via `lower(name)` en #2.2/#2.3) ou, si l'index DB est vraiment requis, assumer un seuil par-fichier documenté. Un index secondaire sur une table minuscule single-tenant = premature → l'omettre.
+- Action : rappel (pattern à réappliquer dès #30 qui touche le schéma). Test FK couvert via `getTableConfig(...).foreignKeys[].reference()`.
+
+### 2026-07-01 — [auth/deps] argon2id : `@node-rs/argon2` + piège `isolatedModules` (PR #34)
+- Problème : `argon2` (npm ranisalt) = node-gyp → friction native pnpm 10 (cf. leçon #19). `@node-rs/argon2` = binaires **prebuilt** (napi) → pas de compilation. MAIS importer son enum `Algorithm.Argon2id` casse le build : `TS2748 Cannot access ambient const enums when 'isolatedModules' is enabled`.
+- Leçon : préférer `@node-rs/argon2` (prebuilt) + l'ajouter à `serverExternalPackages`. Ne **pas** importer son `const enum` ; s'appuyer sur sa **variante par défaut (argon2id)** et **asserter le préfixe `$argon2id$`** en test.
+- Action : rappel (référence pour toute dép exposant un `const enum` sous isolatedModules).
+
+### 2026-07-01 — [config/next] `server-only` incompatible avec les modules partagés hors-Next (PR #34)
+- Problème : review sécurité a suggéré `import "server-only"` sur `server-config.ts` (défense en profondeur). Mais ce module est **volontairement** consommé hors runtime Next (script `tsx db:migrate`, drizzle-kit, vitest) où `server-only` **throw** (paquet même pas installé + pas de condition `react-server`) → casserait migration + tests.
+- Leçon : `server-only` ne peut coiffer que des modules importés **uniquement** dans le runtime Next. Un module de config partagé avec l'outillage hors-Next ne peut pas le porter. La protection Next (env non `NEXT_PUBLIC_*` jamais bundlé client) reste le garde-fou effectif.
+- Action : rappel (finding review décliné avec raison).
+
+### 2026-07-01 — [coverage] Aléa non biaisé = couverture déterministe (PR #34)
+- Problème : générer un code via rejection-sampling (`if (byte < limit)` sur `randomBytes`) introduit une **branche probabiliste** — la branche « octet rejeté » peut ne pas s'exécuter dans un run → gate `branches: 100` **flaky**.
+- Leçon : utiliser `crypto.randomInt(n)` (CSPRNG **non biaisé**, sans branche) plutôt qu'un modulo/rejet manuel → pas de branche à couvrir, déterministe, et pas de biais de modulo (bonus sécu).
+- Action : rappel.
+
+### 2026-07-01 — [process] Boucle de review propre en salve parallèle (PR #34)
+- Observation : 4 reviewers **indépendants** (backend/security/qa/PO) lancés en // → 4× APPROVE au 1er tour, uniquement mineurs/nits. Findings forward-looking reportés en **notes sur les stories consommatrices** (#30/#31/#32) plutôt qu'absorbés dans la story. Story **in-contract** (aucune décision verrouillée touchée) → merge autonome de l'orchestrateur.
+- Leçon : router les findings hors-scope vers les issues cibles (anti-drift), garder la story fondation étroite. Confirme la discipline « reviewers indépendants + escalade si drift ».
+- Action : rappel process.
+
+---
+
 ## Rétro epic #1 (salve parallèle #11/#12/#14/#13)
 
 ### 2026-06-29 — [qa/ci] Gate coverage VIDÉ — récidive (PR #20)
