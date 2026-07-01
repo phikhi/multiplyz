@@ -51,6 +51,8 @@ Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les m
 ## 6. Escalade — SEULEMENT le drift
 S'arrêter et demander le sign-off du propriétaire **uniquement** si une décision **modifierait une décision verrouillée** : modèle de données PLAN · pédagogie ENGINE · économie · sécurité · scope d'épic. **Sinon, jamais.** (ADR 0004.) Le subagent de build **escalade le drift** à l'orchestrateur (il ne tranche pas). Présenter le choix de drift clairement + option recommandée, attendre l'arbitrage.
 
+**En run headless/programmé** (le proprio n'est pas là pour arbitrer en direct) : sur drift → **stop**, ouvrir/étiqueter une issue GitHub **`needs-owner`** avec la question de drift + option recommandée, checkpoint statut, et **NE PAS re-programmer** de reprise (attendre l'arbitrage à la prochaine session interactive). Au **démarrage**, si un blocage `needs-owner` est déjà ouvert → ne pas avancer dessus (le contourner ou s'arrêter si tout le scope en dépend).
+
 ## 7. Contexte & quota (autonomie longue)
 **Contexte** — l'état durable vit dans **git / GitHub / `LEARNINGS` / mémoire**, pas dans le contexte → le contexte est **jetable aux frontières de story**.
 - **Thread principal = conclusions only** : déléguer build (§5), reviews, exploration (`Explore`) aux subagents ; ne jamais garder fichiers/diffs dans le contexte principal.
@@ -59,7 +61,15 @@ S'arrêter et demander le sign-off du propriétaire **uniquement** si une décis
 **Quota (Claude Max, reset ~5 h)** —
 - **Tiering modèle** : **Opus** = orchestration + jugement de drift + build **cœur** (moteur/sécu/data) ; **Sonnet** = reviewers + build **mécanique** ; **Haiku** = exploration.
 - **Fan-out au risque** : story mécanique/faible risque → panel de review **réduit** ; sécu/data/pédagogie → panel **complet** (scope + PO).
-- **Quota bas → PAUSE PROPRE** : finir la story courante (merge + rétro), checkpoint statut, **STOP** + rapport « fait X / reste Y / reprends `continue multiplyz` après reset (~Zh) ». **Ne pas démarrer** une story infinançable dans le budget restant (évite les branches orphelines).
+- **Quota bas → PAUSE PROPRE + reprise AUTO-PROGRAMMÉE** (Claude Max, fenêtre glissante ~5 h) :
+  1. Finir la story courante (**merge + rétro**), **checkpoint statut** (WIP + next). Ne jamais s'arrêter au milieu.
+  2. Lire l'**heure exacte de reset** (indiquée par le message de limite d'usage ; à défaut, `now + 5 h`).
+  3. **Programmer un run UNIQUE** à `reset + ~5 min` via le skill **`schedule`** (routine one-time, pas de cron récurrent), commande **`continue multiplyz`**. Ce run bossera la fenêtre suivante puis **re-programmera** le suivant à sa propre pause → **chaîne auto** sans intervention.
+  4. **STOP** + rapport : « fait X / reste Y / **reprise programmée à HH:MM** ».
+  - **Fin de scope** (plus d'épic/story ouverte) → **NE PAS** re-programmer ; rapport de complétion.
+  - **Scheduling cloud indisponible** (gating plan) → ne pas programmer ; juste rapporter l'heure de reset pour reprise manuelle (`continue multiplyz`).
+  - **Drift rencontré** (§6) → `needs-owner` + **ne pas** re-programmer.
+  - **Ne pas démarrer** une story infinançable dans le budget restant (évite les branches orphelines).
 
 ## Rapport (sans attendre d'aval)
 Rapporter en continu, sobrement : tri du backlog, épic/story choisis + pourquoi, parallélisation, chaque merge, rétro. Le propriétaire lit ; il n'a pas à répondre (sauf drift).
