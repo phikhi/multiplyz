@@ -132,4 +132,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3)", () =>
     await page.goto("/jouer");
     await expect(page).toHaveURL(/\/$/);
   });
+
+  // NB #2.4 (rate-limit + backoff, AUTH §4) : pas de test E2E dédié. Le backoff
+  // est un ralentissement **court** (base 1 s) et le message d'échec reste le
+  // **même** générique (aucune UI dédiée) → une démo E2E dépendrait du temps réel
+  // (la fenêtre expire pendant la navigation) = flaky sur un gate. La courbe et le
+  // blocage sont couverts de façon **déterministe** (horloge injectée) en unitaire :
+  // `rate-limit.test.ts`, `pin-attempts.test.ts`, `login.test.ts` (guardedAuthenticateChild).
 });

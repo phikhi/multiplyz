@@ -3,9 +3,15 @@ import type { AppDatabase } from "@/lib/db";
 import { createDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { profiles, sessions } from "@/lib/db/schema";
-import { CONFIG_DEFAULTS } from "@/config/server-config";
+import { CONFIG_DEFAULTS, getAuthConfig } from "@/config/server-config";
 import { hashPin } from "./pin";
-import { authenticateChild, listProfiles, TIMING_EQUALIZER_HASH } from "./login";
+import {
+  authenticateChild,
+  guardedAuthenticateChild,
+  listProfiles,
+  TIMING_EQUALIZER_HASH,
+} from "./login";
+import { attemptKey, getAttemptState, recordFailure } from "./pin-attempts";
 
 let db: AppDatabase;
 
@@ -86,5 +92,64 @@ describe("authenticateChild", () => {
   it("le hash factice partage les paramètres argon2id par défaut", () => {
     const { memoryCost, timeCost, parallelism } = CONFIG_DEFAULTS.auth.argon2;
     expect(TIMING_EQUALIZER_HASH).toContain(`m=${memoryCost},t=${timeCost},p=${parallelism}`);
+  });
+});
+
+describe("guardedAuthenticateChild — rate-limit + backoff (AUTH §4)", () => {
+  const IP = "1.2.3.4";
+  const rateLimit = getAuthConfig().rateLimit;
+
+  it("bon PIN, pas de backoff → session + compteurs réinitialisés", async () => {
+    const id = await seedProfile("Léa", "fox", PIN);
+    const created = await guardedAuthenticateChild(db, { profileId: id, pin: PIN, ip: IP }, T0);
+
+    expect(created).not.toBeNull();
+    expect(getAttemptState(db, attemptKey("profile", String(id)))).toBeNull();
+    expect(getAttemptState(db, attemptKey("ip", IP))).toBeNull();
+  });
+
+  it("PIN faux → null + incrémente les compteurs profil ET IP", async () => {
+    const id = await seedProfile("Léa", "fox", PIN);
+    const result = await guardedAuthenticateChild(db, { profileId: id, pin: "0000", ip: IP }, T0);
+
+    expect(result).toBeNull();
+    expect(getAttemptState(db, attemptKey("profile", String(id)))?.failures).toBe(1);
+    expect(getAttemptState(db, attemptKey("ip", IP))?.failures).toBe(1);
+  });
+
+  it("profil en backoff (≥ seuil d'échecs) → refus SANS vérifier le PIN (même un bon PIN)", async () => {
+    const id = await seedProfile("Léa", "fox", PIN);
+    const pKey = attemptKey("profile", String(id));
+    // `maxAttemptsPerProfile` échecs → la tentative suivante est en backoff (AC : 6ᵉ).
+    for (let i = 0; i < rateLimit.maxAttemptsPerProfile; i++) recordFailure(db, pKey, T0);
+
+    const result = await guardedAuthenticateChild(db, { profileId: id, pin: PIN, ip: IP }, T0);
+
+    expect(result).toBeNull(); // bloqué : le bon PIN n'est pas honoré
+    // Compteur inchangé : le chemin bloqué retourne avant d'enregistrer un échec.
+    expect(getAttemptState(db, pKey)?.failures).toBe(rateLimit.maxAttemptsPerProfile);
+    expect(db.select().from(sessions).get()).toBeUndefined();
+  });
+
+  it("IP en backoff (profil sain) → refus aussi", async () => {
+    const id = await seedProfile("Léa", "fox", PIN);
+    const ipKey = attemptKey("ip", IP);
+    for (let i = 0; i < rateLimit.maxAttemptsPerIp; i++) recordFailure(db, ipKey, T0);
+
+    const result = await guardedAuthenticateChild(db, { profileId: id, pin: PIN, ip: IP }, T0);
+    expect(result).toBeNull();
+  });
+
+  it("après le délai de backoff, le bon PIN réussit et réinitialise le compteur", async () => {
+    const id = await seedProfile("Léa", "fox", PIN);
+    const pKey = attemptKey("profile", String(id));
+    for (let i = 0; i < rateLimit.maxAttemptsPerProfile; i++) recordFailure(db, pKey, T0);
+
+    // Bien au-delà du plafond de backoff → plus bloqué.
+    const later = new Date(T0.getTime() + rateLimit.backoffMaxMs + 1000);
+    const created = await guardedAuthenticateChild(db, { profileId: id, pin: PIN, ip: IP }, later);
+
+    expect(created).not.toBeNull();
+    expect(getAttemptState(db, pKey)).toBeNull(); // réinitialisé au succès
   });
 });

@@ -1,6 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
 import { loginChild, logoutChild } from "@/lib/auth/current-session";
+import { parseClientIp } from "@/lib/auth/client-ip";
 
 /**
  * Server actions de la connexion (AUTH.md §2). Adaptateurs **minces** au-dessus
@@ -17,11 +19,13 @@ export interface LoginActionResult {
 
 /**
  * Tente de connecter le profil `profileId` avec `pin`. Succès ⇒ session + cookie
- * posés, `{ ok: true }`. Échec (profil inconnu **ou** PIN faux) ⇒ `{ ok: false }`,
- * même message côté client.
+ * posés, `{ ok: true }`. Échec (profil inconnu, PIN faux **ou** backoff actif) ⇒
+ * `{ ok: false }`, même message côté client. L'IP (rate-limit par IP, AUTH.md §4)
+ * est lue serveur via `x-forwarded-for` (Nginx/Forge) — jamais confiée au client.
  */
 export async function loginAction(profileId: number, pin: string): Promise<LoginActionResult> {
-  return { ok: await loginChild(profileId, pin) };
+  const ip = parseClientIp((await headers()).get("x-forwarded-for"));
+  return { ok: await loginChild(profileId, pin, ip) };
 }
 
 /** Déconnecte : révoque la session serveur et efface le cookie. */

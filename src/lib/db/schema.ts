@@ -66,3 +66,22 @@ export const sessions = sqliteTable("sessions", {
 });
 // Pas d'index secondaire : table minuscule (single-tenant, quelques sessions).
 // À ajouter via migration si le volume le justifie un jour.
+
+/**
+ * Compteurs de tentatives de PIN échouées (rate-limit + backoff, AUTH.md §4).
+ * Source de vérité **serveur** : le ralentissement est calculé côté serveur, pas
+ * confié au client. Une ligne par **cible** (`id` = `"<scope>:<clé>"`, ex.
+ * `"profile:5"` / `"ip:1.2.3.4"`) : la clé composite est **encodée dans une seule
+ * colonne PK** — pas de callback `sqliteTable` d'extras (index/PK composite) qui,
+ * n'étant jamais invoqué au runtime, casserait le gate 100 % fonctions (LEARNINGS
+ * #34). Réinitialisée (ligne supprimée) au succès. Générique → réutilisable par la
+ * vérif du code de secours (#2.5). Compteurs non-personnels (pas de FK profil).
+ */
+export const pinAttempts = sqliteTable("pin_attempts", {
+  /** `"<scope>:<clé>"` — cible du compteur (profil ou IP). */
+  id: text("id").primaryKey(),
+  /** Nombre d'échecs consécutifs (remis à 0 = ligne supprimée au succès). */
+  failures: integer("failures").notNull().default(0),
+  /** Instant du dernier échec — base du calcul de backoff. */
+  lastFailureAt: integer("last_failure_at", { mode: "timestamp" }).notNull(),
+});
