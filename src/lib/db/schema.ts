@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-// Schéma technique uniquement (story #12 = wiring de la couche données).
-// Le schéma métier (`profiles`, `mastery`, `attempts`, …) appartient aux
-// epics Auth (#2) et Moteur (#3) — NE PAS l'ajouter ici (cf. PLAN.md §Modèle de données).
+// Schéma métier auth-lite (epic #2) + table technique de wiring (#12).
+// Le reste du schéma métier (`mastery`, `attempts`, …) appartient au Moteur (#3)
+// — NE PAS l'ajouter ici avant sa story (cf. PLAN.md §Modèle de données).
 
 /**
  * Table meta technique : canari de wiring DB + porte la version applicative du
@@ -16,3 +16,53 @@ export const schemaMeta = sqliteTable("schema_meta", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+/**
+ * Profils du foyer (AUTH.md §1, PLAN.md §Modèle de données). Single-tenant : un
+ * seul foyer, prénoms uniques. Le `parent_pin_hash` + `recovery_code_hash`
+ * (accès espace parent + récupération) sont portés par le profil **propriétaire**
+ * (posés au 1er usage, #2.2) — nullable sur les autres profils enfants (§1
+ * multi-profils frères/sœurs). Aucun PIN en clair : seuls les **hash** argon2id.
+ *
+ * Invariants (à honorer par les stories consommatrices) :
+ * - **Owner** = l'unique ligne où `parent_pin_hash IS NOT NULL` (#2.2 le pose sur
+ *   le 1er profil créé).
+ * - **Unicité du prénom insensible à la casse** : l'index UNIQUE est BINARY ici ;
+ *   le check d'onboarding (#2.2) et le lookup de login (#2.3) matchent sur
+ *   `lower(name)` (une enfant tape sa casse au hasard).
+ */
+export const profiles = sqliteTable("profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  pinHash: text("pin_hash").notNull(),
+  avatar: text("avatar").notNull(),
+  /** Hash du PIN parent (espace parent) — porté par le profil propriétaire. */
+  parentPinHash: text("parent_pin_hash"),
+  /** Hash du code de secours (réinit PIN parent sans email, AUTH.md §5). */
+  recoveryCodeHash: text("recovery_code_hash"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+/** Nature d'une session : enfant (longue) ou parent (courte) — AUTH.md §3. */
+export type SessionKind = "child" | "parent";
+
+/**
+ * Sessions serveur (source de vérité). Le `token` opaque (aléa CSPRNG) est
+ * l'unique référence côté cookie httpOnly ; rien n'est signé côté client. La
+ * suppression d'un profil purge ses sessions (ON DELETE CASCADE, RGPD §6).
+ */
+export const sessions = sqliteTable("sessions", {
+  token: text("token").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<SessionKind>().notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+});
+// Pas d'index secondaire : table minuscule (single-tenant, quelques sessions).
+// À ajouter via migration si le volume le justifie un jour.
