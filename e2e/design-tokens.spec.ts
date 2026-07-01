@@ -6,7 +6,7 @@ test.beforeAll(async () => {
 });
 
 test("design tokens — mode clair (capture)", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/styleguide");
   await page.waitForLoadState("networkidle");
 
   // Assert état light avant capture
@@ -17,7 +17,7 @@ test("design tokens — mode clair (capture)", async ({ page }) => {
 });
 
 test("design tokens — mode sombre (capture)", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/styleguide");
   await page.waitForLoadState("networkidle");
 
   const toggle = page.getByRole("button", { name: "Basculer le thème" });

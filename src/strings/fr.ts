@@ -26,6 +26,95 @@ export const fr = {
      */
     coldStart: "Connecte-toi à internet pour jouer 🌐",
   },
+  /**
+   * Pavé PIN partagé (composant `PinPad`, réutilisé par la connexion #2.3).
+   * Libellés d'accessibilité : chaque cible annonce son rôle (lecteur d'écran).
+   */
+  pinPad: {
+    /** Gabarit ARIA d'une pastille remplie (`{n}` = position, 1-indexée). */
+    dotFilled: "Chiffre {n} saisi",
+    /** Gabarit ARIA d'une pastille vide. */
+    dotEmpty: "Chiffre {n} à saisir",
+    /** Gabarit ARIA d'un bouton chiffre (`{d}` = chiffre). */
+    digit: "Chiffre {d}",
+    /** Bouton d'effacement du dernier chiffre. */
+    backspace: "Effacer le dernier chiffre",
+  },
+  /**
+   * Onboarding 1er usage (AUTH.md §2, PRODUCT.md §1.1). Étapes enfant = voix de
+   * Teddy (tutoiement, posture croissance) ; étape parent = registre **neutre**
+   * (COPY.md §5). `{prénom}` interpolé à l'exécution.
+   */
+  onboarding: {
+    /** Étape 1 — présentation du profil (voix Teddy). */
+    profile: {
+      title: "Bienvenue ! Moi, c'est Teddy 🧸",
+      intro: "On prépare ton aventure tous les deux ?",
+      nameLabel: "Comment tu t'appelles ?",
+      namePlaceholder: "Ton prénom",
+      avatarLabel: "Choisis ton portrait",
+      /** Gabarit ARIA d'un portrait (`{nom}` = libellé lisible du portrait). */
+      avatarOption: "Portrait {nom}",
+      /** Libellés FR des portraits (clé = `AvatarOption.id`) — a11y lisible. */
+      avatarNames: {
+        fox: "renard",
+        rabbit: "lapin",
+        panda: "panda",
+        cat: "chat",
+        frog: "grenouille",
+        owl: "chouette",
+        penguin: "manchot",
+        unicorn: "licorne",
+      },
+    },
+    /** Étape 2 — code secret enfant (voix Teddy). */
+    childPin: {
+      title: "Choisis ton code secret 🔑",
+      hint: "4 chiffres, rien qu'à toi. Garde-le bien !",
+    },
+    /** Étape 3 — code parent (registre neutre, COPY.md §5). */
+    parentPin: {
+      title: "Un code pour le parent",
+      hint: "4 chiffres, différent de celui de l'enfant.",
+      method:
+        "Cet espace montre les progrès de {prénom} : de courtes séances, on revoit en douceur ce qui coince, sans jamais parler d'échec.",
+    },
+    /** Étape 4 — code de secours (affiché une seule fois, registre neutre). */
+    recovery: {
+      title: "Note ce code de secours",
+      intro:
+        "Il permet de réinitialiser le code parent s'il est oublié. On ne l'affiche qu'une seule fois — note-le maintenant.",
+      done: "C'est noté, continuer",
+    },
+    /** Écran final (voix Teddy). */
+    ready: {
+      title: "Ton aventure est prête ! 🎉",
+      cta: "On y va !",
+    },
+    /** Navigation entre étapes. */
+    nav: {
+      next: "Continuer",
+      back: "Retour",
+      create: "C'est parti !",
+      creating: "Un instant…",
+    },
+    /**
+     * Messages d'erreur (posture croissance : jamais « faux »/« erreur »).
+     * Clés = codes renvoyés par la server action (`OnboardingErrorCode`).
+     */
+    errors: {
+      NAME_INVALID: "Ton prénom, c'est entre 1 et 20 lettres.",
+      AVATAR_INVALID: "Choisis un portrait pour continuer.",
+      PIN_INVALID: "Le code, c'est 4 chiffres.",
+      PARENT_PIN_SAME: "Le code du parent doit être différent de celui de l'enfant.",
+      NAME_TAKEN: "Ce prénom est déjà pris — choisis-en un autre.",
+      GENERIC: "Oups, ça n'a pas marché. On réessaie ?",
+    },
+  },
+  /** Écran d'accueil quand le foyer est déjà configuré (placeholder #2.3). */
+  home: {
+    ready: "Ton foyer est prêt. La sélection de profil arrive bientôt !",
+  },
 } as const;
 
 export type Strings = typeof fr;
