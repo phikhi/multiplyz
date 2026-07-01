@@ -68,4 +68,18 @@ describe("isValidName", () => {
   it("accepte pile la borne max (après normalisation)", () => {
     expect(isValidName("x".repeat(NAME_MAX_LENGTH))).toBe(true);
   });
+
+  it("normalise AVANT de mesurer la borne (espaces de bord ignorés)", () => {
+    // 20 'x' entourés d'espaces → trim ramène à 20 → valide.
+    expect(isValidName(`   ${"x".repeat(NAME_MAX_LENGTH)}   `)).toBe(true);
+  });
+
+  it("compacte les espaces internes AVANT de mesurer (peut faire passer)", () => {
+    // 20 'x' + espaces multiples + 'y' : longueur brute 24, compactée à 22 → rejeté.
+    expect(isValidName(`${"x".repeat(NAME_MAX_LENGTH)}   y`)).toBe(false);
+    // Mais 19 'x' + espaces multiples + 'y' : compacté à "xx...x y" = 21 → rejeté aussi.
+    expect(isValidName(`${"x".repeat(19)}   y`)).toBe(false);
+    // 18 'x' + espaces + 'y' → compacté "xx...x y" = 20 → accepté.
+    expect(isValidName(`${"x".repeat(18)}   y`)).toBe(true);
+  });
 });

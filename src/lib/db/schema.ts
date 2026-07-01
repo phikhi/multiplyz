@@ -23,6 +23,13 @@ export const schemaMeta = sqliteTable("schema_meta", {
  * (accès espace parent + récupération) sont portés par le profil **propriétaire**
  * (posés au 1er usage, #2.2) — nullable sur les autres profils enfants (§1
  * multi-profils frères/sœurs). Aucun PIN en clair : seuls les **hash** argon2id.
+ *
+ * Invariants (à honorer par les stories consommatrices) :
+ * - **Owner** = l'unique ligne où `parent_pin_hash IS NOT NULL` (#2.2 le pose sur
+ *   le 1er profil créé).
+ * - **Unicité du prénom insensible à la casse** : l'index UNIQUE est BINARY ici ;
+ *   le check d'onboarding (#2.2) et le lookup de login (#2.3) matchent sur
+ *   `lower(name)` (une enfant tape sa casse au hasard).
  */
 export const profiles = sqliteTable("profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
