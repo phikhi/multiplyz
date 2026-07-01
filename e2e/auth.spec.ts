@@ -27,7 +27,11 @@ function digit(d: string) {
 // PIN parent (#2.5) — même foyer single-tenant sérialisé.
 let recoveryCode = "";
 
-/** Saisit un PIN (auto-soumission au 4ᵉ chiffre côté sélecteur). */
+/**
+ * Saisit un PIN sur le pavé partagé (composant contrôlé, sans auto-submit). La
+ * connexion (#2.3) câble l'auto-soumission au 4ᵉ chiffre côté page ; l'onboarding
+ * (#2.2) et la récupération (#2.5) exigent un clic explicite ensuite.
+ */
 async function enterPin(page: import("@playwright/test").Page, pin: string) {
   for (const d of pin) {
     await page.getByRole("button", { name: digit(d) }).click();

@@ -180,13 +180,16 @@ export function ParentRecoveryFlow() {
                 value={code}
                 maxLength={RECOVERY_CODE_LENGTH}
                 placeholder={strings.recovery.codePlaceholder}
-                onChange={(event) => setCode(event.target.value)}
+                onChange={(event) => {
+                  setError(null); // efface le bandeau d'erreur dès que le parent réédite
+                  setCode(event.target.value);
+                }}
                 style={{
                   minHeight: "var(--tap-target-min)",
                   padding: "var(--space-3) var(--space-4)",
                   fontSize: "var(--font-size-md)",
                   fontFamily: "var(--font-family-mono)",
-                  letterSpacing: "var(--space-1)",
+                  letterSpacing: "var(--letter-spacing-wide)",
                   textTransform: "uppercase",
                   color: "var(--color-text-primary)",
                   backgroundColor: "var(--color-bg-secondary)",
@@ -252,7 +255,7 @@ export function ParentRecoveryFlow() {
                 fontFamily: "var(--font-family-mono)",
                 fontSize: "var(--font-size-2xl)",
                 fontWeight: "var(--font-weight-bold)",
-                letterSpacing: "var(--space-2)",
+                letterSpacing: "var(--letter-spacing-wide)",
                 color: "var(--color-text-primary)",
               }}
             >

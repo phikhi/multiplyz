@@ -38,7 +38,7 @@
 ## 5. Récupération (sans email)
 
 - **PIN enfant oublié** → réinitialisable depuis l'**espace parent** (PIN parent).
-- **PIN parent oublié** → **code de secours** généré à la création du foyer (8 caractères, à noter par le parent) permettant de réinitialiser le PIN parent. (Filet ultime : accès direct à la base par le propriétaire.)
+- **PIN parent oublié** → **code de secours** généré à la création du foyer (8 caractères, à noter par le parent) permettant de réinitialiser le PIN parent. Le code de secours est **à usage unique** : à chaque réinitialisation réussie, l'ancien est consommé et un **nouveau code est régénéré + affiché une seule fois** (rate-limité comme la connexion, §4). Le path de vérif est réutilisable (rate-limit générique). (Filet ultime : accès direct à la base par le propriétaire — cf. #33/#7 pour consulter/régénérer le code depuis l'espace parent.)
 
 ## 6. Données & RGPD (usage familial)
 
