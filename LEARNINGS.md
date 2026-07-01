@@ -74,6 +74,35 @@
 
 ---
 
+## Rétro story #30 — épic #2 Auth-lite (2.2 onboarding, PR #36)
+
+### 2026-07-01 — [db/concurrence] TOCTOU : check-then-write avec un `await` entre = transaction synchrone (PR #36, MAJOR backend)
+- Problème : `createHousehold` faisait `if (householdExists) …` PUIS `await Promise.all([hash argon2])` PUIS `insert`. Le hash async **rend la main à l'event loop** → deux soumissions concurrentes de la server action (endpoint POST public ; le `disabled={submitting}` client n'est PAS une garantie serveur) passent toutes deux la garde → **2 propriétaires** (viole l'invariant « owner unique ») ou violation `UNIQUE(name)` re-levée en 500. Le code se réclamait « idempotent » sans l'être sous concurrence.
+- Leçon : sous un invariant d'unicité/idempotence, tout **check-then-write avec une opération async intercalée** doit re-vérifier + écrire dans une **transaction SYNCHRONE better-sqlite3** (`db.transaction((tx) => {…})`, callback sans `await`) — hacher AVANT. Le callback sync s'exécute d'un bloc (BEGIN…COMMIT) sans reprise d'event loop → sérialisation. Bonus couverture : garder la vérif **uniquement** dans la transaction (pas de court-circuit externe redondant) → les 3 branches (return false / throw / insert) sont couvrables déterministe.
+- Action : **candidat promotion CLAUDE.md** (règle serveur « écritures idempotentes » → préciser « check-then-write avec await = transaction sync »). À réappliquer dès #2.3 (création session/login) et toute écriture monotone.
+
+### 2026-07-01 — [coverage] L'optional-chaining `?.` compte comme une branche v8 (PR #36)
+- Problème : gérer le focus a11y via `useEffect(() => headingRef.current?.focus(), [step])` laisse la branche « current === null » **non couverte** (le titre est toujours monté) → gate `branches: 100` rouge.
+- Leçon : préférer un **ref-callback** (`ref={useCallback((node) => node?.focus(), [])}`) : au changement d'étape l'ancien titre démonte (`node=null`) et le nouveau monte (`node=élément`) → **les 2 branches du `?.` sont exercées** naturellement, et le focus suit l'étape. Éviter `?.` / paramètres par défaut / ternaires dont un côté est inatteignable sous gate 100 %.
+- Action : rappel (réapplique la discipline « pas de branche morte » déjà notée #34).
+
+### 2026-07-01 — [a11y] Assistant multi-étapes : focus au montage + région live pour secret à usage unique (PR #36, MAJOR frontend)
+- Problème : au changement d'étape, le focus retombait sur `<body>` (nouveau `<h1>` jamais annoncé) ; le **code de secours à usage unique** était un simple `<p>` (ni focusable ni annoncé) → un utilisateur clavier/lecteur d'écran pouvait le **rater**.
+- Leçon : dans un wizard, déplacer le focus sur le titre de chaque étape (`<h1 tabIndex={-1}>` + ref-callback focus au montage) ; annoncer tout contenu critique éphémère via `role="status"`. Pattern réutilisé par la connexion #2.3 (PinPad).
+- Action : rappel a11y (à réappliquer #2.3).
+
+### 2026-07-01 — [e2e] Gating dépendant d'un état DB → base E2E dédiée wipée à froid + spec mutante `retries:0` (PR #36)
+- Problème : la racine `/` affiche l'onboarding **seulement si aucun foyer** ; les E2E doivent partir d'un état vide déterministe, et le test qui **crée** le foyer mute le single-tenant partagé. Un retry CI (`retries:1`) sur ce test rejouerait sur un foyer déjà créé → `alreadyConfigured` → jamais l'écran attendu.
+- Leçon : base SQLite **dédiée E2E** (`data/e2e.sqlite`, jamais la dev), wipée en `globalSetup` + **migrée au boot** (`db:migrate && dev`) ; `describe.serial` + `test.describe.configure({ retries: 0 })` pour le spec mutant (un retry ne récupère pas une écriture one-time) ; donner un `<h1>` au placeholder « foyer configuré » pour que les specs cold-start `/` restent vertes dans les 2 états.
+- Action : rappel (référence pour toute story dont un écran dépend d'un état serveur).
+
+### 2026-07-01 — [security/copy] Garde de forme sur server action publique + registre parent neutre (PR #36)
+- Problème : (a) `"use server"` = endpoint public ; `input` typé n'est pas garanti au runtime → `sanitizeName(input.name)` sur un `name` non-string = `TypeError` 500 au lieu d'une erreur de validation (AUTH §4). (b) Le tutoiement de Teddy avait fuité dans l'étape **parent** (`parentPin.method`, `errors.PARENT_PIN_SAME`), alors que COPY §5 impose un registre **neutre** côté parent.
+- Leçon : (a) garder la **forme** (types des champs) en tête de toute server action avant sanitisation → erreur de validation propre. (b) surveiller le **registre par audience** (Teddy/tutoiement enfant vs neutre parent) — un même écran onboarding mélange les deux.
+- Action : rappel (réapplique à #2.3+ et à tout copy parent/enfant).
+
+---
+
 ## Rétro epic #1 (salve parallèle #11/#12/#14/#13)
 
 ### 2026-06-29 — [qa/ci] Gate coverage VIDÉ — récidive (PR #20)
