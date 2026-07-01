@@ -79,4 +79,24 @@ describe("strings (i18n FR)", () => {
     expect(strings.play.greeting.length).toBeGreaterThan(0);
     expect(strings.play.logout.length).toBeGreaterThan(0);
   });
+
+  it("récupération = registre parent NEUTRE (pas de tutoiement Teddy)", () => {
+    const rec = strings.recovery;
+    expect(rec.title.length).toBeGreaterThan(0);
+    expect(rec.done.intro).toContain("une seule fois"); // nouveau code affiché une fois
+    // Registre neutre (vouvoiement) : pas de tutoiement enfant (« tu »/« te »).
+    const parentText = `${rec.intro} ${rec.newPinHint} ${rec.done.intro}`.toLowerCase();
+    expect(parentText).not.toMatch(/\btu\b/);
+    expect(parentText).not.toMatch(/\bte\b/);
+  });
+
+  it("erreurs de récupération = clés RecoveryErrorCode + GENERIC (contrat UI↔serveur)", () => {
+    expect(Object.keys(strings.recovery.errors).sort()).toEqual([
+      "CODE_INVALID",
+      "GENERIC",
+      "PARENT_PIN_SAME",
+      "PIN_INVALID",
+    ]);
+    expect(strings.recovery.errors.PARENT_PIN_SAME).toContain("différent");
+  });
 });
