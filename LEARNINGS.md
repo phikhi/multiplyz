@@ -202,3 +202,32 @@
 - Problème/rappel : garde-fou anti-brute-force **sans** verrou permanent (c'est un enfant).
 - Leçon : (1) **bloquer AVANT le `verify`** (aucun coût argon2 consommé sur cible bloquée) ; (2) n'**enregistrer** un échec que sur une tentative **réellement** vérifiée (le chemin bloqué ne prolonge pas le délai → le backoff court depuis le dernier échec réel) ; (3) **reset au succès uniquement** (un attaquant ne remet pas le compteur à zéro sans le bon PIN) ; (4) bloqué → `null` **générique** indiscernable (anti-énum) ; (5) seuil = bloqué dès `failures >= threshold` (les `threshold` premières tentatives tolérées) ; (6) courbe **plafonnée** (jamais de verrou permanent). Path **générique** (seuil/scope paramétrés) → réutilisable (#2.5 code-secours).
 - Action : rappel (réappliquer tel quel à toute vérif de secret rate-limitée).
+
+---
+
+## Rétro story #33 — épic #2 Auth-lite (2.5 récupération PIN parent, PR #49) — **épic #2 COMPLET**
+
+### 2026-07-01 — [coverage/branch] Ordonner un `&&` pour rendre les deux côtés atteignables (PR #49)
+- Problème : `if (ok && owner !== undefined)` laisse la branche « `owner !== undefined` faux » **inatteignable** (elle n'est évaluée que si `ok` est vrai, or `ok` vrai implique un owner présent) → gate `branches: 100` rouge.
+- Leçon : mettre en **premier** l'opérande qui **varie** réellement dans les tests. `owner !== undefined && ok` : foyer absent court-circuite à gauche (owner undefined), foyer présent évalue `ok` des deux côtés (bon/mauvais code) → les 3 combinaisons du `&&` sont exercées. Règle générale sous gate 100 % : ordonner un `&&`/`||` pour qu'aucune combinaison ne soit logiquement morte.
+- Action : rappel (réapplique la discipline « pas de branche morte »).
+
+### 2026-07-01 — [process/coverage] Une branche défensive seulement atteignable en concurrence → issue, pas absorbée (PR #49)
+- Problème : le reset (verify async → `UPDATE`) a un TOCTOU (double reset concurrent = last-write-wins). Le fix propre = CAS (`UPDATE … WHERE recovery_code_hash = ?` + `changes === 1` sinon erreur). Mais la branche `changes !== 1` n'est **atteignable qu'en concurrence** → intestable en mono-thread → casserait le gate 100 %.
+- Leçon : un durcissement dont la branche d'échec n'est pas déterministe en test unitaire se **route en issue** (#50) plutôt que de l'absorber et vider/contourner le gate. Enjeu réel mais négligeable en single-tenant (+ `disabled={submitting}`) → priorité basse. (Confirmé par le reviewer backend lui-même.)
+- Action : rappel (candidat : tester un CAS via injection d'une rotation entre verify et update, si un jour requis).
+
+### 2026-07-01 — [copy] Registre PAR AUDIENCE, pas selon le libellé de l'issue (PR #49)
+- Problème : l'issue #33 disait « voix de Teddy », mais l'écran de récupération est **parent** → COPY §5 impose un registre **neutre/vouvoiement** (pas Teddy, pas de tutoiement/emoji). Découvert aussi : `onboarding.recovery` (#2.2) avait laissé fuiter du **tutoiement** sur un écran parent (→ issue #51).
+- Leçon : déterminer le registre par l'**audience réelle de l'écran** (enfant = Teddy/tutoiement ; parent = neutre/vouvoiement), pas par la formulation de l'issue. Verrouiller par test (`strings.test` rejette `\btu\b`/`\bte\b` sur les textes parent).
+- Action : rappel (réapplique LEARNINGS #2.2 « registre par audience » ; issue #51 pour aligner l'onboarding).
+
+### 2026-07-01 — [reuse/consts] Primitive rate-limit générique + constantes pures partagées (PR #49)
+- Observation : (1) le path rate-limit de #2.4 (`rate-limit.ts` + `pin-attempts.ts`, seuil/scope paramétrés) a été réutilisé **sans refactor** pour la récupération — il a suffi d'étendre `AttemptScope` de `"recovery"`. Confirme le dividende d'un cœur générique. (2) `RECOVERY_CODE_LENGTH`/alphabet ont dû être **remontés dans `validation.ts`** (module **pur, client-safe**) car `tokens.ts` (import argon2, server-only) ne peut pas être importé côté client (l'UI a besoin de la longueur). `tokens.ts` réimporte + réexporte (compat).
+- Leçon : concevoir les gardes avec seuil/scope paramétrés (réemploi cross-story) ; placer les **constantes partagées client+serveur** dans un module **pur** (jamais un module server-only qui tire argon2/DB).
+- Action : rappel.
+
+### 2026-07-01 — [process] Clôture d'épic : contrat mis à jour + 5 stories salve reviewers (épic #2)
+- Observation : épic #2 Auth-lite bouclé en 5 stories séquencées (2.1 fondation → 2.5 récup), chacune 4–5 reviewers indépendants **APPROVE au 1er tour** (nits/forward-looking uniquement), fixes de consensus in-contract appliqués à chaud, hors-scope systématiquement **routé en issues** (anti-drift). Décision d'impl in-contract (code de secours usage-unique régénéré) → **AUTH §5 mis à jour canoniquement** dans la PR (le contrat suit la réalité). Fondations minces + génériques (PinPad, rate-limit, hash, sessions) ont rendu chaque story consommatrice courte.
+- Leçon : séquencer un épic par surfaces partagées, garder les fondations génériques, mettre à jour la spec quand une décision in-contract la précise, router le forward-looking. Discipline reviewers indépendants + merge autonome orchestrateur (in-contract, CI verte) tenue sur 5 stories.
+- Action : rappel process (transposer à l'épic #3 Moteur math).
