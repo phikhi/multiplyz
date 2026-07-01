@@ -101,6 +101,11 @@
 - Leçon : (a) garder la **forme** (types des champs) en tête de toute server action avant sanitisation → erreur de validation propre. (b) surveiller le **registre par audience** (Teddy/tutoiement enfant vs neutre parent) — un même écran onboarding mélange les deux.
 - Action : rappel (réapplique à #2.3+ et à tout copy parent/enfant).
 
+### 2026-07-01 — [dx] 3 footguns de dev local révélés dès que `/` lit la DB (PR #40, #41)
+- Problème : dès que la racine `/` lit une table à la requête (gating #30), le dev local casse là où les stories précédentes (page statique) ne touchaient pas la DB : (a) `pnpm dev` ne migrait pas → `SqliteError: no such table: profiles` (base dev fraîche) ; (b) le **service worker** cachait `/_next/static/*` en **cache-first** (« assets immuables ») → **faux en dev** : les chunks Turbopack réutilisent leurs URLs après édition → un chunk **périmé** servi → `strings.onboarding undefined` / TypeError ; (c) `prettier --check <un-seul-fichier>` a donné un **faux vert** alors que `prettier --check .` (la commande CI) échouait sur le même fichier → `quality` rouge au push.
+- Leçon : (a) `pnpm dev` = `pnpm db:migrate && next dev` (idempotent ; prod migre via Forge, pas au boot) ; (b) SW `/_next/static` en **réseau-d'abord** (frais en ligne dev+prod, cache en repli hors-ligne), bumper `CACHE_NAME` pour purger l'ancien cache ; cache-first n'est correct QUE sur des noms hashés (prod) ; (c) toujours lancer **`pnpm format`** (commande CI exacte) avant push, pas un check par-fichier.
+- Action : (a)+(b) appliqués. (c) rappel — candidat **hook pre-PR** `pnpm format` (déjà pressenti epic #1).
+
 ---
 
 ## Rétro epic #1 (salve parallèle #11/#12/#14/#13)
