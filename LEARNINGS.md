@@ -144,3 +144,37 @@
 - Problème : le skill `next-dev-loop` (DoD vérif runtime) exige `/_next/mcp` (Next ≥ 16.3) ; projet en 16.2.9 → item DoD jamais réellement exécuté, suppléé par E2E live.
 - Leçon : un item DoD peut être bloqué par la version de la stack — le tracer, ne pas le cocher en silence.
 - Action : issue `discovered` #24 (upgrade Next ≥ 16.3). Rappel.
+
+---
+
+## Rétro story #31 — épic #2 Auth-lite (2.3 connexion, PR #42)
+
+### 2026-07-01 — [coverage/next] Un layout de groupe imbriqué EST mesuré par le gate (PR #42)
+- Problème : le gate coverage exclut le littéral **exact** `src/app/layout.tsx` (boilerplate racine). Un layout de **route-group** (`src/app/(app)/layout.tsx`, garde de route) n'est PAS couvert par cet exclude → il est **mesuré** et doit atteindre 100 %.
+- Leçon : garder la glue du garde **mince** (lire session → `redirect()` sinon rendre `children`), la logique de validité dans un module pur testé, puis **unit-tester le layout** en mockant `@/lib/auth/current-session` + `next/navigation` (appeler `await AppLayout({children})`, asserter `redirect` appelé vs enfants rendus). **Ne pas** ajouter d'exclude (règle dure : exclude = boilerplate framework non testable uniquement).
+- Action : rappel (réapplicable à tout garde de route serveur en groupe).
+
+### 2026-07-01 — [e2e] Deux specs à état single-tenant OPPOSÉ ne partagent pas une base wipée-à-froid en parallèle (PR #42)
+- Problème : `onboarding.spec` exige un foyer **vide** (gating 1er usage), la connexion exige un foyer **peuplé**. Une seule base E2E wipée une fois + `fullyParallel:true` → course inter-fichiers (l'ordre inter-fichiers n'est **pas** garanti ; `workers:1` ordonne par nom, fragile et lent).
+- Leçon : quand deux stories forment une **même séquence** sur l'état single-tenant (créer → se connecter → garde → déconnexion), les **fusionner dans un seul fichier `describe.serial`** (ici `e2e/auth.spec.ts`, l'ancien `onboarding.spec.ts` plié dedans) → état déterministe, contexte navigateur neuf par test (le test de garde est naturellement sans cookie). `retries:0` sur le spec mutant conservé.
+- Action : rappel (référence pour toute story dont l'E2E dépend d'un état serveur partagé avec une story sœur).
+
+### 2026-07-01 — [security] Hash-leurre anti-énumération : épingler ses params argon2 aux défauts via un test CI (PR #42)
+- Problème : `authenticateChild` vérifie un `TIMING_EQUALIZER_HASH` factice quand le profil est inconnu → temps constant (profil-inconnu indiscernable de PIN-faux, AUTH §4). Mais ce hash fige `m=19456,t=2,p=1` **en dur** ; si `AUTH_ARGON2_*` relève le coût en prod, les vrais hash deviennent plus lents que le leurre → oracle temporel **réintroduit silencieusement**.
+- Leçon : lier le leurre à la config par un **test de garde** — asserter que `TIMING_EQUALIZER_HASH` contient `m=<memoryCost>,t=<timeCost>,p=<parallelism>` de `CONFIG_DEFAULTS.auth.argon2` → un bump de coût casse la CI et force la regénération du leurre.
+- Action : rappel (tout leurre à temps constant doit tracer ses paramètres cryptographiques).
+
+### 2026-07-01 — [auth] Un garde nommé pour un `kind` doit filtrer sur `kind` à la frontière (PR #42, consensus security+PO)
+- Problème : `getCurrentChildSession` renvoyait n'importe quelle session valide. Inoffensif en #2.3 (seules des sessions `child` existent), mais l'espace parent (#7) partagera le **même cookie** `mz_session` avec une session `parent` **courte (15 min)** → elle ouvrirait le jeu enfant (et expirerait en pleine partie).
+- Leçon : dès que plusieurs `kind` de session partagent un cookie, **filtrer le kind à chaque frontière de garde** (`session?.kind === "child" ? session : null`). Le nom de la fonction doit refléter la garantie qu'elle offre.
+- Action : filtre posé en #2.3 (défense en profondeur avant #7) ; verrou enfant/parent à confirmer côté #7 (issue #43). Rappel.
+
+### 2026-07-01 — [next] `cookies()` est asynchrone en Next 16 (PR #42)
+- Problème : `cookies()` de `next/headers` retourne une Promise (Next 15+) → `store.set/get/delete` sur le résultat non-await = erreur.
+- Leçon : `await cookies()` dans la glue cookie server-only ; garder le **constructeur d'options pur** (`sessionCookieOptions(expiresAt, secure)`) séparé de l'appel `cookies()` → options testables sans mocker `next/headers`, glue testée en mockant `next/headers`.
+- Action : rappel.
+
+### 2026-07-01 — [process] Salve de 5 reviewers → APPROVE 1er tour, fixes in-contract avant merge (PR #42)
+- Observation : 5 reviewers indépendants (backend/security/frontend+a11y/qa/PO) en // → **5× APPROVE au 1er tour**, uniquement nits/forward-looking. 3 findings de **consensus** appliqués avant merge car in-contract et bon marché (filtre kind, easing tokenisé, test garde timing) ; findings forward-looking **routés en issues** (#43 entrée Parent + verrou kind #7, #44 GC sessions) + commentaire #32 (rate-limit via `headers()` IP) plutôt qu'absorbés.
+- Leçon : appliquer les fixes de consensus in-contract tant que le worktree est chaud (une itération), router le hors-scope en issues (anti-drift), merge autonome de l'orchestrateur (story in-contract, CI verte, branche à jour).
+- Action : rappel process (confirme la discipline reviewers indépendants + anti-drift).
