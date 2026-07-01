@@ -189,6 +189,27 @@ Les agents utilisent les **skills installés comme playbooks canoniques** (ne pa
 
 > **Exclus** : `expo:*` (app native — on est web/PWA), `stripe:*` (pas de paiement).
 
+## 20. Boucle d'orchestration autonome (planning délégué — ADR 0004)
+
+Au démarrage d'une conversation (« continue multiplyz »), l'agent orchestrateur lance le skill **`orchestrate`** et est **autonome sur le planning** — le propriétaire n'intervient **que** sur le **drift**. Séquence :
+
+1. **Synchro état** : `git fetch --prune`, `gh pr list`, `gh issue list`, `gh run list`. **Finir l'existant** (PR prête → review/merge ; worktree orphelin → reprendre/nettoyer) avant d'ouvrir du neuf.
+2. **Triage du backlog** (grille) :
+
+   | Classe | Critère | Action |
+   |---|---|---|
+   | **bloquant-maintenant** | correctness/sécu dont dépend une story du scope courant | intégrer dans l'épic, avant la story consommatrice |
+   | **prochain-épic** | rattachée à un épic futur précis | lier l'épic cible, différer |
+   | **backlog-hygiène** | nice-to-have / durcissement, aucun blocage | opportuniste (au contact du code) ou fin d'épic |
+   | **gate-déploiement** | requis avant un jalon de déploiement | taguer, différer au pré-déploiement |
+
+3. **Découpage** de l'épic courant en stories GitHub (ordre de build verrouillé PLAN/CLAUDE) : critères d'acceptation + DoD + `blocked-by`, séquencées par **surfaces partagées**.
+4. **Choix + parallélisation** : prochaine story = 1ʳᵉ débloquée ; paralléliser **seulement** si surfaces disjointes + aucun contrat partagé modifié (schéma/config/lint/dep/composant), sinon **séquencer** (cf. §14).
+5. **Exécution** : `story-start` → build (DoD) → `open-pr` → reviewers indépendants (scope+PO) → fixes consensus in-contract → **merge** (ADR 0003) → `retro` → LEARNINGS ; **re-triage** entre les merges ; **clôture d'épic** puis épic suivant.
+6. **Escalade — SEULEMENT le drift** (PLAN data / pédagogie / éco / sécurité / scope). Sinon **jamais** de sollicitation ; l'agent **rapporte** ses décisions de planning sans attendre d'aval.
+
+Gates de qualité (CI/reviews/PO/branch-protection) **inchangés** : la délégation porte sur le **planning**, pas sur le relâchement des contrôles.
+
 ## Décisions verrouillées (ce tour)
 
 | Sujet | Choix |
@@ -200,6 +221,7 @@ Les agents utilisent les **skills installés comme playbooks canoniques** (ne pa
 | Orchestration | **Claude Code natif** (Agent + Workflow + hooks) + GitHub Actions |
 | Reviewers | Backend · Frontend+A11y · Security · QA/Test · Game-design · **Product Owner** |
 | Merge | **Agent orchestrateur** après reviews scope+PO ✅ + checks verts + branche à jour ; proprio = drift/révocation (ADR 0003) |
+| Planning | **Agent orchestrateur autonome** : triage backlog + découpage épic + choix/parallélisation stories (skill `orchestrate`, §20) ; proprio = **drift uniquement** (ADR 0004) |
 | Anti-drift | Critères d'acceptation + required checks + scope-guard + PO |
 | DoR | Story prenable seulement si critères/scope/deps/estim. OK |
 | Auto-apprentissage | **`LEARNINGS.md`** versionné + **promotion** en règles dures |
