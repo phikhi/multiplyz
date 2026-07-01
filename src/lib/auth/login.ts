@@ -1,8 +1,11 @@
 import { asc, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { profiles } from "@/lib/db/schema";
+import { getAuthConfig } from "@/config/server-config";
 import { verifyPin } from "./pin";
 import { createSession, type CreatedSession } from "./session";
+import { isBlocked } from "./rate-limit";
+import { attemptKey, getAttemptState, recordFailure, resetAttempts } from "./pin-attempts";
 
 /**
  * Connexion enfant (AUTH.md §2 flow connexion, §4 anti-énumération). SERVER-ONLY.
@@ -81,4 +84,62 @@ export async function authenticateChild(
   if (!ok || profile === undefined) return null;
 
   return createSession(db, profile.id, "child", now);
+}
+
+/** Entrée d'une tentative de connexion enveloppée par le rate-limit. */
+export interface ChildLoginInput {
+  profileId: number;
+  pin: string;
+  /** IP client (rate-limit par IP, AUTH.md §4) — cf. `parseClientIp`. */
+  ip: string;
+}
+
+/**
+ * `authenticateChild` **enveloppé du rate-limit + backoff** (AUTH.md §4). Garde-fou
+ * proportionné contre le brute-force : après ~5 échecs par profil (ou ~15 par IP),
+ * un backoff croissant s'applique — **jamais** de verrou permanent (c'est un enfant).
+ *
+ * - **Cible bloquée** (profil OU IP en backoff) → `null` immédiat, **sans** vérifier
+ *   le PIN (le ralentissement, c'est justement ne pas consommer de `verify`).
+ * - **Succès** → réinitialise les deux compteurs (profil + IP) puis renvoie la session.
+ * - **Échec** → incrémente les deux compteurs.
+ *
+ * Renvoie `null` de façon **générique** (blocage vs PIN faux vs profil inconnu tous
+ * indiscernables côté client, anti-énumération §4). `now` injecté → déterministe.
+ * Le path est **générique** (seuil paramétré) → réutilisable par la vérif du code de
+ * secours (#2.5). Seuils/courbe = ⚙️ config (rien en dur).
+ */
+export async function guardedAuthenticateChild(
+  db: AppDatabase,
+  input: ChildLoginInput,
+  now: Date,
+): Promise<CreatedSession | null> {
+  const { rateLimit } = getAuthConfig();
+  const profileKey = attemptKey("profile", String(input.profileId));
+  const ipKey = attemptKey("ip", input.ip);
+
+  const profileBlocked = isBlocked(
+    getAttemptState(db, profileKey),
+    rateLimit.maxAttemptsPerProfile,
+    rateLimit,
+    now,
+  );
+  const ipBlocked = isBlocked(
+    getAttemptState(db, ipKey),
+    rateLimit.maxAttemptsPerIp,
+    rateLimit,
+    now,
+  );
+  if (profileBlocked || ipBlocked) return null;
+
+  const created = await authenticateChild(db, input.profileId, input.pin, now);
+  if (created !== null) {
+    resetAttempts(db, profileKey);
+    resetAttempts(db, ipKey);
+    return created;
+  }
+
+  recordFailure(db, profileKey, now);
+  recordFailure(db, ipKey, now);
+  return null;
 }

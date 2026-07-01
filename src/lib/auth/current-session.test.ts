@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getValidSession, revokeSession } from "./session";
-import { authenticateChild } from "./login";
+import { guardedAuthenticateChild } from "./login";
 import { clearSessionCookie, readSessionToken, setSessionCookie } from "./session-cookie";
 import { getCurrentChildSession, loginChild, logoutChild } from "./current-session";
 
 vi.mock("@/lib/db", () => ({ getDb: () => ({ tag: "db" }) }));
 vi.mock("./session", () => ({ getValidSession: vi.fn(), revokeSession: vi.fn() }));
-vi.mock("./login", () => ({ authenticateChild: vi.fn() }));
+vi.mock("./login", () => ({ guardedAuthenticateChild: vi.fn() }));
 vi.mock("./session-cookie", () => ({
   readSessionToken: vi.fn(),
   setSessionCookie: vi.fn(),
@@ -15,7 +15,7 @@ vi.mock("./session-cookie", () => ({
 
 const getValidSessionMock = vi.mocked(getValidSession);
 const revokeSessionMock = vi.mocked(revokeSession);
-const authenticateChildMock = vi.mocked(authenticateChild);
+const guardedAuthenticateChildMock = vi.mocked(guardedAuthenticateChild);
 const readSessionTokenMock = vi.mocked(readSessionToken);
 const setSessionCookieMock = vi.mocked(setSessionCookie);
 const clearSessionCookieMock = vi.mocked(clearSessionCookie);
@@ -58,15 +58,20 @@ describe("getCurrentChildSession", () => {
 });
 
 describe("loginChild", () => {
-  it("succès → pose le cookie et renvoie true", async () => {
-    authenticateChildMock.mockResolvedValue({ token: "tok", expiresAt: new Date() });
-    await expect(loginChild(1, "1234")).resolves.toBe(true);
+  it("succès → pose le cookie et renvoie true ; passe l'IP au garde rate-limit", async () => {
+    guardedAuthenticateChildMock.mockResolvedValue({ token: "tok", expiresAt: new Date() });
+    await expect(loginChild(1, "1234", "1.2.3.4")).resolves.toBe(true);
+    expect(guardedAuthenticateChildMock).toHaveBeenCalledWith(
+      { tag: "db" },
+      { profileId: 1, pin: "1234", ip: "1.2.3.4" },
+      expect.any(Date),
+    );
     expect(setSessionCookieMock).toHaveBeenCalledOnce();
   });
 
-  it("échec → aucun cookie, renvoie false (générique)", async () => {
-    authenticateChildMock.mockResolvedValue(null);
-    await expect(loginChild(1, "0000")).resolves.toBe(false);
+  it("échec (PIN faux ou backoff) → aucun cookie, renvoie false (générique)", async () => {
+    guardedAuthenticateChildMock.mockResolvedValue(null);
+    await expect(loginChild(1, "0000", "1.2.3.4")).resolves.toBe(false);
     expect(setSessionCookieMock).not.toHaveBeenCalled();
   });
 });

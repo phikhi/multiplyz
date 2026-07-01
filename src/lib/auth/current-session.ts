@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { getValidSession, revokeSession, type ActiveSession } from "./session";
 import { clearSessionCookie, readSessionToken, setSessionCookie } from "./session-cookie";
-import { authenticateChild } from "./login";
+import { guardedAuthenticateChild } from "./login";
 
 /**
  * Point d'entrée « session courante » côté runtime Next (glue `next/headers` +
@@ -25,11 +25,13 @@ export async function getCurrentChildSession(): Promise<ActiveSession | null> {
 }
 
 /**
- * Connexion enfant : vérifie le PIN, ouvre la session et pose le cookie. Renvoie
- * `true` si connecté, `false` génériquement sinon (anti-énumération, AUTH.md §4).
+ * Connexion enfant : vérif PIN **enveloppée du rate-limit** (par profil ET par IP,
+ * AUTH.md §4), ouverture de session + pose du cookie. Renvoie `true` si connecté,
+ * `false` génériquement sinon (PIN faux, profil inconnu **ou** backoff actif — tous
+ * indiscernables). `ip` fourni par l'action (via `headers()`).
  */
-export async function loginChild(profileId: number, pin: string): Promise<boolean> {
-  const created = await authenticateChild(getDb(), profileId, pin, new Date());
+export async function loginChild(profileId: number, pin: string, ip: string): Promise<boolean> {
+  const created = await guardedAuthenticateChild(getDb(), { profileId, pin, ip }, new Date());
   if (created === null) return false;
   await setSessionCookie(created.token, created.expiresAt);
   return true;

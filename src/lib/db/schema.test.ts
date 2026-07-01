@@ -6,7 +6,7 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { afterAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index";
 import { runMigrations } from "./migrate";
-import { profiles, sessions } from "./schema";
+import { pinAttempts, profiles, sessions } from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-auth-schema-"));
 let counter = 0;
@@ -75,5 +75,19 @@ describe("schéma sessions (FK ON DELETE CASCADE)", () => {
     expect(ref.foreignTable).toBe(profiles);
     expect(ref.foreignColumns[0].name).toBe("id");
     expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+describe("schéma pin_attempts (rate-limit — AUTH §4)", () => {
+  it("clé composite texte en PK + compteur par défaut 0 (niveau DB)", () => {
+    const db = freshDb();
+    // Insertion sans `failures` → exerce le défaut DB (0).
+    db.insert(pinAttempts)
+      .values({ id: "profile:1", lastFailureAt: new Date(1_000_000) })
+      .run();
+
+    const row = db.select().from(pinAttempts).get();
+    expect(row).toMatchObject({ id: "profile:1", failures: 0 });
+    expect(row?.lastFailureAt).toBeInstanceOf(Date);
   });
 });
