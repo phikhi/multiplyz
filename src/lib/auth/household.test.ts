@@ -141,4 +141,17 @@ describe("createHousehold — validation serveur (rien n'est créé)", () => {
       OnboardingError,
     );
   });
+
+  it("entrée forgée non-string (endpoint public) → validation propre, rien créé", async () => {
+    // Un client forgé peut envoyer n'importe quoi : on refuse la forme AVANT
+    // sanitisation (sinon TypeError → 500 au lieu d'une erreur de validation).
+    const bad = (patch: Partial<Record<keyof CreateHouseholdInput, unknown>>) =>
+      createHousehold(db, { ...VALID, ...patch } as CreateHouseholdInput);
+
+    await expect(bad({ name: 123 })).rejects.toMatchObject({ code: "NAME_INVALID" });
+    await expect(bad({ avatar: 5 })).rejects.toMatchObject({ code: "AVATAR_INVALID" });
+    await expect(bad({ childPin: 1234 })).rejects.toMatchObject({ code: "PIN_INVALID" });
+    await expect(bad({ parentPin: 9876 })).rejects.toMatchObject({ code: "PIN_INVALID" });
+    expect(ownerRow()).toHaveLength(0);
+  });
 });

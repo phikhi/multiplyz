@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { strings } from "@/strings";
 import { AVATARS } from "@/config/avatars";
-import { PIN_LENGTH } from "@/lib/auth/validation";
+import { NAME_MAX_LENGTH, PIN_LENGTH } from "@/lib/auth/validation";
 import { PinPad } from "@/components/PinPad";
 import { createHouseholdAction } from "./actions";
 import type { OnboardingErrorCode } from "@/lib/auth/household";
@@ -94,6 +94,12 @@ const ghostButtonStyle = {
 
 export function OnboardingFlow() {
   const router = useRouter();
+  // Gestion du focus a11y : chaque étape monte un nouveau titre ; ce ref-callback
+  // y place le focus à son montage → l'utilisateur clavier/lecteur d'écran suit
+  // le changement d'étape (et n'atterrit pas sur <body>). Au démontage `node=null`.
+  const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
+    node?.focus();
+  }, []);
   const [step, setStep] = useState<Step>("profile");
   const [name, setName] = useState(NONE);
   const [avatar, setAvatar] = useState(NONE);
@@ -162,7 +168,9 @@ export function OnboardingFlow() {
 
         {step === "profile" && (
           <>
-            <h1 style={titleStyle}>{strings.onboarding.profile.title}</h1>
+            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
+              {strings.onboarding.profile.title}
+            </h1>
             <p style={{ textAlign: "center", margin: 0, color: "var(--color-text-secondary)" }}>
               {strings.onboarding.profile.intro}
             </p>
@@ -174,7 +182,7 @@ export function OnboardingFlow() {
               <input
                 type="text"
                 value={name}
-                maxLength={20}
+                maxLength={NAME_MAX_LENGTH}
                 placeholder={strings.onboarding.profile.namePlaceholder}
                 onChange={(event) => setName(event.target.value)}
                 style={{
@@ -202,12 +210,20 @@ export function OnboardingFlow() {
             >
               {AVATARS.map((option) => {
                 const selected = option.id === avatar;
+                // Chaque id d'AVATARS a un libellé (invariant vérifié en test).
+                const avatarName =
+                  strings.onboarding.profile.avatarNames[
+                    option.id as keyof typeof strings.onboarding.profile.avatarNames
+                  ];
                 return (
                   <button
                     key={option.id}
                     type="button"
                     aria-pressed={selected}
-                    aria-label={option.emoji}
+                    aria-label={strings.onboarding.profile.avatarOption.replace(
+                      "{nom}",
+                      avatarName,
+                    )}
                     onClick={() => setAvatar(option.id)}
                     style={{
                       minWidth: "var(--tap-target-min)",
@@ -240,7 +256,9 @@ export function OnboardingFlow() {
 
         {step === "childPin" && (
           <>
-            <h1 style={titleStyle}>{strings.onboarding.childPin.title}</h1>
+            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
+              {strings.onboarding.childPin.title}
+            </h1>
             <p style={{ textAlign: "center", margin: 0, color: "var(--color-text-secondary)" }}>
               {strings.onboarding.childPin.hint}
             </p>
@@ -269,7 +287,9 @@ export function OnboardingFlow() {
 
         {step === "parentPin" && (
           <>
-            <h1 style={titleStyle}>{strings.onboarding.parentPin.title}</h1>
+            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
+              {strings.onboarding.parentPin.title}
+            </h1>
             <p style={{ textAlign: "center", margin: 0, color: "var(--color-text-secondary)" }}>
               {strings.onboarding.parentPin.hint}
             </p>
@@ -307,17 +327,22 @@ export function OnboardingFlow() {
 
         {step === "recovery" && (
           <>
-            <h1 style={titleStyle}>{strings.onboarding.recovery.title}</h1>
+            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
+              {strings.onboarding.recovery.title}
+            </h1>
             <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
               {strings.onboarding.recovery.intro}
             </p>
+            {/* role=status : le code à usage unique est annoncé aux lecteurs
+                d'écran dès l'affichage (ne pas le rater). */}
             <p
+              role="status"
               style={{
                 textAlign: "center",
                 fontFamily: "var(--font-family-display)",
                 fontSize: "var(--font-size-3xl)",
                 fontWeight: "var(--font-weight-bold)",
-                letterSpacing: "var(--space-1)",
+                letterSpacing: "var(--letter-spacing-wide)",
                 color: "var(--color-accent-primary)",
                 margin: 0,
               }}
@@ -332,7 +357,9 @@ export function OnboardingFlow() {
 
         {step === "ready" && (
           <>
-            <h1 style={titleStyle}>{strings.onboarding.ready.title}</h1>
+            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
+              {strings.onboarding.ready.title}
+            </h1>
             <button type="button" onClick={() => router.refresh()} style={primaryButtonStyle}>
               {strings.onboarding.ready.cta}
             </button>

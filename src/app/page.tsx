@@ -4,8 +4,10 @@ import { strings } from "@/strings";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
 
 // Lecture DB à chaque requête (source de vérité serveur) : jamais prérendu au
-// build (sinon ouverture SQLite au build). Runtime Node — cf. CLAUDE.md.
+// build (sinon ouverture SQLite au build). Runtime Node explicite — better-sqlite3
+// exige Node (pas edge), cf. CLAUDE.md + next.config serverExternalPackages.
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * Entrée de l'app. Gating 1er usage (AUTH.md §2, PRODUCT.md §1.1) :

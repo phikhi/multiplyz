@@ -1,7 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
-import { AVATARS } from "../src/config/avatars";
 
 /**
  * E2E onboarding 1er usage (#2.2). Sérialisé : la création mute le foyer
@@ -10,6 +9,11 @@ import { AVATARS } from "../src/config/avatars";
  * `next-dev-loop` (vérif runtime) est indispo < Next 16.3 (#24) → supplée par E2E live.
  */
 const nav = strings.onboarding.nav;
+// Libellé a11y du 1er portrait (AVATARS[0] = fox → « Portrait renard »).
+const avatarLabel = strings.onboarding.profile.avatarOption.replace(
+  "{nom}",
+  strings.onboarding.profile.avatarNames.fox,
+);
 
 function digit(d: string) {
   return strings.pinPad.digit.replace("{d}", d);
@@ -18,6 +22,11 @@ function digit(d: string) {
 test.beforeAll(async () => {
   await mkdir("docs/captures", { recursive: true });
 });
+
+// Spec MUTANT (crée le foyer) : un retry ne peut pas récupérer une écriture
+// partielle (foyer déjà configuré → plus d'écran onboarding). On désactive les
+// retries pour ce bloc → échec franc et lisible plutôt qu'un retry trompeur.
+test.describe.configure({ retries: 0 });
 
 test.describe.serial("onboarding 1er usage", () => {
   test("foyer vide → écran 1er usage (capture)", async ({ page }) => {
@@ -38,7 +47,7 @@ test.describe.serial("onboarding 1er usage", () => {
 
     // Étape profil : prénom + avatar.
     await page.getByRole("textbox").fill("Léa");
-    await page.getByRole("button", { name: AVATARS[0].emoji }).click();
+    await page.getByRole("button", { name: avatarLabel }).click();
     await page.getByRole("button", { name: nav.next }).click();
 
     // Étape code enfant (pavé partagé).

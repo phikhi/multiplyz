@@ -53,6 +53,19 @@ export const fr = {
       nameLabel: "Comment tu t'appelles ?",
       namePlaceholder: "Ton prénom",
       avatarLabel: "Choisis ton portrait",
+      /** Gabarit ARIA d'un portrait (`{nom}` = libellé lisible du portrait). */
+      avatarOption: "Portrait {nom}",
+      /** Libellés FR des portraits (clé = `AvatarOption.id`) — a11y lisible. */
+      avatarNames: {
+        fox: "renard",
+        rabbit: "lapin",
+        panda: "panda",
+        cat: "chat",
+        frog: "grenouille",
+        owl: "chouette",
+        penguin: "manchot",
+        unicorn: "licorne",
+      },
     },
     /** Étape 2 — code secret enfant (voix Teddy). */
     childPin: {
@@ -64,7 +77,7 @@ export const fr = {
       title: "Un code pour le parent",
       hint: "4 chiffres, différent de celui de l'enfant.",
       method:
-        "Cet espace te montrera les progrès de {prénom} : de courtes séances, on revoit en douceur ce qui coince, sans jamais parler d'échec.",
+        "Cet espace montre les progrès de {prénom} : de courtes séances, on revoit en douceur ce qui coince, sans jamais parler d'échec.",
     },
     /** Étape 4 — code de secours (affiché une seule fois, registre neutre). */
     recovery: {
@@ -93,7 +106,7 @@ export const fr = {
       NAME_INVALID: "Ton prénom, c'est entre 1 et 20 lettres.",
       AVATAR_INVALID: "Choisis un portrait pour continuer.",
       PIN_INVALID: "Le code, c'est 4 chiffres.",
-      PARENT_PIN_SAME: "Le code du parent doit être différent du tien.",
+      PARENT_PIN_SAME: "Le code du parent doit être différent de celui de l'enfant.",
       NAME_TAKEN: "Ce prénom est déjà pris — choisis-en un autre.",
       GENERIC: "Oups, ça n'a pas marché. On réessaie ?",
     },

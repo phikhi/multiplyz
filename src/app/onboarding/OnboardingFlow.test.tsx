@@ -12,6 +12,11 @@ vi.mock("./actions", () => ({ createHouseholdAction: vi.fn() }));
 const actionMock = vi.mocked(createHouseholdAction);
 
 const nav = strings.onboarding.nav;
+// Libellé a11y du 1er portrait (AVATARS[0] = fox → « Portrait renard »).
+const avatarLabel = strings.onboarding.profile.avatarOption.replace(
+  "{nom}",
+  strings.onboarding.profile.avatarNames.fox,
+);
 
 function pressDigits(digits: string) {
   for (const d of digits) {
@@ -22,7 +27,7 @@ function pressDigits(digits: string) {
 /** Amène l'assistant jusqu'à l'étape parent avec un code parent complet. */
 function driveToParentReady() {
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
-  fireEvent.click(screen.getByRole("button", { name: AVATARS[0].emoji }));
+  fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
   fireEvent.click(screen.getByRole("button", { name: nav.next })); // → childPin
   pressDigits("1234");
   fireEvent.click(screen.getByRole("button", { name: nav.next })); // → parentPin
@@ -44,7 +49,7 @@ describe("OnboardingFlow — gating par étape (affordance client)", () => {
     expect(next()).toBeDisabled(); // avatar manquant
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: AVATARS[0].emoji }));
+    fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     expect(next()).toBeDisabled(); // prénom manquant
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
@@ -54,7 +59,7 @@ describe("OnboardingFlow — gating par étape (affordance client)", () => {
   it("code enfant : suivant désactivé tant que < 4 chiffres", () => {
     render(<OnboardingFlow />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
-    fireEvent.click(screen.getByRole("button", { name: AVATARS[0].emoji }));
+    fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
 
     expect(screen.getByRole("button", { name: nav.next })).toBeDisabled();
@@ -67,7 +72,7 @@ describe("OnboardingFlow — gating par étape (affordance client)", () => {
   it("code parent : « C'est parti » désactivé tant que < 4 chiffres", () => {
     render(<OnboardingFlow />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
-    fireEvent.click(screen.getByRole("button", { name: AVATARS[0].emoji }));
+    fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
     pressDigits("1234");
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
@@ -81,7 +86,7 @@ describe("OnboardingFlow — navigation arrière", () => {
   it("retour ramène code enfant → profil, code parent → code enfant", () => {
     render(<OnboardingFlow />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
-    fireEvent.click(screen.getByRole("button", { name: AVATARS[0].emoji }));
+    fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
 
     // childPin → retour → profil
@@ -98,6 +103,35 @@ describe("OnboardingFlow — navigation arrière", () => {
     expect(
       screen.getByRole("heading", { name: strings.onboarding.childPin.title }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("OnboardingFlow — focus & annonce (a11y)", () => {
+  it("place le focus sur le titre de l'étape courante (montage + transition)", () => {
+    render(<OnboardingFlow />);
+    // Au montage, le titre de la 1ʳᵉ étape reçoit le focus.
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: strings.onboarding.profile.title }),
+    );
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
+    fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
+    fireEvent.click(screen.getByRole("button", { name: nav.next }));
+
+    // Le focus suit la nouvelle étape (pas d'atterrissage sur <body>).
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { name: strings.onboarding.childPin.title }),
+    );
+  });
+
+  it("annonce le code de secours dans une région live (role=status)", async () => {
+    actionMock.mockResolvedValue({ ok: true, recoveryCode: "ABCD2345" });
+    render(<OnboardingFlow />);
+    driveToParentReady();
+    fireEvent.click(screen.getByRole("button", { name: nav.create }));
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("ABCD2345");
   });
 });
 

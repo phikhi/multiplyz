@@ -70,6 +70,20 @@ function nameTaken(db: AppDatabase, name: string): boolean {
   return existing !== undefined;
 }
 
+/**
+ * Garde-fou de **forme** sur une entrée non fiable (la server action est un
+ * endpoint public : `CreateHouseholdInput` n'est pas garanti au runtime). Refuse
+ * tout champ non-string AVANT sanitisation → erreur de validation propre plutôt
+ * qu'un `TypeError` 500 sur input forgé (AUTH.md §4).
+ */
+function assertStringFields(input: CreateHouseholdInput): void {
+  if (typeof input.name !== "string") throw new OnboardingError("NAME_INVALID");
+  if (typeof input.avatar !== "string") throw new OnboardingError("AVATAR_INVALID");
+  if (typeof input.childPin !== "string" || typeof input.parentPin !== "string") {
+    throw new OnboardingError("PIN_INVALID");
+  }
+}
+
 /** Valide l'entrée ; lève `OnboardingError` au 1er problème (rien créé). */
 function assertValidInput(name: string, input: CreateHouseholdInput): void {
   if (!isValidName(name)) throw new OnboardingError("NAME_INVALID");
@@ -87,21 +101,26 @@ function assertValidInput(name: string, input: CreateHouseholdInput): void {
  * + PIN parent + code de secours. **Idempotente** : si le foyer existe déjà,
  * ne crée rien et ne renvoie aucun secret.
  *
- * Ordre : valider → court-circuit idempotent → unicité prénom → hash → insert.
+ * Ordre : forme → valider → hash (async) → re-vérif + insert **atomiques**.
  * Les PIN et le code de secours ne sont persistés que **hachés** (argon2id) ;
  * le code de secours est renvoyé **en clair une seule fois** (AUTH.md §5).
+ *
+ * **Atomicité (anti-TOCTOU)** : le hash est async (rend la main à l'event loop),
+ * donc la garde d'idempotence/unicité + l'`insert` vivent dans une transaction
+ * **synchrone** better-sqlite3 — aucun autre tour d'event loop ne peut s'y
+ * intercaler → deux soumissions concurrentes ne peuvent pas créer 2 propriétaires
+ * ni lever une violation `UNIQUE` non gérée (l'invariant « owner unique » tient).
  */
 export async function createHousehold(
   db: AppDatabase,
   input: CreateHouseholdInput,
 ): Promise<CreateHouseholdResult> {
+  assertStringFields(input);
   const name = sanitizeName(input.name);
   assertValidInput(name, input);
 
-  // Rejeu : foyer déjà configuré → no-op idempotent (pas de doublon, AUTH.md §2).
-  if (householdExists(db)) return { created: false };
-  if (nameTaken(db, name)) throw new OnboardingError("NAME_TAKEN");
-
+  // Hash AVANT la transaction (argon2 est async ; un callback de transaction
+  // better-sqlite3 doit rester synchrone).
   const recoveryCode = generateRecoveryCode();
   const [pinHash, parentPinHash, recoveryCodeHash] = await Promise.all([
     hashPin(input.childPin),
@@ -109,9 +128,15 @@ export async function createHousehold(
     hashRecoveryCode(recoveryCode),
   ]);
 
-  db.insert(profiles)
-    .values({ name, avatar: input.avatar, pinHash, parentPinHash, recoveryCodeHash })
-    .run();
+  const created = db.transaction((tx) => {
+    // Rejeu : foyer déjà configuré → no-op idempotent (pas de doublon, AUTH.md §2).
+    if (householdExists(db)) return false;
+    if (nameTaken(db, name)) throw new OnboardingError("NAME_TAKEN");
+    tx.insert(profiles)
+      .values({ name, avatar: input.avatar, pinHash, parentPinHash, recoveryCodeHash })
+      .run();
+    return true;
+  });
 
-  return { created: true, recoveryCode };
+  return created ? { created: true, recoveryCode } : { created: false };
 }

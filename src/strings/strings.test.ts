@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fr } from "./fr";
 import { LOCALE, strings } from "./index";
+import { AVATARS } from "@/config/avatars";
 
 describe("strings (i18n FR)", () => {
   it("expose la locale FR", () => {
@@ -38,6 +39,16 @@ describe("strings (i18n FR)", () => {
     expect(strings.onboarding.childPin.hint).toContain("chiffres");
     // Étape parent : gabarit prénom interpolable, pas d'enfantillage.
     expect(strings.onboarding.parentPin.method).toContain("{prénom}");
+    // Registre parent NEUTRE (COPY.md §5) : pas de tutoiement dans la méthode.
+    expect(strings.onboarding.parentPin.method).not.toMatch(/\bte\b/);
+  });
+
+  it("chaque portrait AVATARS possède un libellé a11y lisible (invariant)", () => {
+    const names = strings.onboarding.profile.avatarNames as Record<string, string>;
+    for (const avatar of AVATARS) {
+      expect(names[avatar.id]).toBeTruthy();
+    }
+    expect(strings.onboarding.profile.avatarOption).toContain("{nom}");
   });
 
   it("code de secours = affiché une seule fois (registre neutre)", () => {
