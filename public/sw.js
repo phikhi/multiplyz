@@ -5,7 +5,9 @@
  *  - Install   : précache la coquille (root + icônes).
  *  - Activate  : purge les anciens caches.
  *  - /api/*    : JAMAIS mis en cache (online-first strict, serveur = source de vérité).
- *  - /_next/static/* : cache-first (assets immuables, hash dans le nom de fichier).
+ *  - /_next/static/* : réseau d'abord, cache en repli hors-ligne. (Cache-first
+ *    cassait le dev : les chunks Turbopack ne sont PAS immuables — même URL après
+ *    édition → un chunk périmé était servi. Réseau d'abord = toujours frais en ligne.)
  *  - Navigation (HTML) : réseau d'abord ; si hors-ligne, fallback vers le « / » en cache.
  *
  * NE PAS utiliser next-pwa : incompatible Next 16 + Turbopack (cf. STACK.md §Frontend).
@@ -16,7 +18,9 @@
  * indirectement via les tests d'enregistrement et E2E.
  */
 
-const CACHE_NAME = "mz-shell-v1";
+// v2 : bascule des assets /_next/static en réseau-d'abord. Le bump purge le
+// cache v1 (chunks dev périmés) au moment de l'activate.
+const CACHE_NAME = "mz-shell-v2";
 
 /** URLs précachées à l'installation (coquille statique uniquement). */
 const SHELL_URLS = ["/", "/icon-192.png", "/icon-512.png"];
@@ -55,20 +59,22 @@ self.addEventListener("fetch", (event) => {
   // /api/* → toujours réseau, jamais de cache (données de jeu, online-first)
   if (url.pathname.startsWith("/api/")) return;
 
-  // Assets statiques Next.js : cache-first (noms immuables avec hash)
+  // Assets statiques Next.js : réseau d'abord (frais en ligne, dev inclus),
+  // cache en repli hors-ligne uniquement.
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
-        if (cached) return cached;
-        return fetch(event.request).then((response) => {
+      fetch(event.request)
+        .then((response) => {
           // Ne cache que les réponses valides (évite de cacher un 404/5xx)
           if (response.ok) {
             const clone = response.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
           }
           return response;
-        });
-      }),
+        })
+        .catch(() =>
+          caches.match(event.request).then((cached) => cached ?? Response.error()),
+        ),
     );
     return;
   }
