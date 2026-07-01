@@ -39,11 +39,27 @@ Rapporter le tri (bref). Ne pas absorber une issue hors-scope dans une story (an
 - Prochaine story = première **débloquée** (`blocked-by` résolus) dans l'ordre.
 - **Paralléliser** deux stories seulement si **surfaces disjointes** ET aucun **contrat partagé** modifié (schéma, config, règle lint, dépendance, composant partagé). Surface partagée → **séquencer** (LEARNINGS : interactions cross-PR en fan-out). Plafonner le // pour garder la charge de review saine.
 
-## 5. Boucle d'exécution (par story)
-`story-start` → build (DoD, 100 % logique critique) → `open-pr` → **reviewers indépendants** (scope + PO, en //) → appliquer les fixes de **consensus in-contract** tant que le worktree est chaud → **merge** (ADR 0003 : reviews+PO ✅ + CI verte + à jour) → `retro` → `LEARNINGS`. Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les merges. Répéter jusqu'à vider le scope de l'épic, puis **clôturer l'épic** et revenir à l'étape 3.
+## 5. Boucle d'exécution (par story) — build DÉLÉGUÉ
+Le thread orchestrateur **ne construit pas lui-même** (contexte plat, cf. §7). Par story :
+1. **Déléguer le build à un subagent isolé** (`isolation: worktree` ; modèle selon risque, §7). Brief : « implémenter la story #X (critères + DoD) en suivant le workflow multiplyz (`story-start` → build 100 % logique critique → gates lint/type/coverage/build/e2e + captures → `open-pr`) ; **escalader tout drift** à l'orchestrateur ; **ne rien merger** ». Reçu **compact** attendu : n° de PR, résultats de gates, fichiers touchés, captures, **flag drift éventuel**.
+2. **Reviewers indépendants** (subagents, scope + PO, en // ; modèle/fan-out selon §7) → verdicts.
+3. **Fixes de consensus in-contract** : renvoyer au **subagent de build** (via SendMessage — il a encore son worktree) « applique : … ». **Pas** dans le thread principal.
+4. **Merge** (ADR 0003 : reviews+PO ✅ + CI verte + à jour) → **`retro`** → `LEARNINGS` → **checkpoint statut** (mémoire).
+
+Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les merges. Répéter jusqu'à vider l'épic, puis **clôturer l'épic** et revenir à l'étape 3.
 
 ## 6. Escalade — SEULEMENT le drift
-S'arrêter et demander le sign-off du propriétaire **uniquement** si une décision **modifierait une décision verrouillée** : modèle de données PLAN · pédagogie ENGINE · économie · sécurité · scope d'épic. **Sinon, jamais.** (ADR 0004.) Présenter le choix de drift clairement + option recommandée, attendre l'arbitrage.
+S'arrêter et demander le sign-off du propriétaire **uniquement** si une décision **modifierait une décision verrouillée** : modèle de données PLAN · pédagogie ENGINE · économie · sécurité · scope d'épic. **Sinon, jamais.** (ADR 0004.) Le subagent de build **escalade le drift** à l'orchestrateur (il ne tranche pas). Présenter le choix de drift clairement + option recommandée, attendre l'arbitrage.
+
+## 7. Contexte & quota (autonomie longue)
+**Contexte** — l'état durable vit dans **git / GitHub / `LEARNINGS` / mémoire**, pas dans le contexte → le contexte est **jetable aux frontières de story**.
+- **Thread principal = conclusions only** : déléguer build (§5), reviews, exploration (`Explore`) aux subagents ; ne jamais garder fichiers/diffs dans le contexte principal.
+- **Ne jamais couper / compacter au MILIEU d'une story** (état intermédiaire non durable = branche à moitié faite). Frontière propre = **après merge + rétro** ; y mettre à jour la **mémoire de statut** (WIP + next) → reprise exacte en nouvelle conversation.
+
+**Quota (Claude Max, reset ~5 h)** —
+- **Tiering modèle** : **Opus** = orchestration + jugement de drift + build **cœur** (moteur/sécu/data) ; **Sonnet** = reviewers + build **mécanique** ; **Haiku** = exploration.
+- **Fan-out au risque** : story mécanique/faible risque → panel de review **réduit** ; sécu/data/pédagogie → panel **complet** (scope + PO).
+- **Quota bas → PAUSE PROPRE** : finir la story courante (merge + rétro), checkpoint statut, **STOP** + rapport « fait X / reste Y / reprends `continue multiplyz` après reset (~Zh) ». **Ne pas démarrer** une story infinançable dans le budget restant (évite les branches orphelines).
 
 ## Rapport (sans attendre d'aval)
 Rapporter en continu, sobrement : tri du backlog, épic/story choisis + pourquoi, parallélisation, chaque merge, rétro. Le propriétaire lit ; il n'a pas à répondre (sauf drift).
