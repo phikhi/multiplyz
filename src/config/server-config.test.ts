@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CONFIG_DEFAULTS,
   ConfigError,
+  getAuthConfig,
   getConfig,
+  loadAuthConfig,
   loadConfig,
   resetConfigCache,
 } from "./server-config";
@@ -96,6 +98,85 @@ describe("loadConfig — busy_timeout ⚙️", () => {
     expect(loadConfig({ SQLITE_BUSY_TIMEOUT_MS: "0" }).database.busyTimeoutMs).toBe(
       CONFIG_DEFAULTS.database.busyTimeoutMs,
     );
+  });
+});
+
+describe("loadAuthConfig — défauts ⚙️", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    const auth = loadAuthConfig({});
+    expect(auth).toEqual(CONFIG_DEFAULTS.auth);
+  });
+
+  it("session enfant longue, session parent courte (enfant > parent)", () => {
+    const auth = loadAuthConfig({});
+    expect(auth.childSessionMs).toBeGreaterThan(auth.parentSessionMs);
+  });
+
+  it("défauts argon2id alignés OWASP (mémoire ≥ 19 MiB, t ≥ 2)", () => {
+    const { argon2 } = loadAuthConfig({});
+    expect(argon2.memoryCost).toBeGreaterThanOrEqual(19_456);
+    expect(argon2.timeCost).toBeGreaterThanOrEqual(2);
+    expect(argon2.parallelism).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("loadAuthConfig — surcharges ⚙️", () => {
+  it("surcharge les durées de session via l'environnement", () => {
+    const auth = loadAuthConfig({ AUTH_CHILD_SESSION_MS: "1000", AUTH_PARENT_SESSION_MS: "500" });
+    expect(auth.childSessionMs).toBe(1000);
+    expect(auth.parentSessionMs).toBe(500);
+  });
+
+  it("surcharge les seuils de rate-limit et le backoff", () => {
+    const auth = loadAuthConfig({
+      AUTH_MAX_PIN_ATTEMPTS: "3",
+      AUTH_IP_MAX_PIN_ATTEMPTS: "9",
+      AUTH_BACKOFF_BASE_MS: "2000",
+      AUTH_BACKOFF_FACTOR: "1.5",
+      AUTH_BACKOFF_MAX_MS: "60000",
+    });
+    expect(auth.rateLimit).toEqual({
+      maxAttemptsPerProfile: 3,
+      maxAttemptsPerIp: 9,
+      backoffBaseMs: 2000,
+      backoffFactor: 1.5,
+      backoffMaxMs: 60000,
+    });
+  });
+
+  it("surcharge les paramètres argon2id", () => {
+    const auth = loadAuthConfig({
+      AUTH_ARGON2_MEMORY_KIB: "32768",
+      AUTH_ARGON2_TIME_COST: "3",
+      AUTH_ARGON2_PARALLELISM: "2",
+    });
+    expect(auth.argon2).toEqual({ memoryCost: 32768, timeCost: 3, parallelism: 2 });
+  });
+
+  it("retombe sur les défauts quand les valeurs sont invalides", () => {
+    const auth = loadAuthConfig({
+      AUTH_MAX_PIN_ATTEMPTS: "oops",
+      AUTH_BACKOFF_FACTOR: "-2",
+      AUTH_CHILD_SESSION_MS: "0",
+    });
+    expect(auth.rateLimit.maxAttemptsPerProfile).toBe(
+      CONFIG_DEFAULTS.auth.rateLimit.maxAttemptsPerProfile,
+    );
+    expect(auth.rateLimit.backoffFactor).toBe(CONFIG_DEFAULTS.auth.rateLimit.backoffFactor);
+    expect(auth.childSessionMs).toBe(CONFIG_DEFAULTS.auth.childSessionMs);
+  });
+
+  it("accepte un facteur de backoff fractionnaire (> 1)", () => {
+    expect(loadAuthConfig({ AUTH_BACKOFF_FACTOR: "2.5" }).rateLimit.backoffFactor).toBe(2.5);
+  });
+});
+
+describe("getAuthConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc auth de la config applicative", () => {
+    expect(getAuthConfig()).toBe(getConfig().auth);
   });
 });
 

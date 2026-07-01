@@ -8,6 +8,13 @@
       "when": 1782745870752,
       "tag": "0000_good_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782913687091,
+      "tag": "0001_nappy_blindfold",
+      "breakpoints": true
     }
   ]
 }

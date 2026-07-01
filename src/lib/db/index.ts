@@ -28,6 +28,9 @@ export function createDatabase(databasePath?: string) {
   const sqlite = new Database(file);
   sqlite.pragma(`journal_mode = ${journalMode}`);
   sqlite.pragma(`busy_timeout = ${busyTimeoutMs}`);
+  // FK OFF par défaut dans SQLite → l'activer pour honorer `ON DELETE CASCADE`
+  // (purge des sessions à la suppression d'un profil, RGPD — AUTH.md §6).
+  sqlite.pragma("foreign_keys = ON");
   return drizzle(sqlite, { schema });
 }
 
