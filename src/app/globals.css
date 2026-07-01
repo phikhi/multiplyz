@@ -91,5 +91,5 @@ body {
 }
 
 .mz-shake {
-  animation: mz-shake var(--duration-normal) ease-in-out;
+  animation: mz-shake var(--duration-normal) var(--easing-default);
 }

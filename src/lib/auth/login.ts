@@ -29,7 +29,10 @@ export interface PublicProfile {
  * consomment un `verify` similaire (anti-énumération temporelle, AUTH.md §4).
  * Enjeu faible (single-tenant, AUTH.md §7) mais coût nul → défense en profondeur.
  */
-const TIMING_EQUALIZER_HASH =
+// Exporté pour un test de garde : ses paramètres argon2id encodés doivent
+// rester alignés sur les défauts de config, sinon l'égalisation temporelle
+// s'affaiblit silencieusement si le coût argon2 est relevé (cf. login.test.ts).
+export const TIMING_EQUALIZER_HASH =
   "$argon2id$v=19$m=19456,t=2,p=1$Hov22K1k8b7ai+zZuOGR1Q$4SNuH7ZWmJzo3QCRDll3c7bQATEf1JlTNMwOpgaX7wk";
 
 /**

@@ -17,7 +17,11 @@ import { authenticateChild } from "./login";
 export async function getCurrentChildSession(): Promise<ActiveSession | null> {
   const token = await readSessionToken();
   if (token === null) return null;
-  return getValidSession(getDb(), token, new Date());
+  const session = getValidSession(getDb(), token, new Date());
+  // Le garde du jeu n'accepte QUE des sessions enfant : l'espace parent (#7)
+  // partagera le même cookie `mz_session` mais une session parent (courte, 15 min)
+  // ne doit pas ouvrir le jeu enfant → on filtre sur `kind` ici, à la frontière.
+  return session?.kind === "child" ? session : null;
 }
 
 /**

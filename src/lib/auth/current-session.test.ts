@@ -31,12 +31,29 @@ describe("getCurrentChildSession", () => {
     expect(getValidSessionMock).not.toHaveBeenCalled();
   });
 
-  it("résout la session valide quand un token est présent", async () => {
+  it("résout la session enfant valide quand un token est présent", async () => {
     readSessionTokenMock.mockResolvedValue("tok");
     const active = { token: "tok", profileId: 1, kind: "child" as const, expiresAt: new Date() };
     getValidSessionMock.mockReturnValue(active);
     await expect(getCurrentChildSession()).resolves.toBe(active);
     expect(getValidSessionMock).toHaveBeenCalledWith({ tag: "db" }, "tok", expect.any(Date));
+  });
+
+  it("null si le token est présent mais la session invalide/expirée", async () => {
+    readSessionTokenMock.mockResolvedValue("tok");
+    getValidSessionMock.mockReturnValue(null);
+    await expect(getCurrentChildSession()).resolves.toBeNull();
+  });
+
+  it("null si la session est de kind parent (ne doit pas ouvrir le jeu enfant, #7)", async () => {
+    readSessionTokenMock.mockResolvedValue("tok");
+    getValidSessionMock.mockReturnValue({
+      token: "tok",
+      profileId: 1,
+      kind: "parent",
+      expiresAt: new Date(),
+    });
+    await expect(getCurrentChildSession()).resolves.toBeNull();
   });
 });
 

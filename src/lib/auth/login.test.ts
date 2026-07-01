@@ -3,8 +3,9 @@ import type { AppDatabase } from "@/lib/db";
 import { createDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { profiles, sessions } from "@/lib/db/schema";
+import { CONFIG_DEFAULTS } from "@/config/server-config";
 import { hashPin } from "./pin";
-import { authenticateChild, listProfiles } from "./login";
+import { authenticateChild, listProfiles, TIMING_EQUALIZER_HASH } from "./login";
 
 let db: AppDatabase;
 
@@ -77,5 +78,13 @@ describe("authenticateChild", () => {
   it("pin non chaîne → null (garde de forme)", async () => {
     const id = await seedProfile("Léa", "fox", PIN);
     expect(await authenticateChild(db, id, 1234 as unknown as string, T0)).toBeNull();
+  });
+
+  // Garde CI : si les défauts argon2 changent sans regénérer le hash factice,
+  // le verify « profil inconnu » divergerait en coût → oracle temporel. Ce test
+  // casse alors, forçant la mise à jour (anti-énumération, AUTH §4).
+  it("le hash factice partage les paramètres argon2id par défaut", () => {
+    const { memoryCost, timeCost, parallelism } = CONFIG_DEFAULTS.auth.argon2;
+    expect(TIMING_EQUALIZER_HASH).toContain(`m=${memoryCost},t=${timeCost},p=${parallelism}`);
   });
 });
