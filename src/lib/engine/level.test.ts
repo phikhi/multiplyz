@@ -216,6 +216,38 @@ describe("buildLevel — cap de nouveaux + consolidation (ENGINE §4/§7)", () =
     const level = buildLevel(news, CONFIG, NOW);
     expect(level).toHaveLength(0);
   });
+
+  it("FRONTIÈRE weak === consolidationThreshold (PILE au seuil) → capNew 0", () => {
+    // Verrouille la borne exacte du `>=` d'`isWeak`/du cap (mutation `<=`→`<` tuée).
+    // consolidationMaxBox = 1 : un fait à box PILE 1 est fragile. On construit un
+    // périmètre actif (add seul) avec EXACTEMENT `consolidationThreshold` (= 8)
+    // fragiles : 6 DUE à box 1 (fragiles) + 2 NEW (fragiles car jamais vus) = 8.
+    // À PILE 8, la garde `weak >= threshold` doit s'activer → capNew 0 → 0 nouveau.
+    const T = CONFIG.consolidationThreshold; // 8
+    expect(CONFIG.consolidationMaxBox).toBe(1);
+    const weakDue = addFacts(T - 2).map((f) => entry(f, state({ box: 1, nextDue: NOW - 1 })));
+    const news = addFacts(20)
+      .slice(T - 2, T) // 2 NEW → weak total = (T-2) + 2 = T (pile au seuil)
+      .map((f) => entry(f, null));
+    const level = buildLevel([...weakDue, ...news], CONFIG, NOW);
+    const newKeys = new Set(news.map((e) => e.fact.key));
+    expect(level.filter((i) => newKeys.has(i.fact.key))).toHaveLength(0); // 0 nouveau pile au seuil
+  });
+
+  it("FRONTIÈRE weak === consolidationThreshold - 1 (juste sous) → nouveaux autorisés", () => {
+    // Un cran sous le seuil : la garde ne s'active PAS → capNew = newMaxPerLevel.
+    // 5 DUE box 1 (fragiles) + 2 NEW = weak 7 = threshold - 1 → nouveaux permis.
+    const T = CONFIG.consolidationThreshold; // 8
+    const weakDue = addFacts(T - 3).map((f) => entry(f, state({ box: 1, nextDue: NOW - 1 })));
+    const news = addFacts(20)
+      .slice(T - 3, T - 1) // 2 NEW → weak total = (T-3) + 2 = T-1 (juste sous)
+      .map((f) => entry(f, null));
+    const level = buildLevel([...weakDue, ...news], CONFIG, NOW);
+    const newKeys = new Set(news.map((e) => e.fact.key));
+    const inLevelNew = level.filter((i) => newKeys.has(i.fact.key)).length;
+    expect(inLevelNew).toBeGreaterThan(0); // des nouveaux passent sous le seuil
+    expect(inLevelNew).toBeLessThanOrEqual(CONFIG.newMaxPerLevel);
+  });
 });
 
 describe("buildLevel — début de partie (peu de DUE, ENGINE §4)", () => {
@@ -268,9 +300,11 @@ describe("buildLevel — scope actif + interleaving (ENGINE §7)", () => {
     expect(skillsInLevel.size).toBeGreaterThanOrEqual(2); // interleaving activé
   });
 
-  it("interleaving 3 compétences : progress ≥ 2× seuil (0.8 avec le défaut 0.4)", () => {
-    // progress ≥ 0.8 : au moins 80 % des faits à box ≥ interleaveMinBox (3), toutes
-    // compétences présentes, chacune avec au moins un DUE pour apparaître.
+  it("interleaving EXACTEMENT 3 compétences au défaut : progress plafonne le palier à 3", () => {
+    // TOUS les faits sont à box ≥ interleaveMinBox (3) → progress = 1.0 (pas 0.8 : la
+    // fixture n'a aucun fait fragile). Au défaut t = 0.4 : 1.0 ≥ 2·t (0.8) → count 3,
+    // mais 1.0 < 3·t (1.2) → PAS 4. Les 4 compétences sont présentes, donc `min(3, 4)`
+    // → EXACTEMENT 3 compétences mêlées (le 4ᵉ palier reste hors d'atteinte au défaut).
     const strong = (facts: Fact[]) =>
       facts.map((f) => entry(f, state({ box: 4, nextDue: NOW + MS_PER_DAY })));
     const dueLow = (facts: Fact[]) =>
@@ -287,7 +321,7 @@ describe("buildLevel — scope actif + interleaving (ENGINE §7)", () => {
     ];
     const level = buildLevel(scope, CONFIG, NOW);
     const skillsInLevel = new Set(level.map((i) => i.fact.skill));
-    expect(skillsInLevel.size).toBeGreaterThanOrEqual(3); // ≥ 2× seuil → 3 compétences
+    expect(skillsInLevel.size).toBe(3); // exactement 3 (distingue « 3 » de « 4 »)
   });
 
   it("interleaving 4 compétences : palier 3× seuil atteignable pour un seuil calibré", () => {
@@ -395,6 +429,29 @@ describe("buildLevel — ordre facile → dur → presque-su (ENGINE §4)", () =
     expect(level[level.length - 1].fact.key).toBe(seen.key);
   });
 
+  it("NEW (force -1) est STRICTEMENT plus dur qu'un fait box 0 (force 0)", () => {
+    // Verrouille la distinction NEW/box0 (mutation `-1`→`0` de `strengthOf` tuée) :
+    // sous la mutation, NEW et box0 auraient la même force → départage par clé, ce qui
+    // POURRAIT placer le NEW avant le box0. Ici la clé du NEW (`add_1+3`) est
+    // lexicographiquement PLUS PETITE que celle du box0 (`add_1+4`) → sous la mutation
+    // le NEW passerait AVANT le box0. Le code correct (-1 < 0) place le NEW APRÈS le
+    // box0 (plus dur). Un fait fort (box 4) occupe la fin (presque-su).
+    const box0 = makeFact("add", 1, 4); // force 0, clé `add_1+4`
+    const newFact = makeFact("add", 1, 3); // force -1, clé `add_1+3` (< box0)
+    const strong = makeFact("add", 1, 2); // force 4 → presque-su, clôt le niveau
+    const scope = [
+      entry(box0, state({ box: 0, nextDue: NOW - 1 })),
+      entry(newFact, null),
+      entry(strong, state({ box: 4, nextDue: NOW - 1 })),
+    ];
+    const level = buildLevel(scope, CONFIG, NOW);
+    const order = keys(level);
+    // Le plus fort clôt.
+    expect(order[order.length - 1]).toBe(strong.key);
+    // box0 (force 0, moins dur) vient AVANT le NEW (force -1, plus dur) dans la montée.
+    expect(order.indexOf(box0.key)).toBeLessThan(order.indexOf(newFact.key));
+  });
+
   it("un seul item → ordre trivial (pas de réarrangement)", () => {
     const only = makeFact("add", 1, 2);
     const level = buildLevel([entry(only, state({ box: 1, nextDue: NOW - 1 }))], CONFIG, NOW);
@@ -425,16 +482,34 @@ describe("buildLevel — re-ask intra-niveau (ENGINE §4/§9)", () => {
     expect(hasNoAdjacentDuplicate(level)).toBe(true);
   });
 
-  it("re-ask placé avant le dernier item si celui-ci est le même fait (anti-adjacence)", () => {
-    // Un seul fait au niveau, raté : le re-ask ne peut pas suivre directement l'original
-    // (ils sont le même fait) → il s'insère un cran avant.
+  it("re-ask du PRESQUE-SU (dernier item) : la garde anti-adjacence le sépare de l'original", () => {
+    // Cas observable de la garde (mutation « garde désactivée » tuée) : le fait re-ask
+    // est le PLUS FORT → `orderForVictory` le place en DERNIER (presque-su). Une simple
+    // insertion en fin collerait le re-ask à son original (adjacence interdite). La
+    // garde recule le point d'insertion → aucune adjacence. Ce test ÉCHOUE si l'on
+    // retire la garde (le re-ask atterrit juste après l'original en fin de séquence).
+    const strong = makeFact("add", 1, 2); // box 4 → placé en dernier (presque-su)
+    const weak = makeFact("add", 1, 3); // box 0 → plus tôt
+    const other = makeFact("add", 1, 4); // box 2 → milieu (séparateur)
+    const scope = [
+      entry(strong, state({ box: 4, nextDue: NOW - 1 })),
+      entry(weak, state({ box: 0, nextDue: NOW - 1 })),
+      entry(other, state({ box: 2, nextDue: NOW - 1 })),
+    ];
+    const level = buildLevel(scope, CONFIG, NOW, { reaskKeys: new Set([strong.key]) });
+    // 2 occurrences du fait fort, NON adjacentes grâce à la garde.
+    expect(level.filter((i) => i.fact.key === strong.key)).toHaveLength(2);
+    expect(level.filter((i) => i.isReask)).toHaveLength(1);
+    expect(hasNoAdjacentDuplicate(level)).toBe(true); // ← faux sans la garde
+  });
+
+  it("niveau dégénéré (un seul fait, raté) : 2 occurrences, cas indécidable (fallback)", () => {
+    // Un seul fait au niveau : aucune position ne peut séparer les 2 occurrences du
+    // même fait → le fallback les laisse voisines (cas dégénéré, exerce la branche de
+    // repli d'`insertNonAdjacent`). On vérifie juste qu'il y a bien 1 original + 1 re-ask.
     const f = makeFact("add", 5, 5);
     const scope = [entry(f, state({ box: 1, nextDue: NOW - 1 }))];
     const level = buildLevel(scope, CONFIG, NOW, { reaskKeys: new Set([f.key]) });
-    // 2 occurrences du même fait, mais séparées : impossible avec 1 seul fait →
-    // l'anti-adjacence les laisse quand même côte à côte ? Non : la branche insère
-    // avant le dernier, mais le dernier EST l'original → elles restent adjacentes.
-    // On vérifie donc la logique : il y a bien 1 original + 1 re-ask.
     expect(level.filter((i) => i.isReask)).toHaveLength(1);
     expect(level.filter((i) => i.fact.key === f.key)).toHaveLength(2);
   });

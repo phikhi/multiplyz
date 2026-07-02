@@ -26,6 +26,14 @@
  * **Mix cible** ~**70 % DUE** + ~**30 % NEW/MAINT**, sous **cap de nouveaux**
  * (`newMaxPerLevel`), forcé à **0 nouveau** quand trop de faits sont fragiles
  * (`weak ≥ consolidationThreshold`, consolidation pure, ENGINE §7).
+ *
+ * **Périmètre du cap de nouveaux** : cette fonction n'applique QUE le cap
+ * **par niveau** (`newMaxPerLevel`). Le second cap d'ENGINE §7 — `newMaxPerDay`
+ * (nouveaux max **par jour**) — est **cross-niveaux** : il exige de compter les
+ * nouveaux déjà introduits dans les niveaux précédents de la journée, un état
+ * inter-niveaux que cette fonction **pure sans mémoire** ne possède pas. Il est
+ * donc **délégué à l'appelant serveur** (story 3.7), qui tient ce compteur
+ * journalier et peut réduire le cap effectif passé/appliqué en amont si besoin.
  */
 
 import type { EngineConfig } from "../../config/server-config";
@@ -198,6 +206,11 @@ function activeSkillCount(progress: number, config: EngineConfig, present: numbe
   let count = 1; // départ BLOQUÉ (§7)
   if (progress >= t) count = 2;
   if (progress >= 2 * t) count = 3;
+  // NB game-design : le palier « 4 compétences » exige `progress ≥ 3·t`, or
+  // `progress ∈ [0, 1]` → il n'est atteignable que si `t ≲ 1/3` (≈ 0.33). Au défaut
+  // ⚙️ `interleaveThresholdRatio = 0.4`, `3·0.4 = 1.2 > 1` → le mélange **plafonne à
+  // 3 compétences**. Comportement **accepté** en v1 (calibré au playtest, cf. issue de
+  // suivi #76) : baisser le seuil ⚙️ suffit à débloquer le 4ᵉ palier sans toucher au code.
   if (progress >= 3 * t) count = 4;
   return Math.min(count, present);
 }
@@ -274,10 +287,12 @@ function orderForVictory(entries: readonly ScopeEntry[]): ScopeEntry[] {
 
 /**
  * Insère les **re-ask** (ENGINE §4/§9) : chaque fait signalé raté revient **une fois**,
- * plus loin dans le niveau, **sans jamais** être adjacent à son occurrence d'origine
- * (« pas 2× le même fact d'affilée »). On place chaque re-ask à la fin de la séquence
- * (renforcement court terme, après un intervalle) ; s'il devait toucher son voisin, on
- * l'écarte d'un cran. Les items d'origine gardent leur ordre « victoire ».
+ * plus loin dans le niveau, **sans jamais** être adjacent à une autre occurrence du même
+ * fait (« pas 2× le même fact d'affilée »). On vise la **fin** de la séquence
+ * (renforcement court terme, après un intervalle) ; si insérer là collerait le re-ask à
+ * son original (typiquement quand l'original est le **presque-su** placé en dernier par
+ * `orderForVictory`), on **recule le point d'insertion** jusqu'à trouver une position
+ * dont **aucun voisin** ne porte la même clé. Les items d'origine gardent leur ordre.
  */
 function insertReasks(ordered: readonly ScopeEntry[], reaskKeys: ReadonlySet<string>): LevelItem[] {
   const items: LevelItem[] = ordered.map((entry) => ({ fact: entry.fact, isReask: false }));
@@ -285,16 +300,31 @@ function insertReasks(ordered: readonly ScopeEntry[], reaskKeys: ReadonlySet<str
   const toReask = ordered.filter((entry) => reaskKeys.has(entry.fact.key));
   for (const entry of toReask) {
     const reask: LevelItem = { fact: entry.fact, isReask: true };
-    // Placer en fin ; si le dernier item est déjà ce même fait (adjacence interdite),
-    // insérer un cran avant → jamais deux occurrences du même fait côte à côte.
-    const last = items[items.length - 1];
-    if (last.fact.key === reask.fact.key) {
-      items.splice(items.length - 1, 0, reask);
-    } else {
-      items.push(reask);
-    }
+    insertNonAdjacent(items, reask);
   }
   return items;
+}
+
+/**
+ * Insère `reask` dans `items` à la **position la plus tardive** telle que ni le voisin
+ * de gauche ni celui de droite ne portent la même clé (jamais deux occurrences du même
+ * fait côte à côte, ENGINE §4). Balaye les points d'insertion `pos = length … 0` (fin
+ * d'abord = re-ask le plus tard possible) et retient le premier sans collision. Avec au
+ * moins **un autre fait** dans le niveau, une telle position existe toujours ; à défaut
+ * (niveau réduit au seul fait re-ask — dégénéré), on retombe sur la fin. Mute `items`.
+ */
+function insertNonAdjacent(items: LevelItem[], reask: LevelItem): void {
+  for (let pos = items.length; pos >= 0; pos--) {
+    const leftOk = pos === 0 || items[pos - 1].fact.key !== reask.fact.key;
+    const rightOk = pos === items.length || items[pos].fact.key !== reask.fact.key;
+    if (leftOk && rightOk) {
+      items.splice(pos, 0, reask);
+      return;
+    }
+  }
+  // Dégénéré (le niveau ne contient que ce fait) : aucune position non adjacente —
+  // on l'ajoute en fin (les deux occurrences resteront voisines, cas indécidable).
+  items.push(reask);
 }
 
 /**
