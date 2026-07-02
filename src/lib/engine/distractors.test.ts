@@ -5,6 +5,7 @@ import {
   buildDistractors,
   buildQuestionChoices,
   chooseFormat,
+  FILL_OFFSETS,
   QCM_CHOICE_COUNT,
   type Rng,
 } from "./distractors";
@@ -93,16 +94,41 @@ describe("buildDistractors — erreurs typiques par compétence (ENGINE §6), pa
     expect(distractors).toEqual(expect.arrayContaining([3, 8, 6]));
   });
 
-  it.each(SKILLS)("%s : univers Tier 1 complet — toujours exactement 3 distracteurs valides", (skill) => {
-    // Balayage exhaustif du domaine réel (pas seulement un échantillon) : garantit
-    // qu'aucun fait du Tier 1 ne tombe en dessous de 3 distracteurs, y compris aux
-    // bords de domaine où les candidats typiques collisionnent le plus.
-    for (const fact of generateFacts(skill)) {
-      const distractors = buildDistractors(fact);
-      expect(distractors).toHaveLength(3);
-      expect(new Set(distractors).size).toBe(3);
-      expect(distractors.every((d) => d >= 0 && d !== fact.answer)).toBe(true);
-    }
+  it.each(SKILLS)(
+    "%s : univers Tier 1 complet — toujours exactement 3 distracteurs valides",
+    (skill) => {
+      // Balayage exhaustif du domaine réel (pas seulement un échantillon) : garantit
+      // qu'aucun fait du Tier 1 ne tombe en dessous de 3 distracteurs, y compris aux
+      // bords de domaine où les candidats typiques collisionnent le plus.
+      for (const fact of generateFacts(skill)) {
+        const distractors = buildDistractors(fact);
+        expect(distractors).toHaveLength(3);
+        expect(new Set(distractors).size).toBe(3);
+        expect(distractors.every((d) => d >= 0 && d !== fact.answer)).toBe(true);
+      }
+    },
+  );
+});
+
+describe("buildDistractors — assertions de contenu exact (verrou anti-mutation, esprit LEARNINGS #59)", () => {
+  it("comp10 a=9 (réponse=1) : le distracteur `0` (answer-1) est LÉGITIME et présent (verrou de la borne `≥ 0`)", () => {
+    // answer-1 = 0 est un distracteur typique valide (≥ 0, ≠ réponse). Ce test
+    // échouerait si la borne `value >= 0` devenait `value > 0` (le `0` légitime
+    // serait alors filtré à tort). Distracteurs attendus : a=9, answer+1=2, 0.
+    const distractors = buildDistractors(makeFact("comp10", 9, 0));
+    expect(distractors).toContain(0);
+    expect(distractors).toEqual(expect.arrayContaining([9, 2, 0]));
+  });
+
+  it("mult 1×1 (réponse=1) : le distracteur `a*(b+2)`=3 (table voisine) est présent, `a*(b+3)`=4 absent (verrou de l'offset table voisine)", () => {
+    // Candidats : a*(b+1)=2, a*(b-1)=0, a+b=2 (doublon), inversion(1)=1 (=réponse,
+    // rejeté), a*(b+2)=3. Le 5e candidat `a*(b+2)` est réellement retenu ici →
+    // verrou de contenu. Une mutation `a*(b+2)` → `a*(b+3)` produirait 4, pas 3.
+    const distractors = buildDistractors(makeFact("mult", 1, 1));
+    expect(distractors).toEqual([2, 0, 3]);
+    expect(distractors).toContain(3); // a*(b+2)
+    expect(distractors).not.toContain(4); // a*(b+3) mutant rejeté
+    expect(distractors).toContain(0); // a*(b-1) : distracteur 0 légitime (redondant avec comp10_9)
   });
 });
 
@@ -150,15 +176,29 @@ describe("buildDistractors — complétion ±1/±2 quand < 3 candidats typiques 
     expect(distractors).toHaveLength(3);
     expect(distractors).toEqual(expect.arrayContaining([6, 5, 3]));
   });
+});
 
-  it("fillWithOffsets exercé directement : fait minimal où seul 1 candidat typique est valide", () => {
-    // comp10 a=9 (borne haute du domaine) : réponse=1. Candidats typiques :
-    // a=9, answer+1=2, answer-1=0, answer+2=3 → tous valides (4 candidats, aucune
-    // collision) donc ce n'est PAS un cas de complétion ; documenté pour mémoire de
-    // balayage de bord (couvert aussi par le test exhaustif ci-dessus).
-    const fact = makeFact("comp10", 9, 0);
-    const distractors = buildDistractors(fact);
-    expect(distractors).toHaveLength(3);
+describe("FILL_OFFSETS — ordre de repli documenté (verrou anti-mutation de l'ordre)", () => {
+  it("est exactement [+1, -1, +2, -2, +3, -3] : voisin le plus proche d'abord, positif avant négatif", () => {
+    // Verrou direct de l'ordre : une mutation (ex. [-1, 1, …] ou tri croissant)
+    // est attrapée. L'ordre est sémantique (le commentaire de fillWithOffsets
+    // affirme « plus proche d'abord, positif avant négatif ») — on le fige.
+    expect(FILL_OFFSETS).toEqual([1, -1, 2, -2, 3, -3]);
+  });
+
+  it("chaque amplitude k propose +k strictement avant -k (positif prioritaire)", () => {
+    for (let k = 1; k <= 3; k++) {
+      const posIndex = FILL_OFFSETS.indexOf(k);
+      const negIndex = FILL_OFFSETS.indexOf(-k);
+      expect(posIndex).toBeGreaterThanOrEqual(0);
+      expect(posIndex).toBeLessThan(negIndex);
+    }
+  });
+
+  it("les amplitudes croissent (|offset| non décroissant) : le plus proche en premier", () => {
+    const magnitudes = FILL_OFFSETS.map((o) => Math.abs(o));
+    const sorted = [...magnitudes].sort((a, b) => a - b);
+    expect(magnitudes).toEqual(sorted);
   });
 });
 
@@ -187,12 +227,15 @@ describe("buildQuestionChoices — mélange déterministe (aléa injecté, ENGIN
     expect(choicesIdentity).not.toEqual(choicesReversed);
   });
 
-  it.each(SKILLS)("%s : le mélange ne perd ni ne duplique aucun choix (balayage exhaustif du domaine)", (skill) => {
-    for (const f of generateFacts(skill)) {
-      const choices = buildQuestionChoices(f, fakeRng([0.3, 0.7, 0.1, 0.9]));
-      expect(choices).toHaveLength(QCM_CHOICE_COUNT);
-      expect(new Set(choices).size).toBe(QCM_CHOICE_COUNT);
-      expect(choices).toContain(f.answer);
-    }
-  });
+  it.each(SKILLS)(
+    "%s : le mélange ne perd ni ne duplique aucun choix (balayage exhaustif du domaine)",
+    (skill) => {
+      for (const f of generateFacts(skill)) {
+        const choices = buildQuestionChoices(f, fakeRng([0.3, 0.7, 0.1, 0.9]));
+        expect(choices).toHaveLength(QCM_CHOICE_COUNT);
+        expect(new Set(choices).size).toBe(QCM_CHOICE_COUNT);
+        expect(choices).toContain(f.answer);
+      }
+    },
+  );
 });

@@ -120,6 +120,28 @@ function reverseDigits(value: number): number {
 const DISTRACTOR_COUNT = QCM_CHOICE_COUNT - 1;
 
 /**
+ * Amplitude maximale ⚙️ des offsets de repli `±k` (ENGINE §6 : complétion des
+ * distracteurs manquants). Littéral ENGINE = `±1/±2` ; poussé à `±3` pour couvrir
+ * l'unique fait limite du domaine Tier 1 (`sub_1-1`, réponse=0) où `±1/±2`
+ * collisionnent tous ou tombent `<0`. Calibrable : élargir cette borne étend le
+ * repli. Les offsets sont générés `+1, -1, +2, -2, …` (positif d'abord à chaque
+ * amplitude) → privilégie le voisin le plus proche puis alterne les signes.
+ */
+const MAX_FILL_OFFSET = 3;
+
+/**
+ * Offsets de repli ordonnés `[+1, -1, +2, -2, +3, -3]` (dérivés de
+ * `MAX_FILL_OFFSET`) — chaque amplitude `k` est proposée `+k` **avant** `−k`, et
+ * les amplitudes croissent de 1 à `MAX_FILL_OFFSET` : on privilégie le voisin le
+ * plus proche, côté positif d'abord (plus plausible qu'un négatif proche de 0).
+ * Ordre **verrouillé par test** (mutation de l'ordre attrapée).
+ */
+export const FILL_OFFSETS: readonly number[] = Array.from(
+  { length: MAX_FILL_OFFSET },
+  (_, i) => i + 1,
+).flatMap((k) => [k, -k]);
+
+/**
  * `true` si `value` est un candidat **valide** (ENGINE §6 : `≠` bonne réponse,
  * `≥ 0`, pas déjà retenu). `taken` est l'ensemble des valeurs déjà acceptées
  * (bonne réponse incluse) — garantit l'unicité stricte du résultat final.
@@ -132,21 +154,21 @@ function isValidCandidate(value: number, answer: number, taken: ReadonlySet<numb
  * Complète jusqu'à `DISTRACTOR_COUNT` distracteurs avec des offsets valides
  * autour de la bonne réponse (ENGINE §6 : « compléter si < 3 avec ±1/±2
  * valides »), quand les candidats typiques n'ont pas suffi (épuisés ou
- * collisionnant tous). Ordre `+1, -1, +2, -2[, +3, -3]` : privilégie les
- * offsets les plus proches et plausibles avant de s'éloigner.
+ * collisionnant tous). Parcourt `FILL_OFFSETS` (`+1, -1, +2, -2, +3, -3`) : les
+ * offsets les plus proches et plausibles d'abord, côté positif avant négatif.
  *
- * **Repli `±3`** : l'ENGINE §6 littéral ne prévoit que `±1/±2`, mais au bord du
- * domaine `sub` (`a=b`, réponse `0` — ex. `sub_1-1`) les 4 offsets `±1/±2`
- * collisionnent ou tombent `<0` (réponse `0` = pas de marge côté négatif) et
- * **aucun** distracteur typique de secours n'existe (`a+b` seul est valide).
- * `±3` est le **seul** cas de tout le domaine Tier 1 qui l'exige (vérifié par
- * balayage exhaustif des ~330 faits) : repli minimal et conservateur (même
- * famille « petit offset entier proche »), pas une nouvelle règle. Signalé en
- * DRIFT? dans le rapport de story — non verrouillant (réversible, ⚙️-adjacent).
+ * **Repli `±3` (`MAX_FILL_OFFSET`)** : l'ENGINE §6 littéral ne prévoit que
+ * `±1/±2`, mais au bord du domaine `sub` (`a=b`, réponse `0` — ex. `sub_1-1`) les
+ * 4 offsets `±1/±2` collisionnent ou tombent `<0` (réponse `0` = pas de marge
+ * côté négatif) et **aucun** distracteur typique de secours n'existe (`a+b` seul
+ * est valide). `±3` est le **seul** cas de tout le domaine Tier 1 qui l'exige
+ * (vérifié par balayage exhaustif des ~330 faits) : repli minimal et conservateur
+ * (même famille « petit offset entier proche »), pas une nouvelle règle. Non
+ * verrouillant (réversible via `MAX_FILL_OFFSET`, ⚙️-adjacent) — confirmé
+ * in-contract par game-design + PO en review de #61.
  */
 function fillWithOffsets(distractors: number[], answer: number, taken: Set<number>): void {
-  const offsets = [1, -1, 2, -2, 3, -3];
-  for (const offset of offsets) {
+  for (const offset of FILL_OFFSETS) {
     if (distractors.length >= DISTRACTOR_COUNT) {
       break;
     }
