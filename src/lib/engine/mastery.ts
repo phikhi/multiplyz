@@ -132,8 +132,10 @@ function nextBox(box: number, attempt: Attempt, config: EngineConfig): number {
     return Math.max(0, box - config.demoteBoxes);
   }
   if (isFluent(attempt, config)) {
-    // Juste + rapide (et pas anti-mash) → promotion, plafonnée à maxBox.
-    return Math.min(config.maxBox, box + config.promoteBoxes);
+    // Juste + rapide (et pas anti-mash) → promotion, plafonnée à maxBox. `Math.max(0, …)`
+    // par symétrie défensive avec les autres branches : une boîte d'entrée négative
+    // (état/config incohérent) ne peut jamais produire une boîte négative après promotion.
+    return Math.min(config.maxBox, Math.max(0, box + config.promoteBoxes));
   }
   // Juste mais lent (ou juste mais très rapide = anti-mash) → boîte inchangée,
   // clampée dans [0, maxBox] au cas où l'état d'entrée serait hors bornes.

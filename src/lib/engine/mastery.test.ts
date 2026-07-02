@@ -93,6 +93,42 @@ describe("applyAttempt — transitions Leitner (ENGINE §2)", () => {
   });
 });
 
+describe("applyAttempt — seuil de fluence PAR compétence (ENGINE §2)", () => {
+  // Garde-fou : le seuil de fluence dépend de `attempt.skill` — une même durée peut
+  // être « rapide » pour une compétence lente (sub/mult 4 s) et « lente » pour une
+  // compétence rapide (comp10/add 3 s). Prouve que la clé de compétence n'est pas
+  // figée (une régression qui lirait toujours le même seuil passerait le 100 % branches).
+  const SLOW_SKILLS: readonly ["mult", "sub"] = ["mult", "sub"]; // seuil 4 s
+  const FAST_SKILLS: readonly ["comp10", "add"] = ["comp10", "add"]; // seuil 3 s
+  const BETWEEN_MS = 3_500; // entre les deux seuils (3 s < 3,5 s < 4 s)
+
+  for (const skill of SLOW_SKILLS) {
+    it(`${skill} (seuil 4 s) : 3,5 s est rapide → promotion`, () => {
+      expect(CONFIG.fluenceThresholdsMs[skill]).toBe(4_000);
+      const result = applyAttempt(
+        state({ box: 2 }),
+        attempt({ skill, correct: true, responseMs: BETWEEN_MS }),
+        CONFIG,
+        NOW,
+      );
+      expect(result!.box).toBe(3); // 3,5 s ≤ 4 s → fluent → promotion
+    });
+  }
+
+  for (const skill of FAST_SKILLS) {
+    it(`${skill} (seuil 3 s) : la même 3,5 s est lente → PAS de promotion`, () => {
+      expect(CONFIG.fluenceThresholdsMs[skill]).toBe(3_000);
+      const result = applyAttempt(
+        state({ box: 2 }),
+        attempt({ skill, correct: true, responseMs: BETWEEN_MS }),
+        CONFIG,
+        NOW,
+      );
+      expect(result!.box).toBe(2); // 3,5 s > 3 s → juste mais lent → boîte inchangée
+    });
+  }
+});
+
 describe("applyAttempt — anti-mash (ENGINE §9)", () => {
   it("juste mais TRÈS rapide (< antiMashMs) → PAS de promotion (boîte inchangée)", () => {
     const result = applyAttempt(
@@ -123,6 +159,28 @@ describe("applyAttempt — anti-mash (ENGINE §9)", () => {
       NOW,
     );
     expect(result!.box).toBe(1); // max(0, 3−2) : anti-mash ne change pas l'issue d'un faux
+    expect(result!.wrongCount).toBe(2);
+  });
+
+  it("responseMs=0 juste → cas limite anti-mash, PAS de promotion (0 < antiMashMs)", () => {
+    const result = applyAttempt(
+      state({ box: 2 }),
+      attempt({ correct: true, responseMs: 0 }),
+      CONFIG,
+      NOW,
+    );
+    expect(result!.box).toBe(2); // 0 ms = martèlement instantané → jamais de promotion
+    expect(result!.correctCount).toBe(4);
+  });
+
+  it("responseMs=0 faux → reste faux (rétrograde), aucune promotion", () => {
+    const result = applyAttempt(
+      state({ box: 3 }),
+      attempt({ correct: false, responseMs: 0 }),
+      CONFIG,
+      NOW,
+    );
+    expect(result!.box).toBe(1); // max(0, 3−2)
     expect(result!.wrongCount).toBe(2);
   });
 });
@@ -188,6 +246,38 @@ describe("applyAttempt — moyenne glissante avg_response_ms (fluence, ENGINE §
     );
     expect(result!.avgResponseMs).toBe(1_000);
   });
+
+  it("chaîne bout-en-bout : 3 réponses réelles réinjectées → moyenne finale exacte", () => {
+    // Départ d'un fait jamais vu (null). Réponses successives 1200 / 1800 / 3000 ms.
+    // avg1 = 1200 ; avg2 = (1200+1800)/2 = 1500 ; avg3 = round((1200+1800+3000)/3) = 2000.
+    const r1 = applyAttempt(null, attempt({ correct: true, responseMs: 1_200 }), CONFIG, NOW);
+    expect(r1!.avgResponseMs).toBe(1_200);
+    const r2 = applyAttempt(r1, attempt({ correct: true, responseMs: 1_800 }), CONFIG, NOW);
+    expect(r2!.avgResponseMs).toBe(1_500);
+    const r3 = applyAttempt(r2, attempt({ correct: true, responseMs: 3_000 }), CONFIG, NOW);
+    expect(r3!.avgResponseMs).toBe(2_000);
+    // priorCount cumulé cohérent : 3 réponses justes comptées, aucune fausse.
+    expect(r3!.correctCount).toBe(3);
+    expect(r3!.wrongCount).toBe(0);
+  });
+
+  it("un is_retry=true intercalé ne pollue NI priorCount NI la moyenne glissante", () => {
+    // Deux vraies réponses (1000 puis 2000) entrecoupées d'un re-essai à 50000 ms.
+    const r1 = applyAttempt(null, attempt({ correct: true, responseMs: 1_000 }), CONFIG, NOW);
+    // Re-essai (pratique non comptée) : durée aberrante, ne doit rien changer.
+    const afterRetry = applyAttempt(
+      r1,
+      attempt({ correct: false, responseMs: 50_000, isRetry: true }),
+      CONFIG,
+      NOW,
+    );
+    expect(afterRetry).toBe(r1); // état strictement identique (même référence)
+    // 2ᵉ vraie réponse : la moyenne part de r1 (count 1, avg 1000), pas du retry.
+    const r2 = applyAttempt(afterRetry, attempt({ correct: true, responseMs: 2_000 }), CONFIG, NOW);
+    expect(r2!.avgResponseMs).toBe(1_500); // (1000 + 2000)/2, le 50000 du retry ignoré
+    expect(r2!.correctCount).toBe(2);
+    expect(r2!.wrongCount).toBe(0); // le faux du retry n'a pas été compté
+  });
 });
 
 describe("applyAttempt — clamp défensif (config incohérente, LEARNINGS #58)", () => {
@@ -204,6 +294,14 @@ describe("applyAttempt — clamp défensif (config incohérente, LEARNINGS #58)"
     const result = applyAttempt(state({ box: 5 }), attempt({ responseMs: 9_000 }), truncated, NOW);
     expect(result!.box).toBe(5); // inchangée (lente)
     expect(result!.nextDue).toBe(NOW + 2 * MS_PER_DAY); // dernier délai défini
+  });
+
+  it("branche promotion : boîte d'entrée négative → plancher 0 (Math.max sur promotion)", () => {
+    // box -3 (incohérent) + juste+rapide → box+promote = -2, clampé à max(0, -2) = 0.
+    // Exerce le Math.max(0, …) de la branche promotion (clamp non-vacuous).
+    const result = applyAttempt(state({ box: -3 }), attempt({ responseMs: 1_500 }), CONFIG, NOW);
+    expect(result!.box).toBe(0);
+    expect(result!.nextDue).toBe(NOW + delayMs(0));
   });
 });
 
