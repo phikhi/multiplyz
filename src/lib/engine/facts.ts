@@ -124,17 +124,81 @@ export function makeFact(skill: Skill, a: number, b: number): Fact {
 /** Motif d'un entier non signé (opérande). Rejette signe, décimale, vide. */
 const UINT = /^\d+$/;
 
-/** Parse une chaîne d'entier non signé strict → `number`, ou `null` si invalide. */
+/**
+ * Parse une chaîne d'entier non signé strict → `number`, ou `null` si invalide. Le
+ * motif rejette signe/décimale/vide ; `Number.isSafeInteger` rejette en plus les
+ * entiers > 2^53 qui perdraient en précision et **corrompraient silencieusement le
+ * round-trip** (ex. `comp10_9007199254741000`).
+ */
 function parseUint(raw: string): number | null {
-  return UINT.test(raw) ? Number(raw) : null;
+  if (!UINT.test(raw)) {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : null;
 }
 
 /**
- * Reconstruit un `Fact` depuis sa clé canonique. **Robuste** : toute clé malformée
- * (préfixe inconnu, opérateur absent, opérande non numérique, opérandes non
- * canoniques…) renvoie `null` de façon **déterministe** — jamais d'exception non
- * typée. Le contrôle de canonicité garantit que `parseFactKey(factKey(...))` est un
- * aller-retour fidèle et qu'une clé « équivalente non triée » (`add_8+3`) est rejetée.
+ * `true` si les opérandes **canonisés** d'un fait tombent dans les bornes Tier 1
+ * d'ENGINE §1 (`DOMAIN[skill]`). Source **unique** des bornes de domaine, partagée
+ * par la génération (`generate*`) et la désérialisation (`parseFactKey`) → aucune
+ * divergence possible entre « ce qu'on génère » et « ce qu'on accepte à la relecture ».
+ *
+ * On suppose des opérandes déjà canoniques : `[a]` pour `comp10`, `[a, b]` **triés**
+ * pour les commutatifs, ordre naturel pour `sub`. Fonction totale sur les 4 compétences.
+ */
+function isFactInDomain(skill: Skill, operands: readonly number[]): boolean {
+  switch (skill) {
+    case "comp10": {
+      const [a] = operands;
+      return a >= DOMAIN.comp10.minOperand && a <= DOMAIN.comp10.maxOperand;
+    }
+    case "add": {
+      const [a, b] = operands;
+      // a ≤ b garanti par la canonisation. Ordre des tests choisi pour que chaque
+      // côté de chaque `&&` soit atteignable via `parseFactKey` (pas de branche
+      // morte sous gate 100 %) : borne min de a, puis cap de somme (faux dès qu'un
+      // opérande est grand, ex. `add_1+30`), puis borne max de b (faux avec somme
+      // OK, ex. `add_2+11`).
+      return a >= DOMAIN.add.minOperand && a + b <= DOMAIN.add.maxSum && b <= DOMAIN.add.maxOperand;
+    }
+    case "sub": {
+      const [a, b] = operands;
+      // Ordre naturel : minuende bornée, subtrahende ∈ [min..a] (résultat ≥ 0).
+      return (
+        a >= DOMAIN.sub.minMinuend &&
+        a <= DOMAIN.sub.maxMinuend &&
+        b >= DOMAIN.sub.minSubtrahend &&
+        b <= a
+      );
+    }
+    case "mult": {
+      const [a, b] = operands;
+      // a ≤ b garanti par la canonisation → borner a (min) et b (max).
+      return a >= DOMAIN.mult.minOperand && b <= DOMAIN.mult.maxOperand;
+    }
+  }
+}
+
+/**
+ * Reconstruit + **valide** un `Fact` candidat : on rejette (→ `null`) sauf si (a) sa
+ * clé re-générée est **identique** à l'entrée (canonicité stricte : forme, absence de
+ * zéros de tête, tri des commutatifs) ET (b) ses opérandes tombent dans les bornes
+ * Tier 1 (`isFactInDomain`). Garantit `parseFactKey(factKey(...))` bijectif et rejette
+ * toute clé hors-domaine relue de la DB (ENGINE §10).
+ */
+function acceptFact(fact: Fact, key: string): Fact | null {
+  return fact.key === key && isFactInDomain(fact.skill, fact.operands) ? fact : null;
+}
+
+/**
+ * Reconstruit un `Fact` depuis sa clé canonique. **Robuste** : toute clé invalide
+ * (préfixe inconnu, opérateur absent, opérande non numérique/non sûr, opérandes non
+ * canoniques, **hors bornes Tier 1**) renvoie `null` de façon **déterministe** —
+ * jamais d'exception non typée. Le contrôle canonicité + domaine garantit que la clé
+ * relue est un vrai fait Tier 1 : `attempts.fact_id`/`mastery.fact_id` (ENGINE §10)
+ * ne peuvent pas ressusciter une clé corrompue (`comp10_007`, `comp10_999`) ou
+ * hors-domaine (`sub_3-15`, `mult_0x5`) en réponse absurde.
  */
 export function parseFactKey(key: string): Fact | null {
   const sepIndex = key.indexOf(SKILL_SEP);
@@ -150,8 +214,9 @@ export function parseFactKey(key: string): Fact | null {
 
   if (prefix === "comp10") {
     const a = parseUint(rest);
-    // Opérande absent/non numérique → clé invalide.
-    return a === null ? null : makeFact(prefix, a, 0);
+    // Opérande absent/non numérique → clé invalide ; sinon même garde
+    // canonicité+domaine que les binaires (rejette `comp10_007`, `comp10_999`).
+    return a === null ? null : acceptFact(makeFact(prefix, a, 0), key);
   }
 
   const parts = rest.split(OPERATOR[prefix]);
@@ -164,35 +229,41 @@ export function parseFactKey(key: string): Fact | null {
   if (a === null || b === null) {
     return null;
   }
-  // Canonicité : la clé re-générée depuis (a, b) doit être identique à l'entrée —
-  // rejette une clé commutative non triée (`add_8+3`) et toute variante non
-  // canonique, garantissant une clé ↔ fait bijective.
-  const fact = makeFact(prefix, a, b);
-  return fact.key === key ? fact : null;
+  return acceptFact(makeFact(prefix, a, b), key);
+}
+
+/**
+ * Retient un fait candidat dans l'univers **uniquement** s'il est dans le domaine
+ * Tier 1 (`isFactInDomain`) — même prédicat que `parseFactKey`, donc génération et
+ * relecture ne peuvent pas diverger.
+ */
+function pushIfInDomain(facts: Fact[], skill: Skill, a: number, b: number): void {
+  const fact = makeFact(skill, a, b);
+  if (isFactInDomain(fact.skill, fact.operands)) {
+    facts.push(fact);
+  }
 }
 
 /** Génère l'univers `comp10` Tier 1 : `a + ? = 10`, `a ∈ 1..9` (ENGINE §1, ~9). */
 function generateComp10(): Fact[] {
   const facts: Fact[] = [];
   for (let a = DOMAIN.comp10.minOperand; a <= DOMAIN.comp10.maxOperand; a++) {
-    facts.push(makeFact("comp10", a, 0));
+    pushIfInDomain(facts, "comp10", a, 0);
   }
   return facts;
 }
 
 /**
  * Génère l'univers `add` Tier 1 : `a + b`, `a,b ∈ 1..10`, somme `≤ 20` (ENGINE §1).
- * `b` part de `a` (paires triées) → aucun doublon de clé canonique dès la source.
+ * `b` part de `a` (paires triées) → aucun doublon de clé canonique dès la source ; le
+ * cap de somme (v1 « dans 20 ») est appliqué par `isFactInDomain`.
  */
 function generateAdd(): Fact[] {
   const facts: Fact[] = [];
-  const { minOperand, maxOperand, maxSum } = DOMAIN.add;
+  const { minOperand, maxOperand } = DOMAIN.add;
   for (let a = minOperand; a <= maxOperand; a++) {
     for (let b = a; b <= maxOperand; b++) {
-      // Cap de somme (v1 « dans 20 ») : on saute les paires trop grandes.
-      if (a + b <= maxSum) {
-        facts.push(makeFact("add", a, b));
-      }
+      pushIfInDomain(facts, "add", a, b);
     }
   }
   return facts;
@@ -200,14 +271,15 @@ function generateAdd(): Fact[] {
 
 /**
  * Génère l'univers `sub` Tier 1 : `a − b`, minuende `a ∈ 1..maxMinuend`, `b ∈ 1..a`
- * (résultat ≥ 0). Non-commutatif → ordre naturel, pas de dédoublonnage nécessaire.
+ * (résultat ≥ 0). Non-commutatif → ordre naturel, pas de dédoublonnage nécessaire ;
+ * la contrainte `b ≤ a` est appliquée par `isFactInDomain`.
  */
 function generateSub(): Fact[] {
   const facts: Fact[] = [];
   const { minMinuend, maxMinuend, minSubtrahend } = DOMAIN.sub;
   for (let a = minMinuend; a <= maxMinuend; a++) {
     for (let b = minSubtrahend; b <= a; b++) {
-      facts.push(makeFact("sub", a, b));
+      pushIfInDomain(facts, "sub", a, b);
     }
   }
   return facts;
@@ -222,7 +294,7 @@ function generateMult(): Fact[] {
   const { minOperand, maxOperand } = DOMAIN.mult;
   for (let a = minOperand; a <= maxOperand; a++) {
     for (let b = a; b <= maxOperand; b++) {
-      facts.push(makeFact("mult", a, b));
+      pushIfInDomain(facts, "mult", a, b);
     }
   }
   return facts;

@@ -123,6 +123,41 @@ describe("parseFactKey — désérialisation robuste", () => {
     expect(parseFactKey("add_8+3")).toBeNull();
     expect(parseFactKey("mult_8x6")).toBeNull();
   });
+
+  it("rejette les zéros de tête (round-trip même pour comp10)", () => {
+    // comp10_007 se re-génèrerait en comp10_7 ≠ entrée → non canonique, rejeté.
+    expect(parseFactKey("comp10_007")).toBeNull();
+    expect(parseFactKey("add_03+8")).toBeNull();
+  });
+
+  it("rejette un entier non sûr (perte de précision → round-trip corrompu)", () => {
+    // > Number.MAX_SAFE_INTEGER : Number() arrondit → clé re-générée ≠ entrée.
+    expect(parseFactKey("comp10_9007199254741000")).toBeNull();
+  });
+
+  it("comp10 : rejette hors bornes de domaine (a ∈ 1..9)", () => {
+    expect(parseFactKey("comp10_0")).toBeNull(); // a < min (trivial)
+    expect(parseFactKey("comp10_10")).toBeNull(); // a > max (complément 0, trivial)
+    expect(parseFactKey("comp10_999")).toBeNull(); // très hors bornes
+  });
+
+  it("add : rejette hors bornes de domaine", () => {
+    expect(parseFactKey("add_0+3")).toBeNull(); // a < minOperand
+    expect(parseFactKey("add_1+30")).toBeNull(); // somme > maxSum
+    expect(parseFactKey("add_2+11")).toBeNull(); // b > maxOperand (somme OK)
+  });
+
+  it("sub : rejette hors bornes de domaine", () => {
+    expect(parseFactKey("sub_0-0")).toBeNull(); // minuende < minMinuend
+    expect(parseFactKey("sub_21-5")).toBeNull(); // minuende > maxMinuend
+    expect(parseFactKey("sub_5-0")).toBeNull(); // subtrahende < minSubtrahend
+    expect(parseFactKey("sub_3-15")).toBeNull(); // b > a (résultat négatif)
+  });
+
+  it("mult : rejette hors bornes de domaine", () => {
+    expect(parseFactKey("mult_0x5")).toBeNull(); // a < minOperand
+    expect(parseFactKey("mult_2x11")).toBeNull(); // b > maxOperand
+  });
 });
 
 describe("generateFacts — univers Tier 1 par compétence (ENGINE §1)", () => {

@@ -33,9 +33,9 @@ export const COMP10_TARGET = 10;
  *   complément serait 10 ou 0, sans intérêt pédagogique).
  * - `add` : `a + b`, `a,b ∈ 1..10`, somme `≤ 20` (v1 « dans 20 », ENGINE §0/§8) →
  *   ~55 faits une fois la clé canonique triée dédoublonnée.
- * - `sub` : `a − b`, minuende `a ∈ 1..SUB_MAX_MINUEND`, `b ∈ 1..a` (résultat ≥ 0,
- *   pas de soustraction triviale par 0). `SUB_MAX_MINUEND` est la borne ⚙️ « a ≤ 20 »
- *   d'ENGINE §1 — le v1 reste « dans 20 ».
+ * - `sub` : `a − b`, minuende `a ∈ 1..maxMinuend`, `b ∈ 1..a` (résultat ≥ 0, pas de
+ *   soustraction triviale par 0). `maxMinuend` est la borne ⚙️ « a ≤ 20 » d'ENGINE §1
+ *   — le v1 reste « dans 20 ».
  * - `mult` : `a × b`, `a,b ∈ 1..10` → ~55 faits une fois la clé triée dédoublonnée.
  */
 export const DOMAIN = {
@@ -56,7 +56,19 @@ export const DOMAIN = {
   sub: {
     /** Plus petite minuende `a` (a ≥ 1). */
     minMinuend: 1,
-    /** Plus grande minuende `a` — borne ⚙️ « a ≤ 20 » (ENGINE §1, v1 « dans 20 »). */
+    /**
+     * Plus grande minuende `a` — borne ⚙️ « a ≤ 20 » (ENGINE §1, v1 « dans 20 »).
+     *
+     * **Choix assumé** : avec `b ∈ 1..a`, cette borne produit **210 faits** `sub`
+     * (contre 55 pour add/mult), ce qui déséquilibre le cardinal du Tier 1. On
+     * **garde 210** volontairement pour l'instant : c'est le cardinal `~borné ⚙️`
+     * littéral d'ENGINE §1, et il préserve les faits CE1 à **minuende à deux
+     * chiffres** (ex. `15−6`, `12−5`) essentiels aux lacunes visées. Le
+     * rééquilibrage éventuel (échantillonnage par familles de faits, sous-domaine
+     * plus resserré) est un **réglage de playtest** (calibration à 3.4 / issue
+     * `discovered`) — pas un changement de fondation. Modifier ici suffit à
+     * recadrer sans toucher à la logique.
+     */
     maxMinuend: 20,
     /** Plus petit subtrahende `b` (b ≥ 1 : pas de soustraction par 0). */
     minSubtrahend: 1,
