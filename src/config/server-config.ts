@@ -8,6 +8,13 @@
  *   (cf. WORKFLOW.md §15).
  */
 
+// Import RELATIF (pas l'alias `@`) : ce module est consommé HORS runtime Next
+// (`db:migrate` tsx, drizzle-kit, vitest) où le résolveur de paths de Next
+// n'existe pas. `domain.ts` est un module **pur** (aucun `server-only`/argon2/DB —
+// LEARNINGS #34) → import sûr ici. On n'importe QUE le type `Skill` + la liste
+// `SKILLS` (valeur pure), rien d'autre du moteur.
+import { SKILLS, type Skill } from "../lib/engine/domain";
+
 export type AppMode = "development" | "test" | "production";
 
 export interface DatabaseConfig {
@@ -70,11 +77,62 @@ export interface AuthConfig {
   rateLimit: RateLimitConfig;
 }
 
+/** Seuils de fluence ⚙️ (ms) par compétence — « rapide » = `response_ms ≤ seuil`. */
+export type FluenceThresholdsMs = Record<Skill, number>;
+
+/**
+ * Config ⚙️ du **moteur pédagogique** (ENGINE.md §11). **Posée** ici (contrat
+ * partagé de l'épic #3) ; **consommée** par les stories 3.3–3.7 (maîtrise,
+ * sélection, composition de niveau, interleaving, étoiles) — pas ici. Source unique
+ * de tous les paramètres à calibrer du moteur : aucune valeur en dur ailleurs.
+ *
+ * ⚠️ Les **bornes de domaine** des faits (opérandes, somme max…) restent dans
+ * `src/lib/engine/domain.ts` (moteur pur) — elles ne migrent PAS ici.
+ */
+export interface EngineConfig {
+  /**
+   * Délais des boîtes Leitner **en jours**, indexés par la boîte 0..5 (ENGINE §2).
+   * `[0, 1, 2, 4, 9, 21]` : boîte 0 = même session, boîte 5 = entretien (21 j).
+   */
+  leitnerDelaysDays: readonly number[];
+  /** Seuils de fluence (ms) par compétence : « rapide » sous ce seuil (ENGINE §2). */
+  fluenceThresholdsMs: FluenceThresholdsMs;
+  /** Boîtes gagnées quand juste + rapide (promotion, ENGINE §2/§11). */
+  promoteBoxes: number;
+  /** Boîtes perdues quand faux / « je ne sais pas » (rétrograde, ENGINE §2/§11). */
+  demoteBoxes: number;
+  /** Boîte maximale (dernière boîte Leitner) — borne haute de la force. */
+  maxBox: number;
+  /** `NEW_MAX_PAR_NIVEAU` : nouveaux faits max introduits par niveau (ENGINE §7). */
+  newMaxPerLevel: number;
+  /** `NEW_MAX_PAR_JOUR` : nouveaux faits max introduits par jour (ENGINE §7). */
+  newMaxPerDay: number;
+  /** `SEUIL_CONSO` : si ≥ ce nb de facts à `box ≤ 1` → 0 nouveau (ENGINE §7). */
+  consolidationThreshold: number;
+  /** Boîte « fragile » : `box ≤ ce seuil` compte pour la consolidation (ENGINE §7). */
+  consolidationMaxBox: number;
+  /** Bascule interleaving : maîtrise ≥ ce ratio (facts à `box ≥ …`) → mélange (ENGINE §7). */
+  interleaveThresholdRatio: number;
+  /** Boîte plancher de la bascule interleaving (`box ≥ …`, ENGINE §7). */
+  interleaveMinBox: number;
+  /** Déclencheur Tier suivant : maîtrise ≥ ce ratio (facts à `box ≥ …`) (ENGINE §8/§11). */
+  tierUnlockRatio: number;
+  /** Boîte plancher du déclencheur de Tier (`box ≥ …`, ENGINE §11). */
+  tierUnlockMinBox: number;
+  /** Seuils d'étoiles (ratio de réussite d'un niveau) : 1★ / 2★ / 3★ (ENGINE §5/§11). */
+  starThresholds: readonly [number, number, number];
+  /** Anti-mash : réponse sous ce délai (ms) = ignorée (anti-triche, ENGINE §9/§11). */
+  antiMashMs: number;
+  /** Taille du diagnostic de départ (~nb de calculs, ENGINE §3/§11). */
+  diagnosticSize: number;
+}
+
 export interface AppConfig {
   mode: AppMode;
   database: DatabaseConfig;
   imageModel: ImageModelConfig;
   auth: AuthConfig;
+  engine: EngineConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -104,6 +162,39 @@ export const CONFIG_DEFAULTS = {
       backoffFactor: 2,
       backoffMaxMs: 5 * 60 * 1000,
     },
+  },
+  engine: {
+    // Délais boîtes Leitner (j) : 0 · 1 · 2 · 4 · 9 · 21 (ENGINE §2/§11).
+    leitnerDelaysDays: [0, 1, 2, 4, 9, 21],
+    // Seuils fluence (ms) : compléments/add 3 s, sous/mult 4 s (ENGINE §2/§11).
+    fluenceThresholdsMs: {
+      comp10: 3_000,
+      add: 3_000,
+      sub: 4_000,
+      mult: 4_000,
+    },
+    // Promotion juste+rapide → +1 ; faux → −2 (ENGINE §2/§11).
+    promoteBoxes: 1,
+    demoteBoxes: 2,
+    // Boîte max = dernière boîte Leitner (6 boîtes 0..5 → max 5).
+    maxBox: 5,
+    // Rythme prudent (ENGINE §7/§11).
+    newMaxPerLevel: 2,
+    newMaxPerDay: 5,
+    consolidationThreshold: 8,
+    consolidationMaxBox: 1,
+    // Bascule interleaving : 40 % à box≥3 (ENGINE §7/§11).
+    interleaveThresholdRatio: 0.4,
+    interleaveMinBox: 3,
+    // Déclencheur Tier suivant : 85 % à box≥4 (ENGINE §8/§11).
+    tierUnlockRatio: 0.85,
+    tierUnlockMinBox: 4,
+    // Seuils étoiles : 60 / 85 / 100 % (ENGINE §5/§11).
+    starThresholds: [0.6, 0.85, 1.0],
+    // Anti-mash : < 600 ms (ENGINE §9/§11).
+    antiMashMs: 600,
+    // Diagnostic : ~18 calculs (ENGINE §3/§11).
+    diagnosticSize: 18,
   },
 } as const;
 
@@ -136,6 +227,58 @@ function parsePositiveNumber(raw: string | undefined, fallback: number): number 
   if (raw === undefined) return fallback;
   const n = Number.parseFloat(raw);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/**
+ * Parse un entier **≥ 0** (accepte 0, contrairement à `parsePositiveInt`).
+ * Utilisé pour les paramètres du moteur où 0 est légitime (ex. `promoteBoxes`,
+ * délai de la boîte 0).
+ */
+function parseNonNegativeInt(raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
+
+/**
+ * Parse un **ratio** dans `]0, 1]` (seuils de maîtrise / étoiles, ENGINE §5/§7/§8).
+ * Hors intervalle ou non numérique → défaut. Borne haute inclusive (1 = 100 %).
+ */
+function parseRatio(raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n > 0 && n <= 1 ? n : fallback;
+}
+
+/**
+ * Parse une **liste d'entiers ≥ 0** séparés par virgule (ex. délais des boîtes
+ * `"0,1,2,4,9,21"`). Tout élément invalide (non entier / négatif), une longueur
+ * différente du défaut, ou une liste vide → défaut (contrat = 6 boîtes, ENGINE §2).
+ */
+function parseIntList(raw: string | undefined, fallback: readonly number[]): number[] {
+  if (raw === undefined) return [...fallback];
+  const parts = raw.split(",");
+  if (parts.length !== fallback.length) return [...fallback];
+  const parsed = parts.map((p) => Number.parseInt(p.trim(), 10));
+  return parsed.every((n) => Number.isInteger(n) && n >= 0) ? parsed : [...fallback];
+}
+
+/**
+ * Parse un **triplet de ratios croissants** `]0,1]` (seuils d'étoiles 1★/2★/3★,
+ * ENGINE §5). Exactement 3 valeurs, chacune un ratio valide, strictement
+ * croissantes (`s1 < s2 < s3`) — sinon défaut. Le tri croissant est un invariant
+ * du contrat (une 3ᵉ étoile est plus dure qu'une 1ʳᵉ).
+ */
+function parseStarThresholds(
+  raw: string | undefined,
+  fallback: readonly [number, number, number],
+): [number, number, number] {
+  if (raw === undefined) return [...fallback];
+  const parts = raw.split(",");
+  if (parts.length !== 3) return [...fallback];
+  const [s1, s2, s3] = parts.map((p) => Number.parseFloat(p.trim()));
+  const valid = [s1, s2, s3].every((n) => Number.isFinite(n) && n > 0 && n <= 1);
+  return valid && s1 < s2 && s2 < s3 ? [s1, s2, s3] : [...fallback];
 }
 
 /**
@@ -190,6 +333,55 @@ export function loadDatabaseConfig(env: Env): DatabaseConfig {
 }
 
 /**
+ * Bloc **moteur pédagogique** de la config, isolé en fonction pure (ENGINE §11).
+ * Source unique des ⚙️ du moteur, tous surchargeables par l'environnement (mêmes
+ * conventions que `loadAuthConfig`). Défauts = valeurs de départ d'ENGINE §11.
+ *
+ * **Posé** ici (contrat épic #3) ; **consommé** par 3.3–3.7 — pas dans cette story.
+ * Comme `loadDatabaseConfig`, sans validation de secrets : réglages purs, pas de clé.
+ */
+export function loadEngineConfig(env: Env): EngineConfig {
+  const d = CONFIG_DEFAULTS.engine;
+  // Seuils de fluence par compétence : surcharge par `ENGINE_FLUENCE_MS_<SKILL>`
+  // (ex. `ENGINE_FLUENCE_MS_MULT`). Itère sur SKILLS (source unique, ENGINE §1)
+  // pour n'oublier aucune compétence.
+  const fluenceThresholdsMs = {} as Record<Skill, number>;
+  for (const skill of SKILLS) {
+    fluenceThresholdsMs[skill] = parsePositiveInt(
+      env[`ENGINE_FLUENCE_MS_${skill.toUpperCase()}`],
+      d.fluenceThresholdsMs[skill],
+    );
+  }
+  return {
+    leitnerDelaysDays: parseIntList(env.ENGINE_LEITNER_DELAYS_DAYS, d.leitnerDelaysDays),
+    fluenceThresholdsMs,
+    promoteBoxes: parseNonNegativeInt(env.ENGINE_PROMOTE_BOXES, d.promoteBoxes),
+    demoteBoxes: parseNonNegativeInt(env.ENGINE_DEMOTE_BOXES, d.demoteBoxes),
+    maxBox: parseNonNegativeInt(env.ENGINE_MAX_BOX, d.maxBox),
+    newMaxPerLevel: parseNonNegativeInt(env.ENGINE_NEW_MAX_PER_LEVEL, d.newMaxPerLevel),
+    newMaxPerDay: parseNonNegativeInt(env.ENGINE_NEW_MAX_PER_DAY, d.newMaxPerDay),
+    consolidationThreshold: parsePositiveInt(
+      env.ENGINE_CONSOLIDATION_THRESHOLD,
+      d.consolidationThreshold,
+    ),
+    consolidationMaxBox: parseNonNegativeInt(
+      env.ENGINE_CONSOLIDATION_MAX_BOX,
+      d.consolidationMaxBox,
+    ),
+    interleaveThresholdRatio: parseRatio(
+      env.ENGINE_INTERLEAVE_THRESHOLD_RATIO,
+      d.interleaveThresholdRatio,
+    ),
+    interleaveMinBox: parseNonNegativeInt(env.ENGINE_INTERLEAVE_MIN_BOX, d.interleaveMinBox),
+    tierUnlockRatio: parseRatio(env.ENGINE_TIER_UNLOCK_RATIO, d.tierUnlockRatio),
+    tierUnlockMinBox: parseNonNegativeInt(env.ENGINE_TIER_UNLOCK_MIN_BOX, d.tierUnlockMinBox),
+    starThresholds: parseStarThresholds(env.ENGINE_STAR_THRESHOLDS, d.starThresholds),
+    antiMashMs: parsePositiveInt(env.ENGINE_ANTI_MASH_MS, d.antiMashMs),
+    diagnosticSize: parsePositiveInt(env.ENGINE_DIAGNOSTIC_SIZE, d.diagnosticSize),
+  };
+}
+
+/**
  * Construit la config typée depuis un environnement. Fonction pure (testable).
  * En mode `production`, lève `ConfigError` si une variable requise manque (fail-fast).
  */
@@ -218,6 +410,7 @@ export function loadConfig(env: Env): AppConfig {
       model: env.IMAGE_MODEL?.trim() || CONFIG_DEFAULTS.imageModel.model,
     },
     auth: loadAuthConfig(env),
+    engine: loadEngineConfig(env),
   };
 }
 
@@ -235,6 +428,15 @@ export function getConfig(): AppConfig {
  */
 export function getAuthConfig(): AuthConfig {
   return getConfig().auth;
+}
+
+/**
+ * Bloc moteur de la config applicative (mémoïsé). Consommé par les stories du
+ * moteur (maîtrise, sélection, composition de niveau, interleaving, étoiles) qui
+ * tournent DANS le runtime Next.
+ */
+export function getEngineConfig(): EngineConfig {
+  return getConfig().engine;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */

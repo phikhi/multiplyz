@@ -1,8 +1,14 @@
 import { sql } from "drizzle-orm";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+// Import RELATIF (pas l'alias `@`) : drizzle-kit + le script tsx `db:migrate`
+// chargent ce module HORS du résolveur de paths de Next (même contrainte que
+// `config.ts`). `import type` = erased au build, mais on garde le relatif par
+// cohérence et robustesse du résolveur outillage.
+import type { Skill } from "../engine/domain";
 
-// Schéma métier auth-lite (epic #2) + table technique de wiring (#12).
-// Le reste du schéma métier (`mastery`, `attempts`, …) appartient au Moteur (#3)
+// Schéma métier auth-lite (epic #2) + Moteur math (epic #3 : `mastery`/`attempts`)
+// + table technique de wiring (#12).
+// Le reste du schéma métier appartient à ses stories dédiées (économie, mondes, …)
 // — NE PAS l'ajouter ici avant sa story (cf. PLAN.md §Modèle de données).
 
 /**
@@ -84,4 +90,104 @@ export const pinAttempts = sqliteTable("pin_attempts", {
   failures: integer("failures").notNull().default(0),
   /** Instant du dernier échec — base du calcul de backoff. */
   lastFailureAt: integer("last_failure_at", { mode: "timestamp" }).notNull(),
+});
+
+// ============================================================================
+// Moteur math (epic #3) — état de maîtrise + journal des tentatives
+// (ENGINE.md §2/§7/§10, PLAN.md §Modèle de données). Source de vérité SERVEUR
+// (online-first) : la logique maîtrise/sélection vit côté serveur (CLAUDE.md).
+// ============================================================================
+
+/**
+ * Assemble la **PK texte** d'une ligne `mastery` : une seule ligne par
+ * `(profil, fact)`. L'unicité composite est **encodée dans la PK** — pas de
+ * callback `sqliteTable` d'extras (uniqueIndex / PK composite) qui, n'étant jamais
+ * invoqué au runtime, casserait le gate 100 % fonctions (LEARNINGS #34/#46, même
+ * pattern que `pin_attempts`). Fonction pure → couvrable, et l'upsert
+ * `onConflictDoUpdate` (consommé par 3.3+) cible ce PK simple.
+ *
+ * Séparateur `:` (comme `pin_attempts`) : le `fact_id` (clé de faits 3.1) utilise
+ * `_`/`x`/`+`/`-` mais **jamais** `:` → clé sans ambiguïté. Le `profileId` est un
+ * entier (autoincrement) → pas de `:` non plus.
+ */
+export function masteryKey(profileId: number, factId: string): string {
+  return `${profileId}:${factId}`;
+}
+
+/**
+ * État de maîtrise **par (profil, fact)** — modèle Leitner + fluence (ENGINE §2).
+ * Une ligne par fait déjà rencontré par un profil, mise à jour sur la **1ʳᵉ
+ * réponse** d'un fait dans un niveau (ENGINE §2/§10). Données **enfant** → FK
+ * `profile_id` `ON DELETE CASCADE` (purge à la suppression du profil, RGPD).
+ *
+ * Unicité `(profil, fact)` portée par la **PK texte encodée** (`masteryKey`) — cf.
+ * ci-dessus. `profile_id` / `fact_id` / `skill` restent des colonnes normales pour
+ * les requêtes de sélection (dus/faibles par compétence) sans dépendre du décodage
+ * de la PK.
+ *
+ * Invariants (honorés par les stories consommatrices 3.3+) :
+ * - `strength` = **boîte Leitner 0..5** (ENGINE §2) : 0 = à apprendre/raté …
+ *   5 = maîtrisé (entretien). Transitions juste+rapide → +1, faux → −2 (ENGINE §11).
+ * - `next_due` = instant de réapparition dérivé de la boîte (délais ENGINE §2/§11).
+ * - `avg_response_ms` = moyenne glissante du temps de réponse (fluence, ENGINE §2).
+ * - Fact **maîtrisé** = `strength ≥ 4` ; maîtrise d'une compétence = % de ses facts
+ *   à `strength ≥ 4` (ENGINE §2). Pas d'index secondaire (single-tenant, premature ;
+ *   ajout via migration si le dashboard #7 le justifie — évite le callback extras).
+ */
+export const mastery = sqliteTable("mastery", {
+  /** `"<profileId>:<factId>"` — une ligne par (profil, fact) (cf. `masteryKey`). */
+  id: text("id").primaryKey(),
+  /** Profil propriétaire — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Clé stable du fait (ex. `comp10_7`, `mult_6x8`) — contrat de faits 3.1. */
+  factId: text("fact_id").notNull(),
+  /** Compétence du fait (comp10 / add / sub / mult) — requête par compétence. */
+  skill: text("skill").$type<Skill>().notNull(),
+  /** Boîte Leitner 0..5 (force). Défaut 0 = à apprendre (ENGINE §2). */
+  strength: integer("strength").notNull().default(0),
+  /** Nombre cumulé de réponses justes sur ce fait. */
+  correctCount: integer("correct_count").notNull().default(0),
+  /** Nombre cumulé de réponses fausses / « je ne sais pas » sur ce fait. */
+  wrongCount: integer("wrong_count").notNull().default(0),
+  /** Temps de réponse moyen (ms) — fluence (moyenne glissante, ENGINE §2). */
+  avgResponseMs: integer("avg_response_ms").notNull().default(0),
+  /** Dernière rencontre du fait (base de la révision espacée). */
+  lastSeen: integer("last_seen", { mode: "timestamp" }),
+  /** Prochaine échéance de réapparition (dérivée de la boîte, ENGINE §2). */
+  nextDue: integer("next_due", { mode: "timestamp" }),
+});
+
+/**
+ * Journal **append-only** des réponses — une ligne par réponse (ENGINE §10).
+ * Matière première de l'espace parent (justesse, rapidité, régularité, tendances,
+ * PLAN §Modèle de données). Données **enfant** → FK `profile_id` `ON DELETE
+ * CASCADE` (purge RGPD).
+ *
+ * PK `id` autoincrement simple : append-only, **aucune unicité** (contrairement à
+ * `mastery`) → pas de callback extras. Pas d'index secondaire pour l'instant
+ * (single-tenant ; l'agrégation dashboard #7 en ajoutera un via migration si le
+ * volume le justifie).
+ */
+export const attempts = sqliteTable("attempts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Profil auteur — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Clé stable du fait répondu (contrat de faits 3.1). */
+  factId: text("fact_id").notNull(),
+  /** Compétence du fait (comp10 / add / sub / mult). */
+  skill: text("skill").$type<Skill>().notNull(),
+  /** Réponse juste ? (mode boolean drizzle → stocké 0/1). */
+  correct: integer("correct", { mode: "boolean" }).notNull(),
+  /** Temps de réponse (ms) — matière de la fluence. */
+  responseMs: integer("response_ms").notNull(),
+  /** Reprise après une erreur (« refait une fois », ENGINE §9 / PLAN). */
+  isRetry: integer("is_retry", { mode: "boolean" }).notNull().default(false),
+  /** Instant de la réponse (régularité / tendances). */
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
 });
