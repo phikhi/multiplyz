@@ -255,3 +255,22 @@
 - Observation : 4 reviewers indépendants sur la fondation du moteur (backend/qa/game-design/PO) → 2 APPROVE + 2 REQUEST_CHANGES au 1er tour. Le MAJOR (robustesse `parseFactKey`) est remonté **indépendamment** par backend ET qa = vrai défaut, pas un nit. Fixes de consensus appliqués **au worktree chaud en une itération** (via SendMessage au subagent de build), puis **re-review du seul reviewer bloquant restant** (qa) — pas de re-run du panel entier (fan-out au risque, §7 : le changement était mécanique/durcissement, backend+PO non impactés).
 - Leçon : sur une fondation cœur, panel complet ; un finding trouvé par 2 reviewers = priorité haute ; après fix, ne re-solliciter que les reviewers dont le verdict bloquait ou dont la surface a changé (économie de quota). Merge autonome quand scope+PO ✅ + CI verte + à jour, en documentant le ruling sur un REQUEST_CHANGES in-contract.
 - Action : rappel process.
+
+---
+
+## Rétro story #58 — épic #3 Moteur math (3.2 Schéma mastery/attempts + config moteur ⚙️, PR #68)
+
+### 2026-07-02 — [process] Leçons appliquées d'emblée par le subagent de build → 4× APPROVE 1er tour, zéro friction CI (PR #68)
+- Observation : contrat data+config (schéma `mastery`/`attempts` + `loadEngineConfig`) → 4 reviewers indépendants (backend/security/qa/PO) **APPROVE au 1er tour**, aucun bloquant. Le build a **réappliqué proactivement** les leçons accumulées : PK texte encodée `masteryKey` (pattern `pin_attempts`, évite le callback extras drizzle #34/#46), FK cascade niveau colonne testée via `getTableConfig().foreignKeys[].reference()`, `loadEngineConfig` pur sans `server-only` (consommé hors-Next #34), **Node 22 via PATH direct** (#57 appliqué → aucune casse d'outillage cette fois). backend + qa ont **exécuté les gates localement** (355 tests 100 % non-vacuous, `db:migrate` idempotent 2×, cascade vérifiée en DB réelle) = verify haute confiance sur un contrat data.
+- Leçon : LEARNINGS lu+appliqué avant de coder = la story de contrat la plus risquée passe sans tour de correction. Confirme le dividende du fichier de leçons + fondations génériques réutilisées.
+- Action : rappel (transposer aux stories logiques 3.3–3.7).
+
+### 2026-07-02 — [contrat] Contrat le plus précis gagne : `is_retry` d'ENGINE §10 malgré silence de PLAN §data (PR #68)
+- Problème/décision : PLAN §Modèle de données ne liste pas `is_retry` sur `attempts`, mais ENGINE §10 (contrat pédagogique, plus précis pour cette table) l'exige (re-ask intra-niveau §4/§9). Inclus par le build → décision in-contract, pas un drift (aucune contradiction verrouillée, la spec la plus spécifique prime).
+- Leçon : quand deux specs se recouvrent, la **plus précise pour la surface concernée** est le contrat effectif ; un champ présent dans l'une et tu dans l'autre (sans contradiction) n'est pas un drift. Documenter la résolution dans la PR.
+- Action : rappel.
+
+### 2026-07-02 — [config] Un bloc de config ⚙️ est un contrat BRUT non validé de façon croisée → la logique consommatrice doit clamper (PR #68, backend MINOR forward-looking)
+- Problème : `EngineConfig` valide chaque champ isolément (listes/ratios/seuils) mais **pas les relations** (rien n'empêche `ENGINE_MAX_BOX=0` ou `promoteBoxes>maxBox` par env). Sans impact ici (posé, non consommé).
+- Leçon : une story de config **pose** des valeurs brutes ; la **validation croisée + le clamp** (`min(maxBox, box+promote)`, `max(0, box-demote)`) appartiennent à la **logique consommatrice** (3.3 Leitner), qui ne doit jamais supposer la config cohérente. Router en note sur la story consommatrice (#59), ne pas sur-valider la config brute.
+- Action : note routée #59 (3.3) ; findings forward-looking aussi routés #63 (valider `fact_id`/`profile_id` serveur avant insert) + #60 (index DUE/NEW/MAINT via migration si lent). Rappel anti-drift.
