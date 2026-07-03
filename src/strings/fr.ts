@@ -79,11 +79,17 @@ export const fr = {
       method:
         "Cet espace montre les progrès de {prénom} : de courtes séances, on revoit en douceur ce qui coince, sans jamais parler d'échec.",
     },
-    /** Étape 4 — code de secours (affiché une seule fois, registre neutre). */
+    /**
+     * Étape 4 — code de secours (affiché une seule fois). Écran **parent**
+     * (comme la récupération #2.5, `strings.recovery`) → registre **neutre /
+     * vouvoiement** (COPY.md §5, PAS la voix tutoyante de Teddy) — aligné (issue
+     * #51) sur `strings.recovery.done.intro` (même contrat : code affiché une
+     * seule fois, noté maintenant).
+     */
     recovery: {
-      title: "Note ce code de secours",
+      title: "Notez ce code de secours",
       intro:
-        "Il permet de réinitialiser le code parent s'il est oublié. On ne l'affiche qu'une seule fois — note-le maintenant.",
+        "Il permet de réinitialiser le code parent s'il est oublié. Il ne s'affiche qu'une seule fois — notez-le maintenant.",
       done: "C'est noté, continuer",
     },
     /** Écran final (voix Teddy). */
@@ -194,16 +200,19 @@ export const fr = {
       tryAgain: "Je réessaie",
     },
     /**
-     * Étayage visuel du re-essai (WIREFRAMES §3d, PRODUCT §2.2, épic #4). Voix de
-     * Teddy, tutoiement. Le **label** décrit la représentation pour un lecteur
-     * d'écran (a11y : le visuel est doublé d'un texte, jamais couleur/forme seule).
-     * Les étayages concrets (dix-cases, droite numérique, matrice) porteront leur
-     * propre libellé détaillé dans les stories 4.2/4.3/4.4 — ici = libellé
-     * **générique** du conteneur, stable pour la fondation.
+     * Étayage visuel du re-essai (WIREFRAMES §3d, PRODUCT §2.2, épic #4 — COMPLET,
+     * 4.2/4.3/4.4 mergées). Voix de Teddy, tutoiement. Chaque étayage concret
+     * (dix-cases, droite numérique, matrice) porte son **propre** libellé
+     * accessible spécifique dérivé des props (rétro #94 : jamais de `role="img"`
+     * imbriqué, le nom accessible EST l'info numérique, pas un générique).
+     *
+     * **Nit review #112** : l'ancienne clé `label` (libellé générique du
+     * placeholder de fondation #93, avant que 4.2/4.3/4.4 câblent un étayage
+     * concret par compétence) a été **retirée** — plus aucun code prod ne la
+     * référence depuis l'épic #4 complet (elle ne servait plus qu'à des
+     * assertions négatives de tests, remplacées par une constante locale dédiée).
      */
     scaffold: {
-      /** Libellé accessible du conteneur d'étayage (WIREFRAMES §3d « Regarde »). */
-      label: "Un petit dessin pour t'aider à voir le calcul",
       /**
        * Étayage dix-cases des compléments à 10 (story #94, ENGINE §1 `a + ? = 10`,
        * PRODUCT §3.4, WIREFRAMES §3d). Voix de Teddy, tutoiement — `missing` porte

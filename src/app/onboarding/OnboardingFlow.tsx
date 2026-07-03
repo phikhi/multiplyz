@@ -219,6 +219,7 @@ export function OnboardingFlow() {
                   <button
                     key={option.id}
                     type="button"
+                    className="mz-focusable"
                     aria-pressed={selected}
                     aria-label={strings.onboarding.profile.avatarOption.replace(
                       "{nom}",
@@ -245,6 +246,7 @@ export function OnboardingFlow() {
 
             <button
               type="button"
+              className="mz-focusable"
               disabled={!canContinueProfile}
               onClick={() => goto("childPin")}
               style={primaryStyle(!canContinueProfile)}
@@ -270,11 +272,17 @@ export function OnboardingFlow() {
             <div
               style={{ display: "flex", gap: "var(--space-3)", justifyContent: "space-between" }}
             >
-              <button type="button" onClick={() => goto("profile")} style={ghostButtonStyle}>
+              <button
+                type="button"
+                className="mz-focusable"
+                onClick={() => goto("profile")}
+                style={ghostButtonStyle}
+              >
                 {strings.onboarding.nav.back}
               </button>
               <button
                 type="button"
+                className="mz-focusable"
                 disabled={childPin.length !== PIN_LENGTH}
                 onClick={() => goto("parentPin")}
                 style={primaryStyle(childPin.length !== PIN_LENGTH)}
@@ -310,11 +318,17 @@ export function OnboardingFlow() {
             <div
               style={{ display: "flex", gap: "var(--space-3)", justifyContent: "space-between" }}
             >
-              <button type="button" onClick={() => goto("childPin")} style={ghostButtonStyle}>
+              <button
+                type="button"
+                className="mz-focusable"
+                onClick={() => goto("childPin")}
+                style={ghostButtonStyle}
+              >
                 {strings.onboarding.nav.back}
               </button>
               <button
                 type="button"
+                className="mz-focusable"
                 disabled={parentPin.length !== PIN_LENGTH || submitting}
                 onClick={submit}
                 style={primaryStyle(parentPin.length !== PIN_LENGTH || submitting)}
@@ -349,7 +363,12 @@ export function OnboardingFlow() {
             >
               {recoveryCode}
             </p>
-            <button type="button" onClick={() => goto("ready")} style={primaryButtonStyle}>
+            <button
+              type="button"
+              className="mz-focusable"
+              onClick={() => goto("ready")}
+              style={primaryButtonStyle}
+            >
               {strings.onboarding.recovery.done}
             </button>
           </>
@@ -360,7 +379,12 @@ export function OnboardingFlow() {
             <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
               {strings.onboarding.ready.title}
             </h1>
-            <button type="button" onClick={() => router.refresh()} style={primaryButtonStyle}>
+            <button
+              type="button"
+              className="mz-focusable"
+              onClick={() => router.refresh()}
+              style={primaryButtonStyle}
+            >
               {strings.onboarding.ready.cta}
             </button>
           </>

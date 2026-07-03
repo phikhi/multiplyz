@@ -200,6 +200,7 @@ export function ParentRecoveryFlow() {
             </label>
             <button
               type="button"
+              className="mz-focusable"
               disabled={!canVerify || submitting}
               onClick={verifyCode}
               style={primaryStyle(!canVerify || submitting)}
@@ -221,6 +222,7 @@ export function ParentRecoveryFlow() {
             >
               <button
                 type="button"
+                className="mz-focusable"
                 onClick={() => {
                   setError(null);
                   setStep("code");
@@ -231,6 +233,7 @@ export function ParentRecoveryFlow() {
               </button>
               <button
                 type="button"
+                className="mz-focusable"
                 disabled={!canSubmitPin || submitting}
                 onClick={submitNewPin}
                 style={primaryStyle(!canSubmitPin || submitting)}
@@ -261,7 +264,12 @@ export function ParentRecoveryFlow() {
             >
               {newRecoveryCode}
             </p>
-            <button type="button" onClick={() => router.push("/")} style={primaryButtonStyle}>
+            <button
+              type="button"
+              className="mz-focusable"
+              onClick={() => router.push("/")}
+              style={primaryButtonStyle}
+            >
               {strings.recovery.done.cta}
             </button>
           </>

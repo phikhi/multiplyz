@@ -1,9 +1,13 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { NumberLine, numberLineLabel } from "./NumberLine";
 import { strings } from "@/strings";
+import {
+  contrastRatio,
+  rawTokenValue,
+  resolveTokenColor,
+  themeBlock,
+} from "@/components/game/scaffolds/test-support/tokens-css";
 
 function fill(template: string, replacements: Record<string, string>): string {
   return Object.entries(replacements).reduce(
@@ -17,69 +21,6 @@ function points(container: HTMLElement): Element[] {
   return [...container.querySelectorAll("[data-scaffold-kind='number-line'] span")].filter(
     (el) => el.textContent !== "" && /^-?\d+$/u.test(el.textContent ?? ""),
   );
-}
-
-/**
- * Lecture de la **source de vérité** `tokens.css` (fix #104, dette QA #102) : jsdom
- * ne charge pas le CSS externe → `getComputedStyle` ne résout jamais un
- * `var(--token)` posé en style inline React. Pour vérifier la **couleur EFFECTIVE**
- * (pas seulement le nom du token asserté), ce helper parse `tokens.css`, résout la
- * chaîne de `var()` (light `:root` + dark `[data-theme="dark"]`), et calcule le
- * ratio de contraste WCAG réel — un test qui rougit si le token repasse à
- * `--color-text-inverse` (piège #94, exactement le bug #104 constaté sur la capture).
- */
-const TOKENS_CSS = readFileSync(resolve(__dirname, "../../../../tokens.css"), "utf-8");
-
-/** Extrait le bloc `:root { ... }` (light) ou `[data-theme="dark"] { ... }` (dark). */
-function themeBlock(theme: "light" | "dark"): string {
-  const marker = theme === "light" ? ":root {" : '[data-theme="dark"] {';
-  const start = TOKENS_CSS.indexOf(marker);
-  if (start === -1) throw new Error(`bloc thème "${theme}" introuvable dans tokens.css`);
-  const bodyStart = TOKENS_CSS.indexOf("{", start) + 1;
-  const bodyEnd = TOKENS_CSS.indexOf("\n}", bodyStart);
-  return TOKENS_CSS.slice(bodyStart, bodyEnd);
-}
-
-/**
- * Résout `--token` en sa valeur brute (hex OU `var(--autre-token)`) dans un bloc,
- * avec **fallback vers `:root`** si absent (cascade CSS réelle : un token non
- * redéfini dans `[data-theme="dark"]` hérite de `:root` — ex.
- * `--scaffold-line-end-glyph`, jamais surchargé en dark, cf. tokens.css).
- */
-function rawTokenValue(block: string, token: string): string {
-  const re = new RegExp(`--${token.replace(/^--/u, "")}:\\s*([^;]+);`, "u");
-  const m = block.match(re);
-  if (m !== null) return m[1].trim();
-  if (block !== themeBlock("light")) return rawTokenValue(themeBlock("light"), token);
-  throw new Error(`token "${token}" introuvable (même en fallback :root)`);
-}
-
-/** Résout entièrement une chaîne `var(--a)` → `var(--b)` → `#hex` (2 niveaux max ici). */
-function resolveTokenColor(theme: "light" | "dark", token: string): string {
-  const block = themeBlock(theme);
-  let value = rawTokenValue(block, token);
-  let depth = 0;
-  while (value.startsWith("var(")) {
-    if (depth++ > 5) throw new Error(`chaîne de var() trop profonde pour "${token}"`);
-    const inner = value.slice(4, -1).trim();
-    value = rawTokenValue(block, inner);
-  }
-  return value;
-}
-
-/** Luminance relative WCAG d'une couleur hex `#RRGGBB`. */
-function relativeLuminance(hex: string): number {
-  const n = hex.replace("#", "");
-  const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(n.slice(i, i + 2), 16) / 255);
-  const chan = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const [rl, gl, bl] = [r, g, b].map(chan);
-  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
-}
-
-/** Ratio de contraste WCAG entre 2 couleurs hex (≥ 4.5:1 = AA texte normal). */
-function contrastRatio(hexA: string, hexB: string): number {
-  const [lLight, lDark] = [relativeLuminance(hexA), relativeLuminance(hexB)].sort((a, b) => b - a);
-  return (lLight + 0.05) / (lDark + 0.05);
 }
 
 describe("NumberLine — droite numérique add/sub (ENGINE §1, PRODUCT §3.4, story #95)", () => {
@@ -431,6 +372,65 @@ describe("NumberLine — droite numérique add/sub (ENGINE §1, PRODUCT §3.4, s
       expect(startGlyph.style.color).not.toBe("var(--color-text-inverse)");
       expect(endGlyph.style.color).not.toBe("var(--color-text-inverse)");
     });
+  });
+
+  describe("épaisseur du trait — token --scaffold-line-track-width (issue #110, dette pré-#102)", () => {
+    // Garde à effet observable : la largeur RENDUE (trait de la droite, graduation
+    // intermédiaire, arc du saut) doit provenir du TOKEN, jamais d'un nombre magique
+    // `2px`/`strokeWidth={2}` réintroduit en dur. Rougit si un futur changement
+    // reviens à une valeur littérale au lieu de `var(--scaffold-line-track-width)`.
+    it("le trait de la droite référence le token (jamais une largeur en dur)", () => {
+      const { container } = render(<NumberLine operands={[3, 4]} correctAnswer={7} />);
+      // Le trait est le seul `<div>` du sous-arbre dont `borderBottom` référence
+      // `--scaffold-line-track` (couleur du trait) — repéré par contenu de style
+      // plutôt que par profondeur DOM exacte (robuste à un futur remaniement de la
+      // structure interne du composant).
+      const track = [...container.querySelectorAll('[data-scaffold-kind="number-line"] div')].find(
+        (el) => (el as HTMLElement).style.borderBottom.includes("--scaffold-line-track"),
+      ) as HTMLElement;
+      expect(track).toBeDefined();
+      expect(track.style.borderBottom).toContain("var(--scaffold-line-track-width)");
+      expect(track.style.borderBottom).not.toMatch(/^\d/u); // pas "2px solid ..." en dur
+    });
+
+    it("la graduation intermédiaire référence le token (jamais une largeur en dur)", () => {
+      // operands [3,4]→7 avec la marge par défaut produit au moins une graduation
+      // intermédiaire (valeurs entre les bornes hors départ/arrivée).
+      const { container } = render(<NumberLine operands={[3, 4]} correctAnswer={7} />);
+      const intermediateTicks = [
+        ...container.querySelectorAll('[data-scaffold-kind="number-line"] span'),
+      ].filter((el): el is HTMLElement => {
+        const style = (el as HTMLElement).style;
+        return style.backgroundColor === "var(--scaffold-line-tick)";
+      });
+      expect(intermediateTicks.length).toBeGreaterThan(0);
+      for (const tick of intermediateTicks) {
+        expect(tick.style.width).toBe("var(--scaffold-line-track-width)");
+      }
+    });
+
+    it("l'arc du saut référence le token via `style` (jamais l'attribut JSX strokeWidth brut)", () => {
+      const { container } = render(<NumberLine operands={[3, 4]} correctAnswer={7} />);
+      const path = container.querySelector('[data-jump="true"] path') as SVGPathElement;
+      // Posé via `style` (CSS résout var()) — un attribut `stroke-width` brut ne
+      // résoudrait jamais `var(--…)` (seul le style CSS le fait).
+      expect(path.style.strokeWidth).toBe("var(--scaffold-line-track-width)");
+      expect(path.getAttribute("stroke-width")).toBeNull();
+    });
+
+    it.each(["light", "dark"] as const)(
+      "%s : --scaffold-line-track-width résout à une largeur non nulle (2px)",
+      (theme) => {
+        // Résolution depuis la source de vérité tokens.css (pattern #104/#110 :
+        // jamais seulement le nom du token) — le token doit résoudre à une largeur
+        // de trait strictement positive dans les 2 thèmes (sinon la ligne devient
+        // invisible, régression silencieuse).
+        const raw = rawTokenValue(themeBlock(theme), "scaffold-line-track-width");
+        const px = Number.parseFloat(raw);
+        expect(Number.isNaN(px)).toBe(false);
+        expect(px).toBeGreaterThan(0);
+      },
+    );
   });
 
   describe("numberLineLabel — libellé accessible (nom du role='img' parent)", () => {

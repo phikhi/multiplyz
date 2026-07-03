@@ -31,7 +31,7 @@ export function ThemeToggle() {
       aria-label={LABEL_TOGGLE}
       aria-pressed={theme === "dark"}
       onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-      className="mz-theme-toggle"
+      className="mz-focusable"
       suppressHydrationWarning
       style={{
         minWidth: "var(--tap-target-min)",

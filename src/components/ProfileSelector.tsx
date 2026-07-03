@@ -199,6 +199,7 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
                 <li key={profile.id}>
                   <button
                     type="button"
+                    className="mz-focusable"
                     aria-label={fill(strings.login.profileOption, "{prénom}", profile.name)}
                     onClick={() => pickProfile(profile)}
                     style={profileCardStyle}
@@ -234,7 +235,12 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
                 {strings.login.checking}
               </p>
             )}
-            <button type="button" onClick={backToList} style={ghostButtonStyle}>
+            <button
+              type="button"
+              className="mz-focusable"
+              onClick={backToList}
+              style={ghostButtonStyle}
+            >
               {strings.login.back}
             </button>
           </>

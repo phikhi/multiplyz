@@ -161,7 +161,12 @@ export function FeedbackPanel({
         </p>
       )}
 
-      <button type="button" onClick={isCorrect ? onContinue : onRetry} style={primaryButtonStyle}>
+      <button
+        type="button"
+        className="mz-focusable"
+        onClick={isCorrect ? onContinue : onRetry}
+        style={primaryButtonStyle}
+      >
         {isCorrect ? strings.play.correct.next : strings.play.retry.tryAgain}
       </button>
     </div>

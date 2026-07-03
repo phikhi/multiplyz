@@ -407,6 +407,7 @@ function ActionButton({
   return (
     <button
       type="button"
+      className="mz-focusable"
       onClick={onClick}
       style={{
         minHeight: "var(--tap-target-min)",

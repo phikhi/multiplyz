@@ -68,9 +68,19 @@ body {
   background-color: var(--color-bg-primary);
 }
 
-/* Focus-visible via tokens (a11y — pas de valeur en dur) */
-.mz-theme-toggle:focus-visible {
-  outline: none;
+/* Utilitaire `:focus-visible` PARTAGÉ (issue #38) — un seul token `--shadow-focus`
+   pour TOUS les contrôles interactifs (boutons de réponse du jeu, PinPad, clavier
+   numérique, boutons de flow onboarding/connexion/récupération, ThemeToggle, etc.),
+   au lieu de l'anneau UA par défaut incohérent avec le design-system (remplace
+   l'ancienne classe `.mz-theme-toggle` dédiée, désormais fondue ici). `outline`
+   gardé transparent (jamais `none` seul) : un agent utilisateur/forceur de
+   contraste qui ignore `box-shadow` voit quand même un anneau, la coche
+   `box-shadow` prenant le dessus dans les navigateurs standards. Cible ≥ 44 px déjà
+   assurée par `--tap-target-min`/`--answer-min-size` sur chaque composant (a11y,
+   hors scope CSS). */
+.mz-focusable:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   box-shadow: var(--shadow-focus);
 }
 
