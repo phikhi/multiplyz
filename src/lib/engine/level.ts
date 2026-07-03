@@ -29,6 +29,17 @@
  * un fait jamais tenté (`state === null`) ne compte **pas** dans `weak` (bugfix #64 :
  * sinon un domaine à beaucoup de faits neufs bloque `capNew` à 0 indéfiniment).
  *
+ * **Invariant no-fail — un niveau n'est JAMAIS vide** (PRODUCT §5, ENGINE §4, ADR 0006,
+ * issue #108) : la combinaison `DUE ∅ ∧ MAINT ∅ ∧ capNew = 0` (impasse : tous les faits
+ * weak `box ≤ consolidationMaxBox` ont atteint `SEUIL_CONSO` — capNew 0 — mais aucun n'est
+ * encore dû par l'espacement Leitner, et rien n'est en entretien) rendait un niveau
+ * **vide**, injouable pour l'enfant. **Repli d'impasse** (décision Option 2, cf.
+ * `fillFromDeadlock`) : remonter les faits **box < maxBox** les **plus proches de leur
+ * échéance** (ceux que le gate veut consolider, juste un peu en avance) — préserve
+ * l'espacement des faits réellement dus (aucun), n'introduit **aucun NEW** non planifié.
+ * Seul un périmètre **sans aucun fait remontable** (scope vide, ou 100 % NEW/entretien non
+ * dus) reste vide (rien à secourir).
+ *
  * **Périmètre du cap de nouveaux** : cette fonction n'applique QUE le cap
  * **par niveau** (`newMaxPerLevel`). Le second cap d'ENGINE §7 — `newMaxPerDay`
  * (nouveaux max **par jour**) — est **cross-niveaux** : il exige de compter les
@@ -144,6 +155,48 @@ function compareDue(a: ScopeEntry, b: ScopeEntry): number {
  */
 function byKey(a: ScopeEntry, b: ScopeEntry): number {
   return a.fact.key < b.fact.key ? -1 : 1;
+}
+
+/**
+ * **Repli d'impasse** (ENGINE §4/§7, décision Option 2, ADR 0006). `true` si le fait
+ * est **remontable** par le repli anti-niveau-vide : déjà rencontré (a une ligne
+ * `mastery`) et **pas encore gradué** (`box < maxBox`, donc pas en entretien pur). Ce
+ * sont exactement les faits que le gate de consolidation veut résorber — le repli les
+ * remonte « un peu en avance » quand rien n'est encore dû, plutôt que de rendre un
+ * niveau vide (invariant no-fail : un niveau n'est **jamais** vide). Un fait NEW
+ * (`state === null`) n'est **pas** remontable (le repli n'introduit aucun nouveau
+ * non planifié, cf. Option 2) ; un fait `box = maxBox` non plus (déjà maîtrisé).
+ */
+function isRescuable(state: MasteryState, config: EngineConfig): boolean {
+  return state.box < config.maxBox;
+}
+
+/**
+ * Comparateur du **repli d'impasse** (Option 2, ADR 0006) : remonte les faits box<5
+ * les **plus proches de leur échéance** d'abord (plus petit `next_due − now`, i.e. la
+ * prochaine révision à venir). Ordre **total et stable** : tie-break final sur la clé
+ * du fait → déterministe, testable (aucun aléa, cf. `compareDue`). `now` capturé par la
+ * clôture.
+ *
+ * **Pré-condition (invariant du repli)** : n'est appelé que sur des faits **non dus**
+ * avec une échéance **datée** (`next_due` non `null`). En effet un fait `box < maxBox` à
+ * `next_due === null` est **toujours DUE** (`isDue` traite `null` comme dû) → il serait
+ * capté par la sélection nominale, laquelle rendrait `picked` non vide **avant** le
+ * repli. Le repli ne se déclenchant que sur `picked` vide, il ne voit donc jamais de
+ * `next_due` `null` (branche de repli morte évitée sous gate 100 %, cf. LEARNINGS #78).
+ * L'assertion non-null `!` reflète cet invariant.
+ */
+function makeCompareByDueProximity(now: number): (a: ScopeEntry, b: ScopeEntry) => number {
+  return (a, b) => {
+    // `next_due − now` : plus petit = plus proche de l'échéance à venir. `next_due` est
+    // garanti non-`null` ici (cf. pré-condition : un null-due serait DUE, jamais au repli).
+    const proximityA = a.state!.nextDue! - now;
+    const proximityB = b.state!.nextDue! - now;
+    if (proximityA !== proximityB) {
+      return proximityA - proximityB; // plus proche (petit délai) d'abord
+    }
+    return byKey(a, b); // tie-break clé (total, déterministe)
+  };
 }
 
 /**
@@ -360,6 +413,9 @@ export interface BuildLevelOptions {
  * 4. `~70 %` DUE d'abord (consolidation), puis NEW (≤ cap), puis MAINT ;
  * 5. si `< LEVEL_SIZE` (début de jeu, peu de DUE) → compléter avec du **NEW** en
  *    respectant le cap, puis MAINT restant ;
+ * 5.b **repli d'impasse** (Option 2, ADR 0006, #108) : si le niveau est encore **vide**
+ *    (impasse `DUE ∅ ∧ MAINT ∅ ∧ capNew = 0`), remonter les faits **box < maxBox** les
+ *    plus proches de leur échéance → **invariant no-fail : un niveau n'est jamais vide** ;
  * 6. **ordonner** facile → dur → presque-su (finir sur une victoire) ;
  * 7. insérer les **re-ask** (un par raté, jamais adjacent), tronquer à un niveau propre.
  *
@@ -436,6 +492,24 @@ export function buildLevel(
   take(due, LEVEL_SIZE); // DUE au-delà du quota des 70 % si la place reste
   pickNew(neu, capNew - newTaken, seen, picked); // NEW additionnel sous le cap résiduel
 
+  // 5.b **Repli d'impasse anti-niveau-vide** (ENGINE §4/§7, Option 2, issue #108, ADR
+  //     0006). La sélection nominale peut produire un niveau **vide** dans une impasse
+  //     réelle (base de Zoé, #108) : `DUE ∅ ∧ MAINT ∅ ∧ capNew = 0` — tous les faits
+  //     `sub` box-1 ont atteint `SEUIL_CONSO` (donc capNew = 0), mais aucun n'est encore
+  //     dû par l'espacement Leitner (échéance demain), et rien n'est en entretien. Un
+  //     niveau vide viole le contrat **no-fail** (PRODUCT §5 : « un niveau se termine
+  //     toujours »), visible pour l'enfant. Décision propriétaire (Option 2, commentaire
+  //     #108) : remonter les faits **box < maxBox** (ceux que le gate veut consolider) les
+  //     **plus proches de leur échéance**, juste un peu en avance — préserve l'espacement
+  //     des faits réellement dus (il n'y en a aucun), n'introduit **aucun NEW** non
+  //     planifié. **Invariant : un niveau n'est JAMAIS vide** (sauf périmètre sans aucun
+  //     fait remontable — scope vide ou 100 % NEW/entretien non dus, cas non secourable).
+  //     Ne se déclenche QUE si la sélection nominale est vide → aucune régression du cas
+  //     nominal (verrouillé par un test anti-régression, cf. rétro #60/#61).
+  if (picked.length === 0) {
+    picked.push(...fillFromDeadlock(active, config, now));
+  }
+
   const level = picked.slice(0, LEVEL_SIZE);
 
   // 6. Ordonner facile → dur → presque-su (finir sur une victoire, §4).
@@ -443,6 +517,33 @@ export function buildLevel(
 
   // 7. Re-ask intra-niveau (un par raté, jamais adjacent, §4/§9).
   return insertReasks(ordered, reaskKeys);
+}
+
+/**
+ * **Repli d'impasse** (Option 2, ADR 0006, issue #108) : remplit un niveau **vide** avec
+ * les faits **box < maxBox** du périmètre actif les **plus proches de leur échéance**
+ * (jusqu'à `LEVEL_SIZE`), quand la sélection nominale n'a rien produit (`DUE ∅ ∧ MAINT ∅
+ * ∧ capNew = 0`). Consolide exactement les faits weak que le gate veut résorber, un peu
+ * en avance ; n'introduit **aucun NEW** (`isRescuable` exclut `state === null`). Tri
+ * déterministe (proximité d'échéance puis clé). Mute `seen`/`picked` (helper interne).
+ * Si aucun fait n'est remontable (scope vide, ou uniquement NEW / entretien non dus),
+ * le niveau **reste vide** (rien à secourir — cas structurellement non jouable ce tour).
+ *
+ * **Pas de garde anti-doublon ici** : le repli n'est appelé qu'avec `picked` **vide**
+ * (seul déclencheur `picked.length === 0`), et `active` ne contient jamais deux entrées
+ * de même clé (un fait figure une seule fois dans le périmètre). Ajouter un `seen.has()`
+ * défensif introduirait une **branche de repli morte** (jamais fausse) sous gate 100 %
+ * (LEARNINGS #78) → on remplit directement les `LEVEL_SIZE` premiers remontables triés.
+ */
+function fillFromDeadlock(
+  active: readonly ScopeEntry[],
+  config: EngineConfig,
+  now: number,
+): ScopeEntry[] {
+  return active
+    .filter((entry) => entry.state !== null && isRescuable(entry.state, config))
+    .sort(makeCompareByDueProximity(now))
+    .slice(0, LEVEL_SIZE);
 }
 
 /**

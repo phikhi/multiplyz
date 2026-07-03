@@ -91,12 +91,16 @@ construireNiveau(profil):
   items += prendre(MAINT ∩ scope, reste)       # entretien
   si len(items) < 10:                          # début de jeu : peu de DUE
      items += prendre(NEW ∩ scope, jusqu'à 10, en respectant capNew)
+  si items == []:                              # IMPASSE : DUE ∅ ∧ MAINT ∅ ∧ capNew=0
+     items += repliImpasse(scope)              # box<5 les plus proches de l'échéance (§7, ADR 0006)
   ordonner(items): facile → un peu plus dur → finir sur un presque-su  # finir sur une victoire
   garantir: pas 2× le même fact d'affilée ; pas de doublon (sauf re-ask après erreur)
+  garantir: **un niveau n'est JAMAIS vide** (no-fail, cf. repliImpasse ci-dessous)
   return items[:10]
 ```
 
 - **Re-ask intra-niveau** : un fact raté **revient une fois** plus loin dans le même niveau (renforcement court terme), sans recompter la maîtrise.
+- **Repli d'impasse — un niveau n'est JAMAIS vide** (no-fail, PRODUCT §5 ; ADR 0006, issue #108). La combinaison **DUE ∅ ∧ MAINT ∅ ∧ `capNew = 0`** (tous les faits `box ≤ SEUIL_CONSO_BOX` fragiles ont atteint `SEUIL_CONSO`, mais **aucun n'est encore dû** par l'espacement, et rien n'est en entretien) rendait un niveau **vide** — injouable. `repliImpasse` remonte alors les faits **`box < 5`** les **plus proches de leur échéance** (`next_due − now` le plus petit), jusqu'à 10 : consolide **exactement** les faits weak que le gate veut résorber (juste un peu en avance), **préserve l'espacement** des faits réellement dus (il n'y en a aucun), n'introduit **aucun NEW** non planifié. Ne se déclenche **que** si la sélection nominale est vide (aucune régression du cas nominal). Seul un périmètre **sans aucun fait remontable** (scope vide, ou 100 % NEW / entretien non dus) reste vide.
 
 ---
 
@@ -136,6 +140,7 @@ distracteurs(fact):
 - **Rythme prudent** :
   - `NEW_MAX_PAR_NIVEAU` ≈ **2**, `NEW_MAX_PAR_JOUR` ≈ **5** ⚙️.
   - Si `nb facts box≤1 ≥ SEUIL_CONSO` (⚙️ ~8) → **0 nouveau**, consolidation pure jusqu'à résorption.
+  - **Impasse de consolidation** (ADR 0006, issue #108) : le gate `0 nouveau` peut, combiné à l'espacement Leitner, produire une **impasse** — les faits fragiles ont atteint `SEUIL_CONSO` (donc `capNew = 0`) **mais ne sont pas encore dus** (échéance future), et rien n'est en entretien → **DUE ∅ ∧ MAINT ∅ ∧ capNew = 0** → niveau vide. Le **repli d'impasse** (cf. §4) remonte alors les faits `box < 5` les plus proches de leur échéance : la consolidation n'a de sens que s'il y a du DUE à consolider **maintenant** ; à défaut, on avance de quelques heures la révision des mêmes faits weak plutôt que de rendre un niveau vide (**no-fail** prime). Aucun NEW introduit, espacement des faits réellement dus préservé.
 
 ---
 
