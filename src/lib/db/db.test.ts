@@ -3,10 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { nameKey } from "../auth/validation";
 import { CONFIG_DEFAULTS } from "../../config/server-config";
 import { getDatabaseConfig, resolveDatabasePath } from "./config";
 import { createDatabase, getDb } from "./index";
-import { runMigrations } from "./migrate";
+import { backfillNameKeys, runMigrations } from "./migrate";
 import { schemaMeta } from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-db-"));
@@ -113,5 +114,121 @@ describe("runMigrations", () => {
     db.insert(schemaMeta).values({ key: "schema_version", value: "1" }).run();
     const rows = db.select().from(schemaMeta).all();
     expect(rows).toEqual([{ key: "schema_version", value: "1", updatedAt: expect.any(Date) }]);
+  });
+
+  // Régression #105 : la migration 0005 (ajout `name_key`) doit s'appliquer sur
+  // une table `profiles` DÉJÀ peuplée sans planter (`Cannot add a NOT NULL column
+  // with default value NULL`), et backfiller la clé accent-correcte.
+  it("applique 0005 sur une table profiles peuplée sans crash + backfille name_key (#105)", () => {
+    const path = freshDbPath();
+    // Base « fraîche » complète, puis on la ramène à l'état PRÉ-0005 : colonne +
+    // index `name_key` retirés, 0005 dé-journalisée, et un profil accentué inséré
+    // — reproduction fidèle d'une base dev antérieure à la story #37.
+    runMigrations(createDatabase(path));
+    const seed = createDatabase(path);
+    seed.run(sql`DROP INDEX profiles_name_key_unique`);
+    seed.run(sql`ALTER TABLE profiles DROP COLUMN name_key`);
+    seed.run(
+      sql`DELETE FROM __drizzle_migrations WHERE created_at = (SELECT MAX(created_at) FROM __drizzle_migrations)`,
+    );
+    seed.run(sql`INSERT INTO profiles (name, pin_hash, avatar) VALUES ('Élodie', 'h', 'a')`);
+
+    // Rejeu des migrations sur cette base peuplée : ne doit PAS lever.
+    const db = createDatabase(path);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    const row = db.get<{ name_key: string }>(
+      sql`SELECT name_key FROM profiles WHERE name = 'Élodie'`,
+    );
+    expect(row?.name_key).toBe("élodie");
+  });
+
+  // GARDE anti-drift (#105 / doctrine snapshot↔SQL LEARNINGS #411-419) : la colonne
+  // `name_key` est volontairement NULLABLE en base (schema.ts sans `.notNull()`,
+  // snapshot notNull:false, SQL `ADD name_key text`). Rouge si un futur agent
+  // « corrige » schema.ts en `.notNull()` + régénère une migration de rebuild
+  // (la colonne redeviendrait notnull=1). Le non-null reste un invariant applicatif.
+  it("laisse name_key physiquement NULLABLE après migration (cohérence, #105)", () => {
+    const path = freshDbPath();
+    runMigrations(createDatabase(path));
+    const db = createDatabase(path);
+    const col = db
+      .all<{ name: string; notnull: number }>(sql`PRAGMA table_info(profiles)`)
+      .find((c) => c.name === "name_key");
+    expect(col?.notnull).toBe(0);
+  });
+});
+
+describe("backfillNameKeys", () => {
+  it("remplit name_key sur toutes les lignes NULL (NFC + sanitize + locale), laisse les autres, idempotent", () => {
+    const db = createDatabase(":memory:");
+    db.run(sql`CREATE TABLE profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, name_key TEXT)`);
+    // id 1 : É précomposé. id 2 : « é » DÉCOMPOSÉ (e + U+0301) + espaces à compacter
+    // → exerce NFC + sanitizeName + locale (un `.toLowerCase()` naïf produirait
+    // "  léa  " ≠ "léa"). id 3 : clé déjà posée → intouchée.
+    const decomposed = "  Léa  ";
+    db.run(sql`INSERT INTO profiles (id, name, name_key) VALUES
+      (1, 'Élodie', NULL), (2, ${decomposed}, NULL), (3, 'Théo', 'clé-fixe')`);
+
+    backfillNameKeys(db);
+    // Attendu DÉRIVÉ de nameKey() (pas de valeur en dur) → verrouille tout le
+    // contrat de normalisation, pas seulement un lower() sur capitale accentuée.
+    expect(db.all(sql`SELECT id, name_key FROM profiles ORDER BY id`)).toEqual([
+      { id: 1, name_key: nameKey("Élodie") },
+      { id: 2, name_key: nameKey(decomposed) },
+      { id: 3, name_key: "clé-fixe" },
+    ]);
+    // Sanity : la clé est bien la forme NFC compactée minuscule, pas l'entrée brute.
+    expect(nameKey(decomposed)).toBe("léa");
+
+    // 2e passage : plus aucune ligne NULL → boucle 0 itération, aucune écriture.
+    backfillNameKeys(db);
+    expect(db.get(sql`SELECT name_key FROM profiles WHERE id = 1`)).toEqual({
+      name_key: nameKey("Élodie"),
+    });
+  });
+
+  // Collision : base pré-#37 (UNIQUE binaire sur `name`) où deux prénoms convergent
+  // vers la même clé. Détectée AVANT écriture → erreur explicite, aucune ligne
+  // écrite (atomique), rejeu déterministe. Rouge si on retire la détection (l'index
+  // lèverait en plein UPDATE, laissant une base à demi-migrée).
+  it("lève une erreur explicite sans rien écrire quand deux prénoms partagent une clé (#105)", () => {
+    const db = createDatabase(":memory:");
+    db.run(
+      sql`CREATE TABLE profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, name_key TEXT UNIQUE)`,
+    );
+    db.run(
+      sql`INSERT INTO profiles (id, name, name_key) VALUES (1, 'Élodie', NULL), (2, 'élodie', NULL)`,
+    );
+
+    expect(() => backfillNameKeys(db)).toThrow(/même[\s\S]*clé d'unicité/);
+    // Atomique : les deux lignes restent NULL (pas de demi-migration).
+    expect(db.all(sql`SELECT id FROM profiles WHERE name_key IS NULL ORDER BY id`)).toEqual([
+      { id: 1 },
+      { id: 2 },
+    ]);
+    // Rejeu : relève à l'identique, ne « répare » pas silencieusement.
+    expect(() => backfillNameKeys(db)).toThrow(/même[\s\S]*clé d'unicité/);
+  });
+
+  // Collision avec une clé DÉJÀ posée (non-NULL), pas seulement intra-batch : exerce
+  // le pré-chargement `claimedBy` depuis les lignes non-NULL. Rouge si ce SELECT est
+  // neutralisé (la garde ne verrait que les collisions du même batch).
+  it("détecte une collision avec une clé name_key déjà posée en base (#105)", () => {
+    const db = createDatabase(":memory:");
+    db.run(
+      sql`CREATE TABLE profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, name_key TEXT UNIQUE)`,
+    );
+    // id 1 : clé déjà posée « élodie » ; id 2 : NULL « Élodie » → nameKey = « élodie ».
+    db.run(
+      sql`INSERT INTO profiles (id, name, name_key) VALUES (1, 'élodie', 'élodie'), (2, 'Élodie', NULL)`,
+    );
+
+    expect(() => backfillNameKeys(db)).toThrow(/même[\s\S]*clé d'unicité/);
+    // La ligne NULL n'est pas écrite ; la clé existante est intouchée.
+    expect(db.all(sql`SELECT id, name_key FROM profiles ORDER BY id`)).toEqual([
+      { id: 1, name_key: "élodie" },
+      { id: 2, name_key: null },
+    ]);
   });
 });

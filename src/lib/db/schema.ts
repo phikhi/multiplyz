@@ -41,10 +41,16 @@ export const schemaMeta = sqliteTable("schema_meta", {
  *   écrivent/matchent sur `name_key`, jamais sur `lower(name)`. L'index UNIQUE sur
  *   `name` (BINARY) reste un garde-fou secondaire. L'unicité de `name_key` est
  *   déclarée via la **méthode chaînée `.unique()` de la colonne** (drizzle
- *   sérialise l'index dans le snapshot + le SQL → schema/snapshot/migration
- *   cohérents, `db:generate` = no-op). C'est le **callback d'extras 3ᵉ-arg**
- *   `(t) => [...]` qui casse le gate 100 % fonctions (LEARNINGS #34/#46), PAS le
- *   `.unique()` de colonne — ce dernier n'ajoute aucune fonction non couverte.
+ *   sérialise l'index dans le snapshot + le SQL ; `db:generate` = no-op car
+ *   schema.ts == snapshot). C'est le **callback d'extras 3ᵉ-arg** `(t) => [...]`
+ *   qui casse le gate 100 % fonctions (LEARNINGS #34/#46), PAS le `.unique()` de
+ *   colonne — ce dernier n'ajoute aucune fonction non couverte. La colonne est
+ *   **nullable** (pas de `.notNull()`) : SQLite refuse d'ajouter un `NOT NULL`
+ *   sans default sur une table peuplée (issue #105), et la valeur n'est pas
+ *   calculable en SQL. On garde donc schema.ts ↔ snapshot ↔ SQL réel ↔ base
+ *   **tous cohérents** en nullable (doctrine anti-drift snapshot/SQL, LEARNINGS
+ *   #411-419, ADR 0005) ; le **non-null est garanti côté application** (validation
+ *   + INSERT `createHousehold` + backfill `runMigrations`).
  */
 export const profiles = sqliteTable("profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -54,8 +60,17 @@ export const profiles = sqliteTable("profiles", {
    * (`nameKey(name)` — cf. `auth/validation.ts`). Index UNIQUE déclaré via
    * `.unique()` (nom explicite = même index que la migration). Écrite à
    * l'insertion du profil (et à tout renommage éventuel).
+   *
+   * **Nullable** (volontairement, pas de `.notNull()`) : la migration 0005 ne
+   * peut ajouter la colonne en `NOT NULL` sur une table `profiles` déjà peuplée
+   * (SQLite l'interdit sans default, issue #105) et la clé n'est pas calculable
+   * en SQL. Rester nullable garde schema.ts ↔ snapshot ↔ SQL ↔ base **cohérents**
+   * (`db:generate` no-op, aucun drift). Le **non-null est un invariant applicatif**,
+   * garanti par : la validation, l'INSERT `createHousehold` (fournit toujours la
+   * clé) et le backfill `runMigrations` → `backfillNameKeys`. L'index UNIQUE
+   * enforce l'unicité sur toute valeur non-null.
    */
-  nameKey: text("name_key").notNull().unique("profiles_name_key_unique"),
+  nameKey: text("name_key").unique("profiles_name_key_unique"),
   pinHash: text("pin_hash").notNull(),
   avatar: text("avatar").notNull(),
   /** Hash du PIN parent (espace parent) — porté par le profil propriétaire. */
