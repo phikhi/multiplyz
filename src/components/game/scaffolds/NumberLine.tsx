@@ -56,7 +56,11 @@ import type { ScaffoldRepresentationProps } from "@/components/game/scaffolds/Vi
  *
  * **Tokens only** : famille `--scaffold-line-*` (tokens.css), référence des tokens
  * existants (`--color-*`, `--space-*`). S'intègre dans le slot `VisualScaffold`
- * (≤ `--max-width-play`, reflow tél OK, WIREFRAMES §8).
+ * (≤ `--max-width-play`, reflow tél OK, WIREFRAMES §8). L'épaisseur du trait de la
+ * droite ET de l'arc du saut vient du token dédié `--scaffold-line-track-width`
+ * (issue #110, dette pré-#102 : `2px`/`strokeWidth={2}` en dur retirés) — posé via
+ * `style` (jamais un attribut JSX de présentation SVG brut) pour que le CSS résolve
+ * réellement `var(--…)`.
  */
 
 /** Skill des deux compétences qui partagent cette droite (add avance, sub recule). */
@@ -184,7 +188,7 @@ function Tick({
       ) : (
         <span
           style={{
-            width: "2px",
+            width: "var(--scaffold-line-track-width)",
             height: "var(--space-3)",
             backgroundColor: "var(--scaffold-line-tick)",
           }}
@@ -260,7 +264,10 @@ function JumpArc({ startFrac, endFrac }: { readonly startFrac: number; readonly 
         d={`M ${x1} ${baseY} Q ${controlX} ${ARC_PEAK_Y} ${x2} ${baseY}`}
         fill="none"
         stroke="var(--scaffold-line-jump-arc)"
-        strokeWidth={2}
+        // `strokeWidth` posé via `style` (jamais l'attribut JSX présentation) : SEUL le
+        // CSS résout `var(--…)` — un attribut SVG brut ("2" en dur ou une chaîne non-CSS)
+        // ne le ferait pas (issue #110, dette pré-#102 : plus de nombre magique ici).
+        style={{ strokeWidth: "var(--scaffold-line-track-width)" }}
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
@@ -358,7 +365,7 @@ export function NumberLine({ operands, correctAnswer }: ScaffoldRepresentationPr
               left: 0,
               right: 0,
               top: `calc(${ARC_ZONE_HEIGHT} + var(--scaffold-line-point-size) / 2)`,
-              borderBottom: "2px solid var(--scaffold-line-track)",
+              borderBottom: "var(--scaffold-line-track-width) solid var(--scaffold-line-track)",
             }}
           />
           <JumpArc

@@ -1,9 +1,19 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { Matrix, matrixLabel } from "./Matrix";
 import { strings } from "@/strings";
+import {
+  contrastRatio,
+  resolveTokenColor,
+} from "@/components/game/scaffolds/test-support/tokens-css";
+
+/**
+ * Fixture de test **locale** (nit review #112) — l'ancien libellé générique du
+ * placeholder de fondation #93 (`RETIRED_GENERIC_SCAFFOLD_LABEL`) a été RETIRÉ de la
+ * table de strings prod (plus aucun composant ne le référence, épic #4 complet).
+ * Gardée ici uniquement pour la garde anti-régression « ce n'est pas le générique ».
+ */
+const RETIRED_GENERIC_SCAFFOLD_LABEL = "Un petit dessin pour t'aider à voir le calcul";
 
 function fill(template: string, replacements: Record<string, string>): string {
   return Object.entries(replacements).reduce(
@@ -17,68 +27,10 @@ function packets(container: HTMLElement): Element[] {
   return [...container.querySelectorAll("[data-scaffold-packet]")];
 }
 
-/**
- * Lecture de la **source de vérité** `tokens.css` (fix #104, dette QA #102, pattern
- * repris de `NumberLine.test.tsx`) : jsdom ne charge pas le CSS externe →
- * `getComputedStyle` ne résout jamais un `var(--token)` posé en style inline React.
- * Pour vérifier la **couleur EFFECTIVE** (pas seulement le nom du token asserté), ce
- * helper parse `tokens.css`, résout la chaîne de `var()` (light `:root` + dark
- * `[data-theme="dark"]`), et calcule le ratio de contraste WCAG réel — un test qui
- * rougit si le token du point repasse à `--color-text-inverse` (piège #94, exactement
- * le bug #104 constaté sur `NumberLine`).
- */
-const TOKENS_CSS = readFileSync(resolve(__dirname, "../../../../tokens.css"), "utf-8");
-
-/** Extrait le bloc `:root { ... }` (light) ou `[data-theme="dark"] { ... }` (dark). */
-function themeBlock(theme: "light" | "dark"): string {
-  const marker = theme === "light" ? ":root {" : '[data-theme="dark"] {';
-  const start = TOKENS_CSS.indexOf(marker);
-  if (start === -1) throw new Error(`bloc thème "${theme}" introuvable dans tokens.css`);
-  const bodyStart = TOKENS_CSS.indexOf("{", start) + 1;
-  const bodyEnd = TOKENS_CSS.indexOf("\n}", bodyStart);
-  return TOKENS_CSS.slice(bodyStart, bodyEnd);
-}
-
-/**
- * Résout `--token` en sa valeur brute (hex OU `var(--autre-token)`) dans un bloc,
- * avec **fallback vers `:root`** si absent (cascade CSS réelle : un token non
- * redéfini dans `[data-theme="dark"]` hérite de `:root`).
- */
-function rawTokenValue(block: string, token: string): string {
-  const re = new RegExp(`--${token.replace(/^--/u, "")}:\\s*([^;]+);`, "u");
-  const m = block.match(re);
-  if (m !== null) return m[1].trim();
-  if (block !== themeBlock("light")) return rawTokenValue(themeBlock("light"), token);
-  throw new Error(`token "${token}" introuvable (même en fallback :root)`);
-}
-
-/** Résout entièrement une chaîne `var(--a)` → `var(--b)` → `#hex` (plusieurs niveaux). */
-function resolveTokenColor(theme: "light" | "dark", token: string): string {
-  const block = themeBlock(theme);
-  let value = rawTokenValue(block, token);
-  let depth = 0;
-  while (value.startsWith("var(")) {
-    if (depth++ > 5) throw new Error(`chaîne de var() trop profonde pour "${token}"`);
-    const inner = value.slice(4, -1).trim();
-    value = rawTokenValue(block, inner);
-  }
-  return value;
-}
-
-/** Luminance relative WCAG d'une couleur hex `#RRGGBB`. */
-function relativeLuminance(hex: string): number {
-  const n = hex.replace("#", "");
-  const [r, g, b] = [0, 2, 4].map((i) => Number.parseInt(n.slice(i, i + 2), 16) / 255);
-  const chan = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-  const [rl, gl, bl] = [r, g, b].map(chan);
-  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
-}
-
-/** Ratio de contraste WCAG entre 2 couleurs hex. */
-function contrastRatio(hexA: string, hexB: string): number {
-  const [lLight, lDark] = [relativeLuminance(hexA), relativeLuminance(hexB)].sort((a, b) => b - a);
-  return (lLight + 0.05) / (lDark + 0.05);
-}
+// Lecture de la source de vérité `tokens.css` (fix #104, dette QA #102) : parsing
+// partagé extrait dans `test-support/tokens-css.ts` (issue #110 — robustifie et
+// dédoublonne l'ancienne copie identique de ce helper entre `NumberLine.test.tsx`
+// et ce fichier, cf. commentaire du module partagé pour le détail du couplage).
 
 describe("Matrix — étayage matrice de la multiplication (ENGINE §1, PRODUCT §3.4, story #96)", () => {
   // Paires paramétrées couvrant le domaine mult v1 (DOMAIN.mult, a,b ∈ 1..10) : un
@@ -228,7 +180,7 @@ describe("Matrix — étayage matrice de la multiplication (ENGINE §1, PRODUCT 
 
     it("n'est jamais le libellé générique (canal a11y spécifique, pas un texte de repli)", () => {
       const label = matrixLabel({ operands: [7, 5], correctAnswer: 35 });
-      expect(label).not.toBe(strings.play.scaffold.label);
+      expect(label).not.toBe(RETIRED_GENERIC_SCAFFOLD_LABEL);
     });
   });
 });
