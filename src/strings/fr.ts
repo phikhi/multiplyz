@@ -200,6 +200,17 @@ export const fr = {
     scaffold: {
       /** Libellé accessible du conteneur d'étayage (WIREFRAMES §3d « Regarde »). */
       label: "Un petit dessin pour t'aider à voir le calcul",
+      /**
+       * Étayage dix-cases des compléments à 10 (story #94, ENGINE §1 `a + ? = 10`,
+       * PRODUCT §3.4, WIREFRAMES §3d). Voix de Teddy, tutoiement — le libellé texte
+       * porte l'info numérique (a11y : jamais couleur/forme seule, daltonisme).
+       */
+      tenFrame: {
+        /** Libellé accessible du bloc dix-cases (`{a}` = opérande rempli). */
+        label: "Dix-cases : {a} cases déjà remplies",
+        /** Phrase-clé de la découverte (`{n}` = 10 − a, cases à compléter). */
+        missing: "Il manque {n} pour faire 10",
+      },
     },
     /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec). */
     results: {

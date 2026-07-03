@@ -52,11 +52,14 @@ describe("VisualScaffold — a11y (le visuel est doublé d'un texte)", () => {
   });
 
   it("le glyphe décoratif du placeholder est aria-hidden (info portée par le label)", () => {
+    // `comp10` est désormais câblé sur `TenFrame` (#94, représentation concrète) —
+    // ce test vise le contrat générique du **placeholder** (#95/#96 non câblés
+    // encore), donc utilise `mult` qui reste sur `ScaffoldPlaceholder`.
     const { container } = render(
-      <VisualScaffold skill="comp10" operands={[3]} correctAnswer={7} />,
+      <VisualScaffold skill="mult" operands={[6, 8]} correctAnswer={48} />,
     );
     // Le dessin décoratif ne doit pas être annoncé deux fois (le label suffit).
-    expect(container.querySelector('[data-skill="comp10"]')).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelector('[data-skill="mult"]')).toHaveAttribute("aria-hidden", "true");
   });
 
   it("n'ajoute AUCUN contrôle focusable (étayage illustratif, #38 non blocked-by)", () => {

@@ -2,6 +2,7 @@
 
 import type { Skill } from "@/lib/engine/domain";
 import { strings } from "@/strings";
+import { TenFrame } from "@/components/game/scaffolds/TenFrame";
 
 /**
  * **Dispatcher d'étayage visuel** (épic #4, WIREFRAMES §3d, PRODUCT §2.2).
@@ -87,7 +88,7 @@ function ScaffoldPlaceholder({ skill }: { readonly skill: Skill }) {
  * l'entrée par le composant concret (`TenFrame`/`NumberLine`/`Matrix`).
  */
 const SCAFFOLD_BY_SKILL: Record<Skill, (props: ScaffoldRepresentationProps) => React.ReactNode> = {
-  comp10: () => <ScaffoldPlaceholder skill="comp10" />,
+  comp10: (props) => <TenFrame {...props} />,
   add: () => <ScaffoldPlaceholder skill="add" />,
   sub: () => <ScaffoldPlaceholder skill="sub" />,
   mult: () => <ScaffoldPlaceholder skill="mult" />,

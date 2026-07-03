@@ -172,6 +172,17 @@
   --scaffold-min-height:  var(--space-8); /* 64px — hauteur de repli du placeholder */
   --scaffold-glyph-color: var(--color-text-tertiary);
 
+  /* dix-cases (story #94, TenFrame) — cases remplies vs à-compléter distinguées par
+     motif ET couleur (jamais couleur seule, a11y daltonisme). Même famille sémantique
+     que --scaffold-*, référence des tokens existants uniquement. */
+  --scaffold-cell-size:        var(--space-6); /* 32px — case carrée */
+  --scaffold-cell-gap:         var(--space-2);
+  --scaffold-cell-radius:      var(--border-radius-sm);
+  --scaffold-cell-filled-bg:   var(--color-accent-primary);
+  --scaffold-cell-filled-border: var(--color-accent-primary-active);
+  --scaffold-cell-empty-bg:    var(--color-bg-secondary);
+  --scaffold-cell-empty-border: var(--color-border-primary);
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou
      style inline). Défaut = neutre. Le reste du système ne change pas. */
