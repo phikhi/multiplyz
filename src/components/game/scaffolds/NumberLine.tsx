@@ -113,6 +113,17 @@ export function numberLineLabel(
 const MIN_TICK_COL = "var(--space-6)"; /* 32px — cible ≥ largeur d'un chiffre confortable */
 
 /**
+ * Réserve verticale (fix #104, bug #2) au-dessus des pastilles pour la bosse de
+ * l'arc du saut. `Tick` est ancré à `top: ARC_ZONE_HEIGHT` (jamais `bottom:0`) → sa
+ * position (et donc le centre de ses pastilles) est **connue et fixe**,
+ * indépendante de la hauteur du chiffre rendu dessous (qui varie avec la police).
+ * `JumpArc` occupe exactement `[0, ARC_ZONE_HEIGHT + point-size/2]` → son bord bas
+ * tombe pile sur le centre vertical des pastilles, quelle que soit
+ * `--scaffold-line-point-size` (dérivé du token, jamais un nombre magique).
+ */
+const ARC_ZONE_HEIGHT = "var(--space-6)"; /* 32px — place pour la bosse de l'arc */
+
+/**
  * Position horizontale (fraction 0..1) d'une valeur sur la droite affichée `[min, max]`.
  * `max > min` est **toujours** garanti par `displayBounds` : `LINE_MARGIN ≥ 1` élargit
  * l'intervalle de chaque côté avant le clamp `[0, 20]`, et aucun couple de bornes
@@ -144,7 +155,10 @@ function Tick({
       style={{
         position: "absolute",
         left: `${frac * 100}%`,
-        bottom: 0,
+        // Ancré par le HAUT, sous la réserve d'arc (fix #104, bug #2) — la pastille
+        // est donc toujours à une position CONNUE, indépendante de la hauteur du
+        // chiffre rendu dessous (qui varie avec la police/line-height).
+        top: ARC_ZONE_HEIGHT,
         transform: "translateX(-50%)",
         display: "flex",
         flexDirection: "column",
@@ -195,37 +209,41 @@ function Tick({
 }
 
 /**
- * **Arc du saut** — overlay SVG tracé de la graduation de départ (`a`) à celle
- * d'arrivée (`correctAnswer`), avec une pointe de flèche à la destination orientée
- * dans le sens du saut (avance → droite, recul → gauche). `preserveAspectRatio="none"`
- * + `viewBox` 0..100 en x → l'abscisse de l'arc = la fraction × 100, exactement comme
- * les graduations (alignement départ/arrivée garanti). Décoratif (`aria-hidden` porté
- * par la racine). `data-jump` + `data-jump-direction` = marqueurs observables (garde
- * game-design : l'arc existe ET son orientation dérive du sens du saut).
+ * Hauteur (unités viewBox 0..100, mêmes proportions que `peakY`) du sommet de la
+ * courbe — bombée vers le haut, loin de la baseline. Extraite en constante nommée
+ * pour que l'arc ET son commentaire restent le seul endroit qui la définit.
  */
-function JumpArc({
-  startFrac,
-  endFrac,
-  forward,
-}: {
-  readonly startFrac: number;
-  readonly endFrac: number;
-  readonly forward: boolean;
-}) {
+const ARC_PEAK_Y = 20;
+
+/**
+ * **Arc du saut** (fix #104, bug #2 « arc décollé des points ») — overlay SVG tracé
+ * de la graduation de départ (`a`) à celle d'arrivée (`correctAnswer`). `viewBox`
+ * `0 0 100 100` + `preserveAspectRatio="none"` : l'abscisse = la fraction × 100,
+ * exactement comme les graduations (alignement horizontal garanti). Une courbe
+ * étirée reste une courbe (contrairement à une pointe anguleuse, cf. `JumpArrow`) —
+ * seul l'ARC (jamais la pointe) est rendu dans ce repère déformé.
+ *
+ * **Ancrage vertical (fix bug #2)** : `Tick` est ancré par le **haut**
+ * (`top: ARC_ZONE_HEIGHT` du conteneur, sous la réserve d'arc) — la pastille est
+ * donc toujours à une position CONNUE, indépendante de la hauteur du chiffre rendu
+ * dessous (qui varie avec la police/line-height). Son centre vertical est par
+ * conséquent à `calc(ARC_ZONE_HEIGHT + point-size / 2)` du haut du conteneur,
+ * **dérivé des tokens, jamais un nombre magique**. Le SVG de l'arc couvre
+ * exactement `[top: 0, height: ARC_ZONE_HEIGHT + point-size / 2]` : son bord bas
+ * (`baseY=100` en unités viewBox) tombe pile sur ce centre. L'étirement vertical
+ * qui en résulte ne casse rien : une courbe (Bézier) étirée reste une courbe
+ * visuellement lisible (contrairement à une pointe anguleuse, cf. `JumpArrow`) —
+ * l'arc relie donc TOUJOURS visuellement le centre du point de départ au centre du
+ * point d'arrivée.
+ */
+function JumpArc({ startFrac, endFrac }: { readonly startFrac: number; readonly endFrac: number }) {
   const x1 = startFrac * 100;
   const x2 = endFrac * 100;
-  // Baseline en bas du viewBox (la ligne), arc bombé vers le haut ; pointe à l'arrivée.
-  const baseY = 92;
-  const peakY = 18;
+  const baseY = 100; // bord bas du SVG = centre des pastilles (ancrage CSS ci-dessous)
   const controlX = (x1 + x2) / 2;
-  const arrow = 5; // demi-largeur de la pointe (unités viewBox)
-  // Direction de la pointe : vers l'arrivée. La branche de la flèche est orientée selon
-  // le SENS du saut (forward → pointe vers la droite, backward → vers la gauche).
-  const dir = forward ? 1 : -1;
   return (
     <svg
       data-jump="true"
-      data-jump-direction={forward ? "forward" : "backward"}
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       style={{
@@ -233,22 +251,13 @@ function JumpArc({
         left: 0,
         top: 0,
         width: "100%",
-        height: "100%",
+        height: `calc(${ARC_ZONE_HEIGHT} + var(--scaffold-line-point-size) / 2)`,
         pointerEvents: "none",
         overflow: "visible",
       }}
     >
       <path
-        d={`M ${x1} ${baseY} Q ${controlX} ${peakY} ${x2} ${baseY}`}
-        fill="none"
-        stroke="var(--scaffold-line-jump-arc)"
-        strokeWidth={2}
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
-      {/* Pointe de flèche à l'arrivée, ouverte dans le sens du saut. */}
-      <path
-        d={`M ${x2} ${baseY} l ${dir * arrow} ${-arrow} M ${x2} ${baseY} l ${dir * arrow} ${arrow}`}
+        d={`M ${x1} ${baseY} Q ${controlX} ${ARC_PEAK_Y} ${x2} ${baseY}`}
         fill="none"
         stroke="var(--scaffold-line-jump-arc)"
         strokeWidth={2}
@@ -256,6 +265,52 @@ function JumpArc({
         vectorEffect="non-scaling-stroke"
       />
     </svg>
+  );
+}
+
+/** Demi-côté (token d'espacement) du triangle CSS formant la pointe de flèche. */
+const ARROW_HALF_SIZE = "var(--space-2)"; /* 8px */
+
+/**
+ * **Pointe de flèche du saut** (fix #104, bug #1 « pointe cisaillée ») — rendue
+ * comme un **triangle CSS** (border-trick), PAS dans le viewBox étiré de `JumpArc`.
+ * `JumpArc` a `preserveAspectRatio="none"` avec une échelle x ≫ y (largeur de piste
+ * vs 100 unités de hauteur) : une courbe étirée reste lisible (une bosse reste une
+ * bosse), mais des traits DIAGONAUX (une pointe en `l ±n ∓n`) y seraient cisaillés en
+ * crochet quasi-horizontal — exactement le bug #104. Un triangle CSS a son propre
+ * repère (carré, jamais déformé par le ratio d'aspect du parent) → pointe TOUJOURS
+ * nette.
+ *
+ * **Position** : ancrée à la même baseline que l'arc (`top: ARC_ZONE_HEIGHT +
+ * point-size / 2`, centre des pastilles — fix bug #2) et à l'abscisse d'arrivée
+ * (`endFrac`, même référentiel de fraction que les graduations). **Orientation** :
+ * `border-left`/`border-right` transparents + `border-bottom` coloré font pointer
+ * le triangle vers le HAUT par défaut ; une rotation de ±90° l'oriente dans le SENS
+ * du saut (avance → pointe vers la droite, recul → vers la gauche), jamais sous la
+ * ligne.
+ *
+ * Décoratif — pas de rôle propre (contrat a11y hérité, racine `aria-hidden`).
+ * `data-jump-direction` = marqueur observable (garde game-design : la pointe existe
+ * ET son orientation dérive du sens réel du saut).
+ */
+function JumpArrow({ endFrac, forward }: { readonly endFrac: number; readonly forward: boolean }) {
+  return (
+    <span
+      data-jump-arrow="true"
+      data-jump-direction={forward ? "forward" : "backward"}
+      style={{
+        position: "absolute",
+        left: `${endFrac * 100}%`,
+        top: `calc(${ARC_ZONE_HEIGHT} + var(--scaffold-line-point-size) / 2)`,
+        width: 0,
+        height: 0,
+        borderLeft: `${ARROW_HALF_SIZE} solid transparent`,
+        borderRight: `${ARROW_HALF_SIZE} solid transparent`,
+        borderBottom: `${ARROW_HALF_SIZE} solid var(--scaffold-line-jump-arc)`,
+        transform: `translate(-50%, -50%) rotate(${forward ? 90 : -90}deg)`,
+        transformOrigin: "center",
+      }}
+    />
   );
 }
 
@@ -292,14 +347,25 @@ export function NumberLine({ operands, correctAnswer }: ScaffoldRepresentationPr
             width: "100%",
             minWidth: `calc(${values.length} * ${MIN_TICK_COL})`,
             height: "var(--space-9)", // 96px — place pour l'arc au-dessus + pastilles + chiffres
-            borderBottom: "2px solid var(--scaffold-line-track)",
           }}
         >
+          {/* Trait de la droite (fix #104, bug #2) : ancré à la même hauteur que le
+              CENTRE des pastilles (pas au bas du conteneur) — même calcul que
+              `JumpArc`/`JumpArrow`, dérivé des tokens, jamais un nombre magique. */}
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              right: 0,
+              top: `calc(${ARC_ZONE_HEIGHT} + var(--scaffold-line-point-size) / 2)`,
+              borderBottom: "2px solid var(--scaffold-line-track)",
+            }}
+          />
           <JumpArc
             startFrac={fractionOf(a, min, max)}
             endFrac={fractionOf(correctAnswer, min, max)}
-            forward={forward}
           />
+          <JumpArrow endFrac={fractionOf(correctAnswer, min, max)} forward={forward} />
           {values.map((value) => (
             <Tick
               key={value}

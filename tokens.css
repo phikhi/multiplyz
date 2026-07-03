@@ -202,7 +202,12 @@
   --scaffold-line-start-glyph:  var(--color-text-primary);   /* texte fort sur surface neutre (2 thèmes) */
   --scaffold-line-end-bg:       var(--color-accent-primary); /* point d'arrivée (correctAnswer) */
   --scaffold-line-end-border:   var(--color-accent-primary-active);
-  --scaffold-line-end-glyph:    var(--color-text-inverse);   /* blanc sur l'accent plein (2 thèmes) */
+  /* fix #104 (rétro #94, piège récurrent) : le chiffre d'arrivée est rendu SOUS la
+     pastille, sur le fond NEUTRE du panneau — pas sur l'accent plein de la pastille
+     elle-même. --color-text-inverse (blanc) y était donc invisible (blanc sur clair).
+     Même token que --scaffold-line-start-glyph : texte fort contrastant sur surface
+     neutre, ≥ 11.9:1 les 2 thèmes (jamais --color-text-inverse hors fond accent plein). */
+  --scaffold-line-end-glyph:    var(--color-text-primary);
   --scaffold-line-jump-arc:     var(--color-accent-primary-active); /* arc du saut (violet profond, ≥3:1 fond neutre 2 thèmes, distinct du point d'arrivée) */
   --scaffold-line-point-size:   var(--space-5); /* 24px — pastille départ/arrivée */
 
