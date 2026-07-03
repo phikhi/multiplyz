@@ -226,6 +226,19 @@ export const fr = {
         /** Soustraction : saut **arrière** depuis `a` de `b`. */
         backward: "Depuis {a}, on recule de {b}",
       },
+      /**
+       * Étayage matrice de la multiplication (story #96, ENGINE §1 `a × b`,
+       * PRODUCT §3.4 « groupes répétés / matrice », WIREFRAMES §3d). Voix de Teddy,
+       * tutoiement — `{a}`/`{b}` = opérandes du calcul (`a` paquets de `b`). Sert **à
+       * la fois** de texte visible (sous la grille) ET de **nom accessible** de
+       * l'unique `role="img"` du conteneur (registre `label(props)`, rétro #94 : pas
+       * de `role="img"` imbriqué). Le regroupement (paquets) n'est jamais porté par
+       * la seule couleur — séparation spatiale/bordure entre paquets (a11y daltonisme).
+       */
+      matrix: {
+        /** `{a}` = nombre de paquets (lignes), `{b}` = taille d'un paquet (points/ligne). */
+        label: "{a} paquets de {b}",
+      },
     },
     /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec). */
     results: {

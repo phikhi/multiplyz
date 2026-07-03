@@ -41,9 +41,10 @@ function fill(template: string, replacements: Record<string, string>): string {
 /**
  * Nom accessible attendu du conteneur pour une compétence : `comp10` porte le libellé
  * spécifique dérivé des props (« il manque {n} … »), `add`/`sub` le libellé droite
- * numérique spécifique (« on avance »/« on recule », story #95), `mult` reste le
- * générique (placeholder non câblé) — le registre fournit un libellé accessible par
- * compétence (rétro #94). `operandsFor` fournit `[6, 8]` pour add/sub → `{a}=6, {b}=8`.
+ * numérique spécifique (« on avance »/« on recule », story #95), `mult` le libellé
+ * matrice spécifique (« {a} paquets de {b} », story #96) — le registre fournit un
+ * libellé accessible par compétence (rétro #94), plus aucun générique câblé.
+ * `operandsFor` fournit `[6, 8]` pour add/sub/mult → `{a}=6, {b}=8`.
  */
 function expectedLabel(skill: Skill, correctAnswer: number): string {
   if (skill === "comp10") {
@@ -55,7 +56,7 @@ function expectedLabel(skill: Skill, correctAnswer: number): string {
   if (skill === "sub") {
     return fill(strings.play.scaffold.numberLine.backward, { a: "6", b: "8" });
   }
-  return strings.play.scaffold.label;
+  return fill(strings.play.scaffold.matrix.label, { a: "6", b: "8" });
 }
 
 describe("VisualScaffold — dispatch par compétence (ENGINE §1, WIREFRAMES §3d)", () => {
@@ -75,15 +76,19 @@ describe("VisualScaffold — dispatch par compétence (ENGINE §1, WIREFRAMES §
     expect(container.querySelector(`[data-skill="${skill}"]`)).not.toBeNull();
   });
 
-  it.each(["comp10", "add", "sub"] as const)(
+  it.each(SKILLS)(
     "un seul role='img' par étayage (jamais imbriqué — rétro #94 FIX, skill=%s)",
     (skill) => {
       // Garde anti-imbrication à effet observable : si un composant concret
-      // (`TenFrame`/`NumberLine`) réintroduisait un `role='img'` propre, le
+      // (`TenFrame`/`NumberLine`/`Matrix`) réintroduisait un `role='img'` propre, le
       // sous-arbre deviendrait opaque au lecteur d'écran et son libellé serait
-      // avalé. Exercé sur les 3 représentations concrètes câblées à ce jour.
+      // avalé. Exercé sur les 4 représentations concrètes câblées (épic #4 complet).
       const { container } = render(
-        <VisualScaffold skill={skill} operands={operandsFor(skill)} correctAnswer={7} />,
+        <VisualScaffold
+          skill={skill}
+          operands={operandsFor(skill)}
+          correctAnswer={correctAnswerFor(skill)}
+        />,
       );
       expect(container.querySelectorAll('[role="img"]')).toHaveLength(1);
     },
@@ -117,16 +122,19 @@ describe("VisualScaffold — dispatch par compétence (ENGINE §1, WIREFRAMES §
 });
 
 describe("VisualScaffold — a11y (le visuel est doublé d'un texte)", () => {
-  it("porte un label textuel centralisé pour un placeholder (jamais couleur/forme seule)", () => {
-    // `mult` reste sur `ScaffoldPlaceholder` (#96 non câblé) → libellé générique.
+  it("mult → porte le label textuel spécifique de la matrice (jamais couleur/forme seule)", () => {
+    // Épic #4 complet (story #96) : `mult` est câblé sur `Matrix`, plus de
+    // générique — le nom accessible porte l'info numérique « {a} paquets de {b} ».
     render(<VisualScaffold skill="mult" operands={[7, 5]} correctAnswer={35} />);
-    expect(screen.getByRole("img")).toHaveAccessibleName(strings.play.scaffold.label);
+    const expected = fill(strings.play.scaffold.matrix.label, { a: "7", b: "5" });
+    expect(screen.getByRole("img")).toHaveAccessibleName(expected);
+    expect(screen.getByRole("img")).not.toHaveAccessibleName(strings.play.scaffold.label);
   });
 
-  it("le glyphe décoratif du placeholder est aria-hidden (info portée par le label)", () => {
-    // `comp10`/`add`/`sub` sont désormais câblés (`TenFrame`/`NumberLine`,
-    // représentations concrètes) — ce test vise le contrat générique du
-    // **placeholder** (#96 non câblé encore), donc utilise `mult`.
+  it("le glyphe décoratif de la matrice est aria-hidden (info portée par le label)", () => {
+    // `comp10`/`add`/`sub`/`mult` sont désormais tous câblés (`TenFrame`/`NumberLine`/
+    // `Matrix`, représentations concrètes) — ce test vise le contrat a11y du visuel
+    // décoratif via `mult`.
     const { container } = render(
       <VisualScaffold skill="mult" operands={[6, 8]} correctAnswer={48} />,
     );
