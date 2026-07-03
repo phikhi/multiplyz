@@ -1,19 +1,16 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import PlayPage from "./page";
-import { strings } from "@/strings";
 
-// LogoutButton est testé isolément (dépend du router) → on le stubbe ici.
-vi.mock("@/components/LogoutButton", () => ({
-  LogoutButton: () => <button type="button">{strings.play.logout}</button>,
+// PlayScreen (orchestrateur complet, appelle des server actions) est testé isolément
+// → on le stubbe ici, cette route ne fait que le monter.
+vi.mock("@/components/game/PlayScreen", () => ({
+  PlayScreen: () => <div data-testid="play-screen-stub" />,
 }));
 
-describe("PlayPage — placeholder protégé", () => {
-  it("affiche l'accueil (voix Teddy) et la déconnexion", () => {
+describe("PlayPage — route /jouer (garde par le layout du groupe (app))", () => {
+  it("monte PlayScreen (écran de jeu nu, #64)", () => {
     render(<PlayPage />);
-    expect(
-      screen.getByRole("heading", { level: 1, name: strings.play.greeting }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument();
+    expect(screen.getByTestId("play-screen-stub")).toBeInTheDocument();
   });
 });

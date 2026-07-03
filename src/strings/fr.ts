@@ -134,14 +134,76 @@ export const fr = {
     error: "Oups, on réessaie ?",
   },
   /**
-   * Écran de jeu (placeholder protégé #2.3 — l'écran réel arrive épic #3+). Voix
-   * de Teddy. Accessible uniquement avec une session enfant valide.
+   * Écran de jeu **nu** (story #64, ENGINE §5/§9, PRODUCT §2.2, COPY §3). Voix de
+   * Teddy, tutoiement. Accessible uniquement avec une session enfant valide.
+   * Habillage visuel (étayages, animations) = hors scope (épic #4).
    */
   play: {
-    /** Accueil après connexion réussie. */
-    greeting: "Te voilà ! Ton aventure arrive très bientôt 🎉",
     /** Déconnexion (formulé pour un enfant : « changer de joueur »). */
     logout: "Changer de joueur",
+    /** Chargement du niveau (lecture serveur avant affichage de la 1re question). */
+    loading: "Je prépare tes calculs…",
+    /** Erreur générique de chargement (session expirée / réseau) — posture douce. */
+    loadError: "Oups, ça n'a pas marché. On réessaie ?",
+    loadErrorRetry: "Réessayer",
+    /** Cas défensif « niveau vide » (structurellement improbable, ENGINE §4). */
+    emptyLevel: "Pas de calcul à te proposer pour l'instant — reviens un peu plus tard !",
+    /** Diagnostic de départ (déguisé, ENGINE §3, COPY §3 : cadre sans pression). */
+    diagnostic: {
+      intro: "On commence par un petit défi pour préparer ta carte !",
+      hint: "Pas de stress, montre-moi juste ce que tu sais 😊",
+    },
+    /** Question (WIREFRAMES §3a/§3b). `{a}`/`{b}` = opérandes interpolés. */
+    question: {
+      /** Gabarit à 2 opérandes (add/sub/mult) : `6 × 8 = ?`. */
+      equationTwoOperands: "{a} {op} {b} = ?",
+      /** Gabarit à 1 opérande (compléments à 10) : `3 + ? = 10`. */
+      equationComplement: "{a} + ? = {cible}",
+      /** Libellé accessible du groupe de choix QCM. */
+      choicesLabel: "Choisis la bonne réponse",
+      /** Libellé accessible du pavé de saisie libre. */
+      inputLabel: "Ta réponse",
+      /** Bouton de validation du pavé. */
+      submit: "Valider",
+      /** Bouton « je ne sais pas » (ENGINE §9 : indice sans pénalité). */
+      dontKnow: "Je ne sais pas",
+      /** Libellé ARIA d'un bouton-réponse QCM (`{n}` = valeur proposée). */
+      choiceOption: "Réponse {n}",
+      /** Libellé de la barre de progression (`{n}`/`{total}` = position). */
+      progress: "Question {n} sur {total}",
+    },
+    /** Feedback juste (variantes, voix Teddy — COPY §3 « Bonne réponse »). */
+    correct: {
+      variants: ["Bravo !", "Dans le mille !", "Trop forte !", "Et hop !", "Génial, continue !"],
+      next: "Continuer",
+    },
+    /** Feedback « pas encore » (ENGINE §9 no-fail — jamais « faux », COPY §3). */
+    retry: {
+      variants: [
+        "Oups, presque ! Regarde…",
+        "Pas encore — on essaie ensemble ?",
+        "Hé, j'ai failli me tromper aussi ! La voilà :",
+        "T'inquiète, je te montre le truc :",
+      ],
+      /** Affiche la bonne réponse avant le re-essai (`{n}` = valeur). */
+      answerReveal: "La bonne réponse : {n}",
+      tryAgain: "Je réessaie",
+    },
+    /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec). */
+    results: {
+      title: "Niveau bouclé ! 🎉",
+      /** Libellé accessible du total d'étoiles (`{n}` = 0 à 3). */
+      starsLabel: "{n} étoile sur 3",
+      starsLabelPlural: "{n} étoiles sur 3",
+      /** Encouragement selon le nombre d'étoiles (clé = nombre, ENGINE §5). */
+      byStars: {
+        0: "Bien joué, on avance !",
+        1: "Bien joué, on avance !",
+        2: "Super, presque parfait !",
+        3: "Trois étoiles ?! Une championne ! 🌟",
+      },
+      continue: "Continuer",
+    },
   },
   /**
    * Récupération du code parent via code de secours (AUTH.md §5). Écran

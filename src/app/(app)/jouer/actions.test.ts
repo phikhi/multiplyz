@@ -29,9 +29,12 @@ const SUBMIT_INPUT: SubmitAttemptInput = {
  * une réponse cliente neutre, (c) l'injection horloge/RNG à la frontière.
  */
 
+/** Config de test : seul `starThresholds` est lu directement par l'action (contrat #64). */
+const FAKE_CONFIG = { starThresholds: [0.6, 0.85, 1] as const };
+
 vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => "DB") }));
-vi.mock("@/config/server-config", () => ({ getEngineConfig: vi.fn(() => "CONFIG") }));
+vi.mock("@/config/server-config", () => ({ getEngineConfig: vi.fn(() => FAKE_CONFIG) }));
 vi.mock("@/lib/engine/service", () => ({
   startLevel: vi.fn(),
   submitAttempt: vi.fn(),
@@ -52,23 +55,29 @@ beforeEach(() => {
 });
 
 describe("startLevelAction", () => {
-  it("non authentifié → { level: null }, aucun appel moteur", async () => {
+  it("non authentifié → { level: null }, starThresholds ⚙️ renvoyé quand même, aucun appel moteur", async () => {
     profileMock.mockResolvedValue(null);
-    await expect(startLevelAction()).resolves.toEqual({ level: null });
+    await expect(startLevelAction()).resolves.toEqual({
+      level: null,
+      starThresholds: FAKE_CONFIG.starThresholds,
+    });
     expect(startLevelMock).not.toHaveBeenCalled();
   });
 
-  it("authentifié → compose le niveau du profil de session (horloge + RNG injectés)", async () => {
+  it("authentifié → compose le niveau du profil de session (horloge + RNG injectés) + starThresholds", async () => {
     profileMock.mockResolvedValue(7);
     const level = { questions: [] };
     startLevelMock.mockReturnValue(level);
-    await expect(startLevelAction()).resolves.toEqual({ level });
+    await expect(startLevelAction()).resolves.toEqual({
+      level,
+      starThresholds: FAKE_CONFIG.starThresholds,
+    });
     // Profil de session (7), config + db mockés ; now = number, rng = fonction.
     expect(startLevelMock).toHaveBeenCalledTimes(1);
     const [dbArg, profileArg, configArg, nowArg, rngArg] = startLevelMock.mock.calls[0];
     expect(dbArg).toBe("DB");
     expect(profileArg).toBe(7);
-    expect(configArg).toBe("CONFIG");
+    expect(configArg).toBe(FAKE_CONFIG);
     expect(typeof nowArg).toBe("number");
     expect(typeof rngArg).toBe("function");
   });

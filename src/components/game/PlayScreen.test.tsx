@@ -1,0 +1,416 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PlayScreen } from "./PlayScreen";
+import { strings } from "@/strings";
+import {
+  diagnosticPlanAction,
+  seedDiagnosticAction,
+  startLevelAction,
+  submitAttemptAction,
+} from "@/app/(app)/jouer/actions";
+import { makeFact } from "@/lib/engine/facts";
+import type { LevelQuestion } from "@/lib/engine/service";
+
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
+vi.mock("@/app/(app)/jouer/actions", () => ({
+  diagnosticPlanAction: vi.fn(),
+  seedDiagnosticAction: vi.fn(),
+  startLevelAction: vi.fn(),
+  submitAttemptAction: vi.fn(),
+}));
+
+const diagnosticPlanMock = vi.mocked(diagnosticPlanAction);
+const seedDiagnosticMock = vi.mocked(seedDiagnosticAction);
+const startLevelMock = vi.mocked(startLevelAction);
+const submitAttemptMock = vi.mocked(submitAttemptAction);
+
+const STAR_THRESHOLDS = [0.6, 0.85, 1] as const;
+
+const KNOWN_FACTS = {
+  mult_6x8: makeFact("mult", 6, 8),
+  "add_3+8": makeFact("add", 3, 8),
+  "sub_15-6": makeFact("sub", 15, 6),
+} as const;
+
+function question(
+  factKey: keyof typeof KNOWN_FACTS,
+  format: "qcm" | "pave" = "qcm",
+): LevelQuestion {
+  const fact = KNOWN_FACTS[factKey];
+  return {
+    factKey: fact.key,
+    skill: fact.skill,
+    operands: fact.operands,
+    format,
+    choices:
+      format === "qcm" ? [fact.answer, fact.answer + 1, fact.answer - 1, fact.answer + 2] : null,
+    isReask: false,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  diagnosticPlanMock.mockResolvedValue({ items: [] }); // profil déjà amorcé par défaut
+});
+
+describe("PlayScreen — chargement", () => {
+  it("affiche l'état de chargement avant toute résolution de plan", () => {
+    diagnosticPlanMock.mockReturnValue(new Promise(() => {})); // jamais résolue
+    render(<PlayScreen />);
+    expect(
+      screen.getByRole("heading", { level: 1, name: strings.play.loading }),
+    ).toBeInTheDocument();
+  });
+
+  it("session invalide (diagnosticPlanAction → items:null) → écran d'erreur avec retry", async () => {
+    diagnosticPlanMock.mockResolvedValue({ items: null });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.loadError }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: strings.play.loadErrorRetry })).toBeInTheDocument();
+  });
+
+  it("retry après erreur relance le chargement", async () => {
+    diagnosticPlanMock.mockResolvedValueOnce({ items: null });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.loadError }),
+      ).toBeInTheDocument(),
+    );
+
+    diagnosticPlanMock.mockResolvedValueOnce({ items: [] });
+    startLevelMock.mockResolvedValueOnce({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    fireEvent.click(screen.getByRole("button", { name: strings.play.loadErrorRetry }));
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+  });
+
+  it("niveau structurellement vide → message dédié (cas défensif ENGINE §4)", async () => {
+    startLevelMock.mockResolvedValue({ level: { questions: [] }, starThresholds: STAR_THRESHOLDS });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.emptyLevel }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("session invalide au démarrage de niveau (level:null) → écran d'erreur", async () => {
+    startLevelMock.mockResolvedValue({ level: null, starThresholds: STAR_THRESHOLDS });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.loadError }),
+      ).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("PlayScreen — diagnostic de départ (ENGINE §3, 1re session)", () => {
+  it("profil vierge → écran d'intro diagnostic (aucun score)", async () => {
+    const items = [{ fact: makeFact("mult", 6, 8), difficulty: "easy" as const }];
+    diagnosticPlanMock.mockResolvedValue({ items });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.diagnostic.intro }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(strings.play.diagnostic.hint)).toBeInTheDocument();
+  });
+
+  it("démarre le diagnostic (QCM systématique) puis amorce la maîtrise à la fin", async () => {
+    const items = [{ fact: makeFact("mult", 6, 8), difficulty: "easy" as const }];
+    // 1er appel (profil vierge) → plan non vide ; après amorçage, le profil n'est plus
+    // vierge → 2e appel (rechargement post-diagnostic) doit renvoyer un plan vide pour
+    // enchaîner sur `startLevelAction` (mêmes garanties que le service réel).
+    diagnosticPlanMock.mockResolvedValueOnce({ items }).mockResolvedValue({ items: [] });
+    seedDiagnosticMock.mockResolvedValue({ ok: true, seededCount: 1 });
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("add_3+8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.diagnostic.intro }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    // Question de diagnostic affichée (QCM, ENGINE §6 fait neuf → QCM).
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    const fact = makeFact("mult", 6, 8);
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    // Dernière (seule) question du diagnostic → amorçage puis chargement du 1er niveau.
+    await waitFor(() => expect(seedDiagnosticMock).toHaveBeenCalledTimes(1));
+    expect(seedDiagnosticMock.mock.calls[0][0]).toEqual([
+      { factKey: fact.key, skill: fact.skill, correct: true, responseMs: expect.any(Number) },
+    ]);
+    // Le diagnostic n'appelle jamais submitAttemptAction (amorçage dédié, pas la maîtrise du niveau).
+    expect(submitAttemptMock).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
+  });
+
+  it("« je ne sais pas » pendant le diagnostic → accumulé comme faux, jamais submitAttemptAction", async () => {
+    const items = [{ fact: makeFact("mult", 6, 8), difficulty: "easy" as const }];
+    diagnosticPlanMock.mockResolvedValueOnce({ items }).mockResolvedValue({ items: [] });
+    seedDiagnosticMock.mockResolvedValue({ ok: true, seededCount: 1 });
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("add_3+8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.diagnostic.intro }),
+      ).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.question.dontKnow }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.retry.tryAgain }));
+
+    const fact = makeFact("mult", 6, 8);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    await waitFor(() => expect(seedDiagnosticMock).toHaveBeenCalledTimes(1));
+    // Les 2 réponses (« je ne sais pas » puis le re-essai juste) sont **toutes deux**
+    // envoyées — le dédoublonnage par clé (dernière réponse gagne) vit côté service
+    // (`seedDiagnosticMastery`, ENGINE §3), pas ici. Le client ne fait qu'accumuler.
+    expect(seedDiagnosticMock.mock.calls[0][0]).toEqual([
+      { factKey: fact.key, skill: fact.skill, correct: false, responseMs: expect.any(Number) },
+      { factKey: fact.key, skill: fact.skill, correct: true, responseMs: expect.any(Number) },
+    ]);
+    expect(submitAttemptMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlayScreen — niveau normal, QCM, no-fail (ENGINE §9)", () => {
+  it("réponse juste → feedback positif puis continue vers la question suivante", async () => {
+    const fact68 = makeFact("mult", 6, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8"), question("add_3+8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(submitAttemptMock).toHaveBeenCalledWith(
+      expect.objectContaining({ factKey: fact68.key, correct: true, isRetry: false }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+    await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
+  });
+
+  it("réponse fausse → re-essai proposé (bonne réponse montrée), puis avance après re-essai", async () => {
+    const fact68 = makeFact("mult", 6, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 0 });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+
+    // Choisit un distracteur (≠ bonne réponse).
+    const wrongChoice = [fact68.answer + 1, fact68.answer - 1, fact68.answer + 2].find(
+      (v) => v !== fact68.answer,
+    )!;
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(wrongChoice)),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(strings.play.retry.answerReveal.replace("{n}", String(fact68.answer))),
+      ).toBeInTheDocument(),
+    );
+    expect(submitAttemptMock).toHaveBeenCalledWith(
+      expect.objectContaining({ correct: false, isRetry: false }),
+    );
+
+    // Re-essai : même clientAttemptId, isRetry=true à la prochaine soumission.
+    fireEvent.click(screen.getByRole("button", { name: strings.play.retry.tryAgain }));
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(submitAttemptMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ factKey: fact68.key, correct: true, isRetry: true }),
+    );
+
+    // Fin de niveau (unique question) → résultats (0 % de 1re-réponse-juste → 0 étoile).
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.results.title }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(strings.play.results.byStars[0])).toBeInTheDocument();
+  });
+
+  it("« je ne sais pas » compte comme faux, sans pénalité (ENGINE §9)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 0 });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.question.dontKnow }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(submitAttemptMock).toHaveBeenCalledWith(expect.objectContaining({ correct: false }));
+  });
+});
+
+describe("PlayScreen — niveau normal, format pavé", () => {
+  it("saisie pavé jugée localement (juste) puis feedback positif", async () => {
+    const factAdd = makeFact("add", 3, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("add_3+8", "pave")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 3 });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
+
+    for (const d of String(factAdd.answer)) {
+      fireEvent.click(screen.getByRole("button", { name: strings.pinPad.digit.replace("{d}", d) }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: strings.play.question.submit }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(submitAttemptMock).toHaveBeenCalledWith(
+      expect.objectContaining({ factKey: factAdd.key, correct: true }),
+    );
+  });
+});
+
+describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
+  it("100 % de justesse 1re réponse → 3 étoiles, jamais d'écran d'échec", async () => {
+    const fact68 = makeFact("mult", 6, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.results.title }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(strings.play.results.byStars[3])).toBeInTheDocument();
+  });
+
+  it("continuer depuis les résultats recharge un niveau (ou re-diagnostique)", async () => {
+    const fact68 = makeFact("mult", 6, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.results.title }),
+      ).toBeInTheDocument(),
+    );
+
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("add_3+8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    fireEvent.click(screen.getByRole("button", { name: strings.play.results.continue }));
+    await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
+  });
+});
+
+describe("PlayScreen — déconnexion accessible à tout écran", () => {
+  it("le bouton de déconnexion est visible sur l'écran de diagnostic", async () => {
+    diagnosticPlanMock.mockResolvedValue({
+      items: [{ fact: makeFact("mult", 6, 8), difficulty: "easy" as const }],
+    });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument(),
+    );
+  });
+
+  it("le bouton de déconnexion est visible pendant une question", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument(),
+    );
+  });
+});
