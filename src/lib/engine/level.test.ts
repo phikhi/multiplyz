@@ -200,47 +200,56 @@ describe("buildLevel — cap de nouveaux + consolidation (ENGINE §4/§7)", () =
     const news = addFacts(20)
       .slice(3)
       .map((f) => entry(f, null));
-    // weak = seulement les NEW comptent fragiles ? NEW compte comme weak (jamais vu).
-    // Ici 17 NEW → weak ≥ 8 → 0 nouveau. On réduit les NEW pour rester sous le seuil.
-    const fewNews = news.slice(0, 4); // 4 NEW → weak = 4 < 8
-    const level = buildLevel([...strongDue, ...fewNews], CONFIG, NOW);
-    const newKeys = new Set(fewNews.map((e) => e.fact.key));
+    const level = buildLevel([...strongDue, ...news], CONFIG, NOW);
+    const newKeys = new Set(news.map((e) => e.fact.key));
     const inLevelNew = level.filter((i) => newKeys.has(i.fact.key)).length;
     expect(inLevelNew).toBeGreaterThan(0);
     expect(inLevelNew).toBeLessThanOrEqual(CONFIG.newMaxPerLevel);
   });
 
-  it("NEW comptent comme fragiles : trop de NEW → cap 0 même sans DUE fragile", () => {
-    // Aucun DUE, 10 NEW → weak = 10 ≥ 8 → capNew 0 → niveau vide (rien à poser).
+  // BUGFIX (#64, découvert en E2E) : un fait NEW (`state === null`, jamais tenté)
+  // n'a pas encore de « boîte » à consolider — ENGINE §7 (« weak = nb facts box≤1 »)
+  // ne peut désigner que des faits déjà rencontrés. Avant le fix, un domaine avec
+  // beaucoup de faits jamais introduits (ex. `sub` = 210 faits) bloquait `capNew` à
+  // 0 **indéfiniment** (`weak` ne pouvait jamais redescendre sous le seuil), et en
+  // tout début de partie (DUE/MAINT encore vides) `buildLevel` pouvait renvoyer un
+  // niveau **vide** — violation du contrat no-fail (PRODUCT §5). Ces tests
+  // verrouillent la lecture corrigée : NEW ne compte JAMAIS dans `weak`.
+  it("NEW ne compte PAS comme fragile : que des NEW → capNew plein, jamais un niveau vide", () => {
+    // Aucun DUE, 10 NEW (jamais tentés) → weak = 0 < 8 → capNew = newMaxPerLevel,
+    // le niveau se remplit de NEW (jusqu'au cap, puis LEVEL_SIZE si plus de NEW
+    // disponibles) — jamais vide (cf. `weak est calculé sur les seuls faits
+    // rencontrés`).
     const news = addFacts(10).map((f) => entry(f, null));
     const level = buildLevel(news, CONFIG, NOW);
-    expect(level).toHaveLength(0);
+    expect(level.length).toBeGreaterThan(0);
+    expect(level.length).toBeLessThanOrEqual(CONFIG.newMaxPerLevel);
   });
 
-  it("FRONTIÈRE weak === consolidationThreshold (PILE au seuil) → capNew 0", () => {
+  it("FRONTIÈRE weak === consolidationThreshold (PILE au seuil, faits DÉJÀ TENTÉS uniquement) → capNew 0", () => {
     // Verrouille la borne exacte du `>=` d'`isWeak`/du cap (mutation `<=`→`<` tuée).
-    // consolidationMaxBox = 1 : un fait à box PILE 1 est fragile. On construit un
-    // périmètre actif (add seul) avec EXACTEMENT `consolidationThreshold` (= 8)
-    // fragiles : 6 DUE à box 1 (fragiles) + 2 NEW (fragiles car jamais vus) = 8.
-    // À PILE 8, la garde `weak >= threshold` doit s'activer → capNew 0 → 0 nouveau.
+    // consolidationMaxBox = 1 : un fait à box PILE 1 est fragile. EXACTEMENT
+    // `consolidationThreshold` (= 8) faits DUE fragiles (déjà tentés) + des NEW
+    // (qui ne comptent plus dans `weak` depuis le bugfix #64) → capNew 0 malgré
+    // les NEW présents, uniquement à cause des 8 DUE fragiles.
     const T = CONFIG.consolidationThreshold; // 8
     expect(CONFIG.consolidationMaxBox).toBe(1);
-    const weakDue = addFacts(T - 2).map((f) => entry(f, state({ box: 1, nextDue: NOW - 1 })));
+    const weakDue = addFacts(T).map((f) => entry(f, state({ box: 1, nextDue: NOW - 1 })));
     const news = addFacts(20)
-      .slice(T - 2, T) // 2 NEW → weak total = (T-2) + 2 = T (pile au seuil)
+      .slice(T, T + 2)
       .map((f) => entry(f, null));
     const level = buildLevel([...weakDue, ...news], CONFIG, NOW);
     const newKeys = new Set(news.map((e) => e.fact.key));
     expect(level.filter((i) => newKeys.has(i.fact.key))).toHaveLength(0); // 0 nouveau pile au seuil
   });
 
-  it("FRONTIÈRE weak === consolidationThreshold - 1 (juste sous) → nouveaux autorisés", () => {
+  it("FRONTIÈRE weak === consolidationThreshold - 1 (juste sous, faits déjà tentés) → nouveaux autorisés", () => {
     // Un cran sous le seuil : la garde ne s'active PAS → capNew = newMaxPerLevel.
-    // 5 DUE box 1 (fragiles) + 2 NEW = weak 7 = threshold - 1 → nouveaux permis.
+    // T-1 DUE box 1 (fragiles, déjà tentés) + des NEW (ne comptent plus) → permis.
     const T = CONFIG.consolidationThreshold; // 8
-    const weakDue = addFacts(T - 3).map((f) => entry(f, state({ box: 1, nextDue: NOW - 1 })));
+    const weakDue = addFacts(T - 1).map((f) => entry(f, state({ box: 1, nextDue: NOW - 1 })));
     const news = addFacts(20)
-      .slice(T - 3, T - 1) // 2 NEW → weak total = (T-3) + 2 = T-1 (juste sous)
+      .slice(T - 1, T + 1)
       .map((f) => entry(f, null));
     const level = buildLevel([...weakDue, ...news], CONFIG, NOW);
     const newKeys = new Set(news.map((e) => e.fact.key));

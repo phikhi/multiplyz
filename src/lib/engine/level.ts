@@ -24,8 +24,10 @@
  *   (`next_due ≤ now`).
  *
  * **Mix cible** ~**70 % DUE** + ~**30 % NEW/MAINT**, sous **cap de nouveaux**
- * (`newMaxPerLevel`), forcé à **0 nouveau** quand trop de faits sont fragiles
- * (`weak ≥ consolidationThreshold`, consolidation pure, ENGINE §7).
+ * (`newMaxPerLevel`), forcé à **0 nouveau** quand trop de faits **déjà rencontrés**
+ * sont fragiles (`weak ≥ consolidationThreshold`, consolidation pure, ENGINE §7) —
+ * un fait jamais tenté (`state === null`) ne compte **pas** dans `weak` (bugfix #64 :
+ * sinon un domaine à beaucoup de faits neufs bloque `capNew` à 0 indéfiniment).
  *
  * **Périmètre du cap de nouveaux** : cette fonction n'applique QUE le cap
  * **par niveau** (`newMaxPerLevel`). Le second cap d'ENGINE §7 — `newMaxPerDay`
@@ -389,9 +391,25 @@ export function buildLevel(
   const maint = active.filter((entry) => entry.state !== null && isMaint(entry.state, config, now));
 
   // 3. Cap de nouveaux : 0 si trop de fragiles (consolidation pure, §7), sinon ⚙️.
-  const weak = active.filter(
-    (entry) => entry.state === null || isWeak(entry.state!, config),
-  ).length;
+  //
+  // BUGFIX (#64, découvert en E2E — cf. rétro) : ENGINE §7 pseudo-code dit
+  // « weak = nb facts **box≤1** dans scope » — cette notion de « box » ne
+  // s'applique qu'à un fait **déjà rencontré** (a une ligne mastery). Compter aussi
+  // les faits **NEW** (`state === null`, jamais tentés) dans `weak` — comme le
+  // faisait l'ancienne version — rend le seuil de consolidation **structurellement
+  // inatteignable en dessous** dès qu'une compétence a beaucoup de faits jamais
+  // testés (ex. `sub` = 210 faits) : `weak` explose immédiatement au-delà de
+  // `consolidationThreshold` (⚙️ 8) et `capNew` reste bloqué à 0 **pour toujours**
+  // (aucun NEW n'est jamais introduit assez pour que `weak` redescende, puisque
+  // les NEW ne comptent que positivement). Combiné à un DUE/MAINT encore vide en
+  // tout début de partie (juste après le diagnostic, tous les faits testés sont à
+  // `box ≥ 2`, pas encore dus), `buildLevel` pouvait renvoyer une liste **vide** —
+  // un niveau structurellement impossible à jouer, violant le contrat no-fail
+  // (PRODUCT §5 : « un niveau se termine toujours »). Un fait NEW n'a pas encore
+  // de boîte à consolider ; seuls les faits **déjà tentés et fragiles** comptent
+  // pour la consolidation (« jusqu'à résorption » d'ENGINE §7 implique un stock
+  // existant à résorber, pas un stock infini de faits jamais commencés).
+  const weak = active.filter((entry) => entry.state !== null && isWeak(entry.state, config)).length;
   const capNew = weak >= config.consolidationThreshold ? 0 : config.newMaxPerLevel;
 
   // 4. Composition : ~70 % DUE, puis NEW (≤ cap), puis MAINT (§4).

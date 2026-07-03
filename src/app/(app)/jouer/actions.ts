@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { getEngineConfig } from "@/config/server-config";
+import { getEngineConfig, type EngineConfig } from "@/config/server-config";
 import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
 import {
   needsDiagnostic,
@@ -29,22 +29,35 @@ import { selectDiagnostic, type DiagnosticItem } from "@/lib/engine/diagnostic";
  * déterministe/testable (LEARNINGS #46/aléa).
  */
 
-/** Réponse de démarrage de niveau : le niveau, ou `null` si non authentifié. */
+/**
+ * Réponse de démarrage de niveau : le niveau, ou `null` si non authentifié.
+ *
+ * `starThresholds` (ENGINE §5/§11, ⚙️) est renvoyé **avec** le niveau — le client
+ * (#64) calcule les étoiles de fin de niveau **localement** (justesse de la 1ʳᵉ
+ * réponse déjà connue côté client, ENGINE §5) sans aller-retour réseau bloquant ni
+ * réimplémenter le seuil ; `getEngineConfig()` (server-only, lit l'env + des
+ * secrets potentiels) ne doit **jamais** être importée côté client — seule cette
+ * valeur ⚙️, déjà publique par nature (affichée à l'écran résultats), traverse la
+ * frontière server action.
+ */
 export interface StartLevelActionResult {
   readonly level: Level | null;
+  readonly starThresholds: EngineConfig["starThresholds"];
 }
 
 /**
  * Démarre un niveau pour la session enfant courante. Lecture seule (aucune écriture au
- * démarrage). `null` si pas de session enfant valide.
+ * démarrage). `level: null` si pas de session enfant valide (`starThresholds` renvoyé
+ * quand même — valeur ⚙️ publique, pas liée à l'auth — pour un contrat de retour stable).
  */
 export async function startLevelAction(): Promise<StartLevelActionResult> {
+  const config = getEngineConfig();
   const profileId = await getCurrentChildProfileId();
   if (profileId === null) {
-    return { level: null };
+    return { level: null, starThresholds: config.starThresholds };
   }
-  const level = startLevel(getDb(), profileId, getEngineConfig(), Date.now(), Math.random);
-  return { level };
+  const level = startLevel(getDb(), profileId, config, Date.now(), Math.random);
+  return { level, starThresholds: config.starThresholds };
 }
 
 /** Réponse de soumission — neutre : succès/échec + maîtrise à jour du fait (ou `null`). */

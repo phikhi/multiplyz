@@ -75,9 +75,28 @@ describe("strings (i18n FR)", () => {
     expect(strings.login.error.toLowerCase()).not.toContain("inexistant");
   });
 
-  it("écran de jeu placeholder = voix Teddy + déconnexion", () => {
-    expect(strings.play.greeting.length).toBeGreaterThan(0);
+  it("écran de jeu = voix Teddy + déconnexion", () => {
     expect(strings.play.logout.length).toBeGreaterThan(0);
+  });
+
+  it("écran de jeu = posture croissance (jamais « faux »/« erreur ») + no-fail", () => {
+    const retryTexts = [...strings.play.retry.variants, strings.play.retry.tryAgain];
+    for (const text of retryTexts) {
+      expect(text.toLowerCase()).not.toContain("faux");
+      expect(text.toLowerCase()).not.toContain("erreur");
+    }
+    // Aucun écran d'échec : "results" couvre 0 à 3 étoiles, jamais un message négatif.
+    expect(Object.keys(strings.play.results.byStars).sort()).toEqual(["0", "1", "2", "3"]);
+  });
+
+  it("étoiles = gabarits interpolables singulier/pluriel", () => {
+    expect(strings.play.results.starsLabel).toContain("{n}");
+    expect(strings.play.results.starsLabelPlural).toContain("{n}");
+  });
+
+  it("question = énoncés signes clairs interpolables (COPY §6)", () => {
+    expect(strings.play.question.equationTwoOperands).toContain("{op}");
+    expect(strings.play.question.equationComplement).toContain("{cible}");
   });
 
   it("récupération = registre parent NEUTRE (pas de tutoiement Teddy)", () => {

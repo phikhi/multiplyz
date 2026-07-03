@@ -1,42 +1,17 @@
-import { strings } from "@/strings";
-import { LogoutButton } from "@/components/LogoutButton";
+import { PlayScreen } from "@/components/game/PlayScreen";
 
-// Placeholder de l'écran de jeu (#2.3) — l'écran réel arrive épic #3+. Protégé
-// par le garde du groupe `(app)` : atteignable uniquement avec une session valide.
+// Écran de jeu nu (#64, ENGINE §3/§4/§5/§9, PRODUCT §2.2). Protégé par le garde du
+// groupe `(app)` : atteignable uniquement avec une session enfant valide. Runtime Node
+// (server actions 3.7 utilisent better-sqlite3, transaction synchrone).
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Écran de jeu (placeholder). Confirme la connexion (session enfant valide) et
- * offre la déconnexion. Voix de Teddy. Tokens uniquement, cible ≥ 44 px.
+ * Route `/jouer` — délègue tout à `PlayScreen` (client) : diagnostic de départ (1ʳᵉ
+ * session, ENGINE §3) puis niveaux (~10 questions, ENGINE §4), QCM/pavé (§6), feedback
+ * no-fail (§9), étoiles de fin de niveau (§5). Aucun habillage visuel (étayages,
+ * animations, récompenses éco = épic #4/#5).
  */
 export default function PlayPage() {
-  return (
-    <main
-      className="bg-bg text-text"
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: "var(--space-6)",
-        padding: "var(--space-6)",
-        textAlign: "center",
-      }}
-    >
-      <h1
-        style={{
-          fontFamily: "var(--font-family-display)",
-          fontSize: "var(--font-size-xl)",
-          fontWeight: "var(--font-weight-bold)",
-          color: "var(--color-text-primary)",
-          margin: 0,
-        }}
-      >
-        {strings.play.greeting}
-      </h1>
-      <LogoutButton />
-    </main>
-  );
+  return <PlayScreen />;
 }
