@@ -617,13 +617,31 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await enterPin(page, "1234");
     await expect(page).toHaveURL(/\/jouer$/);
 
-    // Déconnexion → retour sélecteur.
+    // Déconnexion (fix flaky #88, cause-racine) : le clic déclenche l'action serveur
+    // (révocation + effacement cookie, `logoutChild` — déjà awaited et donc DÉJÀ
+    // effective quand `LogoutButton` enchaîne la navigation) PUIS une navigation
+    // client (`router.push("/")`, englobée dans `startTransition` depuis le fix
+    // #88 — `LogoutButton.tsx`). Cette navigation n'est PAS instantanée (RSC
+    // fetch + render de `/`) : sous charge CI, elle peut dépasser le timeout par
+    // défaut (5 s) de `toHaveURL` alors même que rien n'est cassé — c'était
+    // EXACTEMENT le flake observé (issue #88). Fix ici (LEARNINGS #42 : attendre
+    // l'état RÉEL, jamais un timeout gonflé en aveugle) : on attend un **état
+    // observable** du DOM cible (le titre du sélecteur de profil, contenu réel de
+    // `/`) avec une marge généreuse et EXPLICITE plutôt que le timeout implicite
+    // par défaut — la garde échoue si la navigation ne se termine JAMAIS
+    // (véritable régression), pas si elle prend simplement plus de 5 s.
     await page.getByRole("button", { name: strings.play.logout }).click();
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible({
+      timeout: 15_000,
+    });
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
 
-    // Session révoquée serveur : la route jeu redirige à nouveau.
+    // Session révoquée serveur (déjà purgée avant même la navigation ci-dessus,
+    // cf. `logoutChild` awaited dans la server action) : la route jeu redirige à
+    // nouveau — navigation serveur complète (`page.goto`), pas de course possible
+    // ici (le garde lit la session à CHAQUE requête, ENGINE/AUTH §2).
     await page.goto("/jouer");
+    await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL(/\/$/);
   });
 
