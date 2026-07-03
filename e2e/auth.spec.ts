@@ -138,14 +138,52 @@ async function answerCorrectly(page: Page): Promise<void> {
  * le 1er niveau normal (chargement → questions). Boucle bornée généreusement (30
  * tours) : robuste à un ajustement futur de `diagnosticSize` sans devenir un test
  * infini en cas de régression réelle.
+ *
+ * `onComp10Retry` (optionnel, story #94) : le diagnostic est ordonné par compétence
+ * **canonique** (`comp10` en tête, `diagnostic.ts` §3) → c'est le point le plus
+ * déterministe pour déclencher un re-essai `comp10` en E2E (chasser l'interleaving du
+ * niveau normal est combinatoire et non déterministe, cf. ENGINE §7 « périmètre actif
+ * bloqué sur 1 compétence » — peut rester bloqué sur une autre compétence à fort
+ * volume de faits, ex. `sub`, très longtemps). Sur le **premier** fait `comp10`
+ * rencontré : répond FAUX (au lieu de juste), laisse l'appelant asserter l'étayage
+ * `TenFrame` monté, puis relance le re-essai en juste avant de poursuivre la boucle
+ * normalement pour les faits suivants.
  */
-async function playThroughDiagnostic(page: Page) {
+async function playThroughDiagnostic(
+  page: Page,
+  onComp10Retry?: (equation: string) => Promise<void>,
+) {
+  let comp10RetryDone = onComp10Retry === undefined;
   for (let i = 0; i < 30; i++) {
     const stillDiagnosticQuestion = await page
       .getByRole("group", { name: strings.play.question.choicesLabel })
       .isVisible()
       .catch(() => false);
     if (!stillDiagnosticQuestion) break; // niveau normal atteint (diagnostic terminé)
+
+    const equation = await readEquation(page);
+    if (!comp10RetryDone && onComp10Retry !== undefined && /^\d+ \+ \? = \d+$/u.test(equation)) {
+      comp10RetryDone = true;
+      const choicesGroup = page.getByRole("group", { name: strings.play.question.choicesLabel });
+      const correct = computeAnswer(equation);
+      // Réponse volontairement FAUSSE (1er distracteur ≠ bonne réponse, ENGINE §9).
+      for (const button of await choicesGroup.getByRole("button").all()) {
+        const label = (await button.getAttribute("aria-label")) ?? "";
+        if (!label.includes(String(correct))) {
+          await button.click();
+          break;
+        }
+      }
+      await expect(feedbackStatus(page)).toBeVisible();
+      await expect(page.getByRole("button", { name: strings.play.retry.tryAgain })).toBeVisible();
+      await onComp10Retry(equation);
+      // Re-essai juste → avance normalement (non compté, ENGINE §9).
+      await page.getByRole("button", { name: strings.play.retry.tryAgain }).click();
+      await answerCorrectly(page);
+      await expect(feedbackStatus(page)).toBeVisible();
+      await page.getByRole("button", { name: strings.play.correct.next }).click();
+      continue;
+    }
 
     await answerCorrectly(page);
     await expect(feedbackStatus(page)).toBeVisible();
@@ -257,8 +295,37 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     ).toBeVisible();
     await page.screenshot({ path: "docs/captures/64-question-qcm.png", fullPage: true });
 
-    // Joue le reste du diagnostic puis atterrit sur le 1er niveau normal.
-    await playThroughDiagnostic(page);
+    // Joue le reste du diagnostic puis atterrit sur le 1er niveau normal. Le diagnostic
+    // est ordonné par compétence CANONIQUE (comp10 en tête, `diagnostic.ts` §3) : le
+    // callback intercepte le 1er fait comp10 rencontré pour vérifier l'étayage
+    // `TenFrame` en re-essai (story #94, ENGINE §1/§9) — seul point déterministe pour
+    // ce scénario (l'interleaving du niveau normal, lui, n'est pas prévisible, cf.
+    // ENGINE §7).
+    await playThroughDiagnostic(page, async (equation) => {
+      const parsed = parseEquation(equation);
+      if (!("target" in parsed)) {
+        throw new Error(
+          `Fait attendu comp10 (gabarit a + ? = cible) — équation inattendue: "${equation}"`,
+        );
+      }
+      const a = parsed.a;
+      const missing = parsed.target - parsed.a;
+      // Unique `role="img"` de l'étayage, dont le NOM ACCESSIBLE porte l'info numérique
+      // « il manque {n} pour faire 10 » (rétro #94 : pas de `role="img"` imbriqué ; le
+      // libellé spécifique EST annoncé, pas un générique). En conditions réelles
+      // (next-dev-loop indispo #24 → E2E).
+      const missingText = strings.play.scaffold.tenFrame.missing.replace("{n}", String(missing));
+      const tenFrame = page.getByRole("img", { name: missingText });
+      await expect(tenFrame).toBeVisible();
+      // Le même texte est aussi visible sous la grille (double canal, bénéfice voyants).
+      await expect(page.getByText(missingText)).toBeVisible();
+      // Effet observable du modèle (pas seulement le montage) : a cases remplies (●)
+      // ET (10-a) cases vides (○), total 10 — le composant réel calcule le bon
+      // partage, pas seulement un conteneur générique présent.
+      await expect(tenFrame.locator("span", { hasText: "●" })).toHaveCount(a);
+      await expect(tenFrame.locator("span", { hasText: "○" })).toHaveCount(missing);
+      await page.screenshot({ path: "docs/captures/94-tenframe-retry.png", fullPage: true });
+    });
     await page.screenshot({ path: "docs/captures/64-question-niveau.png", fullPage: true });
   });
 
