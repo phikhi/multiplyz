@@ -182,11 +182,15 @@ export const fr = {
       variants: [
         "Oups, presque ! Regarde…",
         "Pas encore — on essaie ensemble ?",
-        "Hé, j'ai failli me tromper aussi ! La voilà :",
+        "Hé, j'ai failli me tromper aussi ! Regarde :",
         "T'inquiète, je te montre le truc :",
       ],
-      /** Affiche la bonne réponse avant le re-essai (`{n}` = valeur). */
-      answerReveal: "La bonne réponse : {n}",
+      /**
+       * Révélation numérique de la bonne réponse en **synthèse APRÈS l'étayage visuel**
+       * (issue #100 : l'étayage fait « voir » le calcul d'abord, le chiffre conclut).
+       * Se lit comme une conclusion, pas comme la réponse jetée en tête (`{n}` = valeur).
+       */
+      answerReveal: "Et voilà, ça fait {n} !",
       tryAgain: "Je réessaie",
     },
     /**

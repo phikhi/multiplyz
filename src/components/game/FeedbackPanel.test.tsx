@@ -76,14 +76,16 @@ describe("FeedbackPanel — phase retry (no-fail, ENGINE §9)", () => {
   });
 });
 
-describe("FeedbackPanel — slot d'étayage visuel (épic #4, WIREFRAMES §3d)", () => {
-  // L'étayage est un conteneur `role="img"` labellisé (VisualScaffold). Effet observable :
-  // ces tests échouent si le montage conditionnel du slot est muté (retry → correct).
+describe("FeedbackPanel — slot d'étayage visuel (épic #4, WIREFRAMES §3d, issue #100)", () => {
+  // L'étayage est un conteneur `role="img"` labellisé (VisualScaffold), présenté EN
+  // PREMIER en re-essai (au-dessus de la révélation numérique — ordre inversé issue #100,
+  // ADR 0007). Effet observable : ces tests échouent si le montage conditionnel du slot
+  // est muté (retry → correct) OU si l'ordre DOM est remis à l'ancien (révélation d'abord).
   // `mult` → matrice (story #96) : libellé spécifique « 6 paquets de 8 », plus le
   // générique (câblé depuis #96, cf. VisualScaffold.tsx SCAFFOLD_BY_SKILL.mult).
   const matrixLabel = strings.play.scaffold.matrix.label.replace("{a}", "6").replace("{b}", "8");
 
-  it("monte l'étayage en re-essai (sous la révélation de réponse)", () => {
+  it("monte l'étayage en re-essai (au-dessus de la révélation de réponse)", () => {
     renderPanel({ phase: "retry", skill: "mult", operands: [6, 8] });
     expect(screen.getByRole("img", { name: matrixLabel })).toBeInTheDocument();
   });
@@ -95,14 +97,19 @@ describe("FeedbackPanel — slot d'étayage visuel (épic #4, WIREFRAMES §3d)",
     expect(screen.queryByRole("img", { name: matrixLabel })).not.toBeInTheDocument();
   });
 
-  it("l'étayage est rendu SOUS la révélation de la bonne réponse (ordre DOM)", () => {
+  it("l'étayage est rendu AU-DESSUS de la révélation de la bonne réponse (ordre DOM, issue #100)", () => {
     renderPanel({ phase: "retry", correctAnswer: 48, skill: "mult", operands: [6, 8] });
     const reveal = screen.getByText(strings.play.retry.answerReveal.replace("{n}", "48"));
     const scaffold = screen.getByRole("img", { name: matrixLabel });
-    // La révélation précède l'étayage dans l'ordre du document (WIREFRAMES §3d).
+    // Ordre inversé (issue #100, ADR 0007, WIREFRAMES §3d) : l'étayage-découverte PRÉCÈDE
+    // la révélation numérique en synthèse. Effet observable — ce test échoue si l'ordre
+    // DOM est remis à l'ancien (révélation avant étayage) : `DOCUMENT_POSITION_FOLLOWING`
+    // n'est vrai que si `reveal` suit `scaffold` dans le document.
     expect(
-      reveal.compareDocumentPosition(scaffold) & Node.DOCUMENT_POSITION_FOLLOWING,
+      scaffold.compareDocumentPosition(reveal) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    // No-fail : la bonne réponse reste TOUJOURS présente (jamais retirée, juste déplacée).
+    expect(reveal).toBeInTheDocument();
   });
 });
 

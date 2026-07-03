@@ -58,7 +58,7 @@ Ajouter un profil enfant depuis l'accueil (modèle DB déjà compatible). Chaque
      - calcul **nouveau/faible** → **QCM 4 choix** (reconnaissance + distracteurs intelligents).
      - calcul **en cours/connu** → **pavé numérique** (rappel libre, gros boutons).
    - **Bonne réponse** → juice : étincelles, étoile, compagnon content, petit son. Combo si série.
-   - **Mauvaise réponse** → **aucune sanction** : on affiche la bonne réponse **avec le visuel d'étayage** (dix-cases, matrice, droite numérique), elle **refait une fois**, le calcul est marqué faible (reviendra plus tôt).
+   - **Mauvaise réponse** → **aucune sanction** : on montre **d'abord le visuel d'étayage** (dix-cases, matrice, droite numérique — l'enfant « voit » le calcul par la représentation, outil de découverte), **puis la bonne réponse en synthèse APRÈS** (issue #100, ADR 0007 : l'étayage-découverte précède le résultat) ; elle **refait une fois**, le calcul est marqué faible (reviendra plus tôt).
    - Bouton **« Je ne sais pas »** → montre un indice/étayage au lieu de forcer à deviner ; compté comme non-su, sans pénalité.
 3. **Pas d'échec possible** : un niveau se termine toujours. La justesse détermine seulement le nombre d'étoiles.
 4. **Écran de résultats** : étoiles (1–3), pièces gagnées, créature/œuf éventuel, encouragement.
