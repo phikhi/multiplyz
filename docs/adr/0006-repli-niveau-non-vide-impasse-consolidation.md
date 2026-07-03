@@ -3,7 +3,7 @@
 - **Statut** : accepted
 - **Type** : pedago
 - **Portée** : majeure (drift — décision propriétaire, cf. issue #108)
-- **Liens** : issue [#108](https://github.com/phikhi/multiplyz/issues/108) · PR #… · spec(s) impactée(s) : `ENGINE.md` §4/§7, `PRODUCT.md` §5
+- **Liens** : issue [#108](https://github.com/phikhi/multiplyz/issues/108) · PR [#115](https://github.com/phikhi/multiplyz/pull/115) · spec(s) impactée(s) : `ENGINE.md` §4/§7, `PRODUCT.md` §5
 
 ## Contexte
 
