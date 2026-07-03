@@ -161,6 +161,17 @@
   /* cible tactile mini (a11y) */
   --tap-target-min: 2.75rem; /* 44px */
 
+  /* étayage visuel (scaffold) — conteneur monté en re-essai (WIREFRAMES §3d,
+     épic #4). Famille sémantique dédiée : les étayages concrets (dix-cases /
+     droite numérique / matrice, stories 4.2/4.3/4.4) s'y réfèrent sans valeur en
+     dur. Surface neutre du thème courant (le thème per-monde --world-accent =
+     épic #5, non câblé ici). */
+  --scaffold-bg:          var(--color-bg-tertiary);
+  --scaffold-padding:     var(--space-4);
+  --scaffold-radius:      var(--border-radius-md);
+  --scaffold-min-height:  var(--space-8); /* 64px — hauteur de repli du placeholder */
+  --scaffold-glyph-color: var(--color-text-tertiary);
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou
      style inline). Défaut = neutre. Le reste du système ne change pas. */

@@ -299,6 +299,13 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     const feedbackText = (await feedbackStatus(page).textContent()) ?? "";
     expect(feedbackText.toLowerCase()).not.toMatch(/faux|erreur/u);
     await expect(page.getByRole("button", { name: strings.play.retry.tryAgain })).toBeVisible();
+
+    // Étayage visuel monté SOUS la révélation (épic #4 fondation #93, WIREFRAMES §3d) :
+    // conteneur `role="img"` labellisé, présent uniquement en re-essai. Sa présence ici
+    // (mais jamais dans le feedback juste, cf. tests unitaires) prouve le montage
+    // conditionnel du slot en conditions réelles (next-dev-loop indispo #24 → E2E).
+    await expect(page.getByRole("img", { name: strings.play.scaffold.label })).toBeVisible();
+    await page.screenshot({ path: "docs/captures/93-etayage-retry.png", fullPage: true });
     await page.screenshot({ path: "docs/captures/64-feedback-erreur.png", fullPage: true });
 
     // Re-essai juste → avance (non compté, ENGINE §9) puis termine le niveau en

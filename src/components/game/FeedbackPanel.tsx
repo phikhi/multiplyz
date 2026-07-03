@@ -4,13 +4,16 @@ import { useCallback } from "react";
 import { strings } from "@/strings";
 import { pickVariant } from "@/lib/game/copy-variant";
 import type { QuestionPhase } from "@/lib/game/session";
+import type { Skill } from "@/lib/engine/domain";
+import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
 
 /**
  * Feedback no-fail après une réponse (ENGINE §9, WIREFRAMES §3c/§3d, COPY §3).
  *
  * - `phase === "correct"` : feedback positif bref (variante Teddy), bouton continuer.
  * - `phase === "retry"` : posture croissance — **jamais** « faux »/« erreur » (règle
- *   CLAUDE.md/COPY §6) —, montre la bonne réponse, propose un re-essai.
+ *   CLAUDE.md/COPY §6) —, montre la bonne réponse, puis **l'étayage visuel** sous la
+ *   révélation (`VisualScaffold`, épic #4, WIREFRAMES §3d) — **jamais** en `"correct"`.
  *
  * **A11y (LEARNINGS #36/#23)** : le feedback est **doublé d'une icône** (✓ / ↻), jamais
  * la seule couleur (daltonisme) — glyphes en constantes (aucun littéral JSX,
@@ -26,6 +29,10 @@ export interface FeedbackPanelProps {
   readonly phase: Exclude<QuestionPhase, "asking">;
   /** Bonne réponse du fait (affichée uniquement en re-essai, ENGINE §9). */
   readonly correctAnswer: number;
+  /** Compétence du fait — indexe l'étayage visuel du re-essai (`VisualScaffold`, épic #4). */
+  readonly skill: Skill;
+  /** Opérandes du calcul (`[a]` pour comp10, `[a, b]` sinon) — transmis à l'étayage visuel. */
+  readonly operands: readonly number[];
   /** Seed déterministe pour varier la formulation (ex. index de question, COPY §1). */
   readonly variantSeed: number;
   /** Continuer vers la question suivante (uniquement depuis `phase === "correct"`). */
@@ -57,6 +64,8 @@ const primaryButtonStyle = {
 export function FeedbackPanel({
   phase,
   correctAnswer,
+  skill,
+  operands,
   variantSeed,
   onContinue,
   onRetry,
@@ -127,6 +136,15 @@ export function FeedbackPanel({
         >
           {fill(strings.play.retry.answerReveal, "{n}", String(correctAnswer))}
         </p>
+      )}
+
+      {/* Étayage visuel SOUS la révélation de réponse, **uniquement** en re-essai
+          (jamais en « correct » : l'enfant a déjà trouvé). Le dispatcher choisit la
+          représentation par compétence (épic #4). Il vit à l'intérieur du panneau
+          `role="status"` déjà focalisé au montage → aucun nouveau focus, aucun contrôle
+          focusable ajouté (le focus reste sur le conteneur, LEARNINGS #36). */}
+      {!isCorrect && (
+        <VisualScaffold skill={skill} operands={operands} correctAnswer={correctAnswer} />
       )}
 
       <button type="button" onClick={isCorrect ? onContinue : onRetry} style={primaryButtonStyle}>
