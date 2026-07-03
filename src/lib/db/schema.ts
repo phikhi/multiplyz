@@ -41,10 +41,12 @@ export const schemaMeta = sqliteTable("schema_meta", {
  *   écrivent/matchent sur `name_key`, jamais sur `lower(name)`. L'index UNIQUE sur
  *   `name` (BINARY) reste un garde-fou secondaire. L'unicité de `name_key` est
  *   déclarée via la **méthode chaînée `.unique()` de la colonne** (drizzle
- *   sérialise l'index dans le snapshot + le SQL → schema/snapshot/migration
- *   cohérents, `db:generate` = no-op). C'est le **callback d'extras 3ᵉ-arg**
- *   `(t) => [...]` qui casse le gate 100 % fonctions (LEARNINGS #34/#46), PAS le
- *   `.unique()` de colonne — ce dernier n'ajoute aucune fonction non couverte.
+ *   sérialise l'index dans le snapshot + le SQL ; `db:generate` = no-op car
+ *   schema.ts == snapshot). C'est le **callback d'extras 3ᵉ-arg** `(t) => [...]`
+ *   qui casse le gate 100 % fonctions (LEARNINGS #34/#46), PAS le `.unique()` de
+ *   colonne — ce dernier n'ajoute aucune fonction non couverte. NB : la colonne
+ *   physique est ajoutée *nullable* puis backfillée (issue #105 — cf. le champ
+ *   `nameKey` et `runMigrations`), le `.notNull()` restant le contrat de type.
  */
 export const profiles = sqliteTable("profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -54,6 +56,13 @@ export const profiles = sqliteTable("profiles", {
    * (`nameKey(name)` — cf. `auth/validation.ts`). Index UNIQUE déclaré via
    * `.unique()` (nom explicite = même index que la migration). Écrite à
    * l'insertion du profil (et à tout renommage éventuel).
+   *
+   * `.notNull()` = **contrat logique/type** : tous les INSERT applicatifs
+   * fournissent la clé (type Drizzle exige le champ). La colonne **physique**
+   * est ajoutée *nullable* par la migration 0005 — SQLite refuse un `NOT NULL`
+   * sans default sur une table peuplée (issue #105) — puis backfillée
+   * (`runMigrations` → `backfillNameKeys`, valeur accent-correcte non calculable
+   * en SQL). `db:generate` reste no-op (schema.ts == snapshot, tous deux notNull).
    */
   nameKey: text("name_key").notNull().unique("profiles_name_key_unique"),
   pinHash: text("pin_hash").notNull(),

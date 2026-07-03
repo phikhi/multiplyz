@@ -6,7 +6,7 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { CONFIG_DEFAULTS } from "../../config/server-config";
 import { getDatabaseConfig, resolveDatabasePath } from "./config";
 import { createDatabase, getDb } from "./index";
-import { runMigrations } from "./migrate";
+import { backfillNameKeys, runMigrations } from "./migrate";
 import { schemaMeta } from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-db-"));
@@ -113,5 +113,53 @@ describe("runMigrations", () => {
     db.insert(schemaMeta).values({ key: "schema_version", value: "1" }).run();
     const rows = db.select().from(schemaMeta).all();
     expect(rows).toEqual([{ key: "schema_version", value: "1", updatedAt: expect.any(Date) }]);
+  });
+
+  // Régression #105 : la migration 0005 (ajout `name_key`) doit s'appliquer sur
+  // une table `profiles` DÉJÀ peuplée sans planter (`Cannot add a NOT NULL column
+  // with default value NULL`), et backfiller la clé accent-correcte.
+  it("applique 0005 sur une table profiles peuplée sans crash + backfille name_key (#105)", () => {
+    const path = freshDbPath();
+    // Base « fraîche » complète, puis on la ramène à l'état PRÉ-0005 : colonne +
+    // index `name_key` retirés, 0005 dé-journalisée, et un profil accentué inséré
+    // — reproduction fidèle d'une base dev antérieure à la story #37.
+    runMigrations(createDatabase(path));
+    const seed = createDatabase(path);
+    seed.run(sql`DROP INDEX profiles_name_key_unique`);
+    seed.run(sql`ALTER TABLE profiles DROP COLUMN name_key`);
+    seed.run(
+      sql`DELETE FROM __drizzle_migrations WHERE created_at = (SELECT MAX(created_at) FROM __drizzle_migrations)`,
+    );
+    seed.run(sql`INSERT INTO profiles (name, pin_hash, avatar) VALUES ('Élodie', 'h', 'a')`);
+
+    // Rejeu des migrations sur cette base peuplée : ne doit PAS lever.
+    const db = createDatabase(path);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    const row = db.get<{ name_key: string }>(
+      sql`SELECT name_key FROM profiles WHERE name = 'Élodie'`,
+    );
+    expect(row?.name_key).toBe("élodie");
+  });
+});
+
+describe("backfillNameKeys", () => {
+  it("remplit name_key (accent-correct) sur les lignes NULL, laisse les autres, idempotent", () => {
+    const db = createDatabase(":memory:");
+    db.run(sql`CREATE TABLE profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, name_key TEXT)`);
+    // id 1 : à backfiller (NULL, accentué) ; id 2 : clé déjà posée → intouchée.
+    db.run(
+      sql`INSERT INTO profiles (id, name, name_key) VALUES (1, 'Élodie', NULL), (2, 'Léa', 'DÉJÀ')`,
+    );
+
+    backfillNameKeys(db);
+    expect(db.all(sql`SELECT id, name_key FROM profiles ORDER BY id`)).toEqual([
+      { id: 1, name_key: "élodie" },
+      { id: 2, name_key: "DÉJÀ" },
+    ]);
+
+    // 2e passage : plus aucune ligne NULL → boucle 0 itération, aucune écriture.
+    backfillNameKeys(db);
+    expect(db.get(sql`SELECT name_key FROM profiles WHERE id = 1`)).toEqual({ name_key: "élodie" });
   });
 });
