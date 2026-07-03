@@ -9,10 +9,11 @@ import { strings } from "../src/strings";
  * global-setup) : toutes ces stories forment une même séquence (créer → se
  * connecter → jouer → garde → déconnexion → récupérer), donc **sérialisées dans le
  * même fichier** pour un état déterministe (pas de course inter-fichiers sur le
- * foyer partagé, LEARNINGS #157 — deux specs en état opposé/successif sur le même
- * single-tenant ne peuvent PAS tourner dans des fichiers séparés sous
- * `fullyParallel`). `next-dev-loop` (vérif runtime) indispo < Next 16.3 (#24) →
- * supplée par E2E live.
+ * foyer partagé). Cf. LEARNINGS 2026-07-01 (rétro story #31, PR #42) : « Deux specs
+ * à état single-tenant OPPOSÉ ne partagent pas une base wipée-à-froid en parallèle »
+ * → fusionner dans un seul `describe.serial`, ils ne peuvent PAS tourner dans des
+ * fichiers séparés sous `fullyParallel`. `next-dev-loop` (vérif runtime) indispo
+ * < Next 16.3 (#24) → supplée par E2E live.
  */
 const nav = strings.onboarding.nav;
 // Libellé a11y du 1er portrait (AVATARS[0] = fox → « Portrait renard »).

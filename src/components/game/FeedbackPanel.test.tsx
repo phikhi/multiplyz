@@ -95,3 +95,34 @@ describe("FeedbackPanel — phase retry (no-fail, ENGINE §9)", () => {
     expect(screen.getByRole("status")).toHaveTextContent(strings.play.retry.variants[1]);
   });
 });
+
+describe("FeedbackPanel — focus au montage (a11y, LEARNINGS #36)", () => {
+  // À la transition question→feedback, le bouton de réponse démonte : le panneau doit
+  // recevoir le focus pour ne pas laisser l'utilisateur clavier sur `<body>`. Effet
+  // observable (échoue si le ref-callback / `tabIndex` saute).
+  it("le panneau de feedback juste (correct) reçoit le focus", () => {
+    render(
+      <FeedbackPanel
+        phase="correct"
+        correctAnswer={48}
+        variantSeed={0}
+        onContinue={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveFocus();
+  });
+
+  it("le panneau de feedback re-essai (retry) reçoit le focus", () => {
+    render(
+      <FeedbackPanel
+        phase="retry"
+        correctAnswer={48}
+        variantSeed={0}
+        onContinue={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("status")).toHaveFocus();
+  });
+});

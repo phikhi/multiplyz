@@ -178,7 +178,9 @@ export function QuestionCard({
         alignItems: "center",
         gap: "var(--space-6)",
         width: "100%",
-        maxWidth: "var(--space-12)",
+        // Largeur de la zone de jeu centrée (token dédié, cohérent avec
+        // FeedbackPanel/ResultsScreen/PlayScreen) — pas un token d'espacement détourné.
+        maxWidth: "var(--max-width-play)",
       }}
     >
       <div

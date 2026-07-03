@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { strings } from "@/strings";
 import { pickVariant } from "@/lib/game/copy-variant";
 import type { QuestionPhase } from "@/lib/game/session";
@@ -13,10 +14,13 @@ import type { QuestionPhase } from "@/lib/game/session";
  *
  * **A11y (LEARNINGS #36/#23)** : le feedback est **doublé d'une icône** (✓ / ↻), jamais
  * la seule couleur (daltonisme) — glyphes en constantes (aucun littéral JSX,
- * `react/jsx-no-literals`). Annoncé via `role="status"` (contenu éphémère critique).
- * Couleurs `--color-feedback-*` (bg + texte suivent **ensemble** le thème, contraste
- * préservé dans les 2 modes — distinct du cas « chip à couleur fixe » qui exigerait un
- * token de texte constant type `--color-on-warning`, cf. LEARNINGS #23).
+ * `react/jsx-no-literals`). Annoncé via `role="status"` (contenu éphémère critique) et
+ * **reçoit le focus au montage** (ref-callback + `tabIndex={-1}`, même pattern approuvé
+ * que `ResultsScreen`) : à la transition question→feedback le bouton de réponse démonte,
+ * sans ce déplacement le focus retomberait sur `<body>` et perdrait l'utilisateur
+ * clavier. Couleurs `--color-feedback-*` (bg + texte suivent **ensemble** le thème,
+ * contraste préservé dans les 2 modes — distinct du cas « chip à couleur fixe » qui
+ * exigerait un token de texte constant type `--color-on-warning`, cf. LEARNINGS #23).
  */
 export interface FeedbackPanelProps {
   readonly phase: Exclude<QuestionPhase, "asking">;
@@ -61,9 +65,19 @@ export function FeedbackPanel({
   const variants = isCorrect ? strings.play.correct.variants : strings.play.retry.variants;
   const message = pickVariant(variants, variantSeed);
 
+  // Ref-callback : déplace le focus sur le panneau de feedback dès son montage
+  // (LEARNINGS #36 — évite la branche `current === null` non couverte d'un `useEffect`
+  // + `?.`, et couvre les 2 branches montage/démontage). Réplique le pattern approuvé
+  // de `ResultsScreen`.
+  const focusOnMount = useCallback((node: HTMLDivElement | null) => {
+    node?.focus();
+  }, []);
+
   return (
     <div
       role="status"
+      ref={focusOnMount}
+      tabIndex={-1}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -75,7 +89,7 @@ export function FeedbackPanel({
           ? "var(--color-feedback-correct-bg)"
           : "var(--color-feedback-retry-bg)",
         width: "100%",
-        maxWidth: "var(--space-12)",
+        maxWidth: "var(--max-width-play)",
         textAlign: "center",
       }}
     >
