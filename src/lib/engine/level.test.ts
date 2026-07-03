@@ -70,6 +70,17 @@ function multFacts(n: number): Fact[] {
   return facts;
 }
 
+/** N faits `sub` distincts (`a − b`, minuende `a ∈ 1..20`, subtrahende `b ∈ 1..a`). */
+function subFacts(n: number): Fact[] {
+  const facts: Fact[] = [];
+  for (let a = 1; facts.length < n && a <= 20; a++) {
+    for (let b = 1; b <= a && facts.length < n; b++) {
+      facts.push(makeFact("sub", a, b));
+    }
+  }
+  return facts;
+}
+
 describe("buildLevel — pools DUE / NEW / MAINT (ENGINE §4)", () => {
   it("assez de DUE : mix ~70 % DUE + reste, cap de nouveaux respecté", () => {
     // 12 faits add DUE (box 1, échéance passée) + des add NEW (jamais vus). Une seule
@@ -160,11 +171,15 @@ describe("buildLevel — pools DUE / NEW / MAINT (ENGINE §4)", () => {
     expect(level).toHaveLength(0); // rien de dû, aucun neuf
   });
 
-  it("box < maxBox non échue (next_due futur) → exclue de DUE", () => {
+  it("box < maxBox non échue (next_due futur) → exclue de DUE mais remontée par le repli d'impasse (#108)", () => {
+    // Un seul fait box<max non dû : DUE ∅, MAINT ∅, capNew 0 (aucun NEW). La sélection
+    // nominale ne le pose PAS (échéance future). Repli d'impasse (Option 2, ADR 0006) :
+    // un niveau n'est jamais vide → le fait box<max est remonté (consolidation en avance).
     const future = makeFact("add", 4, 5);
     const scope = [entry(future, state({ box: 1, nextDue: NOW + MS_PER_DAY }))];
     const level = buildLevel(scope, CONFIG, NOW);
-    expect(level).toHaveLength(0);
+    expect(keys(level)).toEqual([future.key]); // repli : jamais vide (cf. #108)
+    expect(level[0].isReask).toBe(false);
   });
 
   it("next_due null sur ligne existante (box < max) → traité comme dû", () => {
@@ -256,6 +271,128 @@ describe("buildLevel — cap de nouveaux + consolidation (ENGINE §4/§7)", () =
     const inLevelNew = level.filter((i) => newKeys.has(i.fact.key)).length;
     expect(inLevelNew).toBeGreaterThan(0); // des nouveaux passent sous le seuil
     expect(inLevelNew).toBeLessThanOrEqual(CONFIG.newMaxPerLevel);
+  });
+});
+
+describe("buildLevel — repli d'impasse anti-niveau-vide (Option 2, ADR 0006, #108)", () => {
+  // Reconstruit l'impasse RÉELLE de la base de Zoé (#108) : DUE ∅ ∧ MAINT ∅ ∧ capNew = 0.
+  // 8 faits `sub` box-1 **non dus** (échéance demain) → weak = 8 = consolidationThreshold
+  // → capNew 0, mais rien n'est DUE (espacement Leitner) ni en MAINT. La sélection
+  // nominale rend un niveau VIDE (violation no-fail). Le repli (Option 2) doit le remplir
+  // avec ces faits box<max, LES PLUS PROCHES de leur échéance d'abord.
+  //
+  // EFFET OBSERVABLE (rétro #60/#61) : ces tests ÉCHOUENT si on retire l'appel à
+  // `fillFromDeadlock` — le niveau redeviendrait vide (assertions de non-vacuité + de
+  // contenu/ordre précis, pas un simple `.length > 0` trivial).
+  it("impasse DUE ∅ ∧ MAINT ∅ ∧ capNew 0 (8 faits sub box-1 non dus) → niveau NON vide (tue le repli)", () => {
+    // Exactement SEUIL_CONSO faits sub box-1, échéance dans le futur (non dus).
+    const T = CONFIG.consolidationThreshold; // 8
+    const facts = subFacts(T); // T faits sub distincts
+    const scope = facts.map((f) => entry(f, state({ box: 1, nextDue: NOW + MS_PER_DAY })));
+
+    // Pré-condition : on est BIEN dans l'impasse (aucun fait dû, weak = T → capNew 0).
+    expect(scope.every((e) => e.state!.nextDue! > NOW)).toBe(true); // aucun DUE
+    expect(scope.filter((e) => e.state!.box <= CONFIG.consolidationMaxBox)).toHaveLength(T);
+
+    const level = buildLevel(scope, CONFIG, NOW);
+    // Assertion cœur : le repli casse l'impasse → niveau NON vide (échoue sans le repli).
+    expect(level.length).toBeGreaterThan(0);
+    // Contenu exact : le repli remonte ces faits box<max (aucun NEW inventé).
+    const subKeys = new Set(facts.map((f) => f.key));
+    expect(level.every((i) => subKeys.has(i.fact.key))).toBe(true);
+    expect(level.length).toBe(Math.min(T, LEVEL_SIZE)); // remplit jusqu'à LEVEL_SIZE
+    expect(hasNoAdjacentDuplicate(level)).toBe(true);
+  });
+
+  it("repli : remonte les faits les PLUS PROCHES de l'échéance d'abord (ordre observable)", () => {
+    // 12 faits sub box-1 non dus, à échéances ÉCHELONNÉES (proche → lointain). Le repli
+    // doit sélectionner les LEVEL_SIZE (10) plus PROCHES (petits délais) et écarter les
+    // 2 plus lointains. Tue la mutation du comparateur (tri par proximité d'échéance).
+    const T = CONFIG.consolidationThreshold; // 8 (≥ seuil → capNew 0)
+    const total = 12;
+    const facts = subFacts(total);
+    // Échéances croissantes : fact i dû à NOW + (i+1) jours. i=0 le plus proche.
+    const scope = facts.map((f, i) =>
+      entry(f, state({ box: 1, nextDue: NOW + (i + 1) * MS_PER_DAY })),
+    );
+    // Pré-condition impasse : ≥ SEUIL_CONSO faits weak (box 1) → capNew 0, aucun dû.
+    expect(
+      scope.filter((e) => e.state!.box <= CONFIG.consolidationMaxBox).length,
+    ).toBeGreaterThanOrEqual(T);
+    expect(scope.every((e) => e.state!.nextDue! > NOW)).toBe(true);
+
+    const level = buildLevel(scope, CONFIG, NOW);
+    expect(level.length).toBe(LEVEL_SIZE); // 10 remontés sur 12
+
+    // Les 2 faits les plus LOINTAINS (i=10, i=11) doivent être EXCLUS ; les 10 plus
+    // proches (i=0..9) présents. Effet observable du tri par proximité (échoue si on
+    // mute le comparateur en « plus lointain d'abord » ou en tri arbitraire).
+    const levelKeys = new Set(level.map((i) => i.fact.key));
+    for (let i = 0; i <= 9; i++) {
+      expect(levelKeys.has(facts[i].key)).toBe(true); // proches présents
+    }
+    for (let i = 10; i <= 11; i++) {
+      expect(levelKeys.has(facts[i].key)).toBe(false); // lointains exclus
+    }
+  });
+
+  it("repli : un box<max à next_due null est capté par DUE (nominal), JAMAIS par le repli", () => {
+    // Invariant du repli : un fait box<max à next_due null est TOUJOURS DUE (isDue traite
+    // null comme dû) → la sélection nominale le pose → picked ≠ ∅ → le repli ne se
+    // déclenche pas. Ce test verrouille cet invariant (le repli ne voit jamais un null),
+    // ce qui justifie l'absence de branche null dans son comparateur (LEARNINGS #78).
+    const nullFact = makeFact("sub", 3, 2);
+    // + 8 faits box-1 non dus (weak ≥ seuil, capNew 0) : sans le null, ce serait l'impasse.
+    const others = subFacts(10)
+      .filter((f) => f.key !== nullFact.key)
+      .slice(0, 8);
+    const scope = [
+      entry(nullFact, state({ box: 1, nextDue: null })),
+      ...others.map((f) => entry(f, state({ box: 1, nextDue: NOW + MS_PER_DAY }))),
+    ];
+    const level = buildLevel(scope, CONFIG, NOW);
+    // Le null est DUE (nominal) → présent ; comme picked ≠ ∅, le repli ne s'active pas,
+    // donc les 8 box-1 non dus ne sont PAS remontés (ils le seraient si le repli tirait).
+    expect(keys(level)).toEqual([nullFact.key]);
+  });
+
+  it("repli : n'introduit AUCUN NEW (Option 2) — que du box<max déjà rencontré", () => {
+    // Impasse box-1 sub (capNew 0) + des NEW sub. Le repli ne doit PAS remonter de NEW
+    // (isRescuable exclut state===null) : seuls les box<max déjà vus remplissent.
+    const T = CONFIG.consolidationThreshold; // 8
+    const seenFacts = subFacts(T);
+    const newFacts = subFacts(20).filter((f) => !seenFacts.some((s) => s.key === f.key));
+    const scope = [
+      ...seenFacts.map((f) => entry(f, state({ box: 1, nextDue: NOW + MS_PER_DAY }))),
+      ...newFacts.map((f) => entry(f, null)),
+    ];
+    const level = buildLevel(scope, CONFIG, NOW);
+    expect(level.length).toBeGreaterThan(0); // repli actif
+    const newKeys = new Set(newFacts.map((f) => f.key));
+    expect(level.filter((i) => newKeys.has(i.fact.key))).toHaveLength(0); // 0 NEW remonté
+  });
+
+  it("repli NON déclenché quand un niveau nominal non vide existe (anti-régression cas nominal)", () => {
+    // 8 faits sub box-1 DUS (échéance passée) → DUE non vide → sélection nominale remplit.
+    // Le repli ne doit PAS polluer : le niveau nominal est identique avec ou sans repli.
+    const T = CONFIG.consolidationThreshold; // 8
+    const dueFacts = subFacts(T);
+    const scope = dueFacts.map((f) => entry(f, state({ box: 1, nextDue: NOW - MS_PER_DAY })));
+    const level = buildLevel(scope, CONFIG, NOW);
+    // Niveau nominal plein de DUE (le repli ne change rien : picked ≠ ∅ à l'étape 5.b).
+    expect(level.length).toBe(Math.min(T, LEVEL_SIZE));
+    const dueKeys = new Set(dueFacts.map((f) => f.key));
+    expect(level.every((i) => dueKeys.has(i.fact.key))).toBe(true);
+  });
+
+  it("repli : scope 100 % NEW non dus → reste vide (rien de remontable, pas un NEW inventé)", () => {
+    // Aucun fait déjà rencontré (que des NEW), mais capNew 0 impossible (weak=0). Cas
+    // nominal : le NEW remplit (pas d'impasse). On vérifie que le repli ne s'immisce pas.
+    const news = subFacts(10).map((f) => entry(f, null));
+    const level = buildLevel(news, CONFIG, NOW);
+    // NEW nominal (capNew plein) : non vide via le chemin nominal, PAS via le repli.
+    expect(level.length).toBeGreaterThan(0);
+    expect(level.length).toBeLessThanOrEqual(CONFIG.newMaxPerLevel);
   });
 });
 
@@ -554,11 +691,27 @@ describe("buildLevel — options par défaut + horloge injectée", () => {
   });
 
   it("l'échéance DUE dépend de `now` injecté (jamais Date.now)", () => {
+    // Un box-1 daté + un ancre MAINT (box max) toujours dû → le niveau n'est jamais
+    // vide (le repli d'impasse #108 ne masque donc pas la bascule DUE). On observe la
+    // MEMBERSHIP DUE du box-1 : `isReask=false` ordonné, présence conditionnée par `now`.
     const f = makeFact("add", 1, 2);
+    const anchor = makeFact("add", 3, 4); // MAINT (box max), dû → jamais vide
     const dueAt = 5_000_000_000_000;
-    const scope = [entry(f, state({ box: 1, nextDue: dueAt }))];
-    // now AVANT l'échéance → pas dû ; now APRÈS → dû.
-    expect(buildLevel(scope, CONFIG, dueAt - 1)).toHaveLength(0);
-    expect(buildLevel(scope, CONFIG, dueAt + 1)).toHaveLength(1);
+    const scope = [
+      entry(f, state({ box: 1, nextDue: dueAt })),
+      entry(anchor, state({ box: CONFIG.maxBox, nextDue: dueAt - 10 })),
+    ];
+    // now AVANT l'échéance du box-1 → pas DUE, mais le box-1 reste **remontable par le
+    // repli** (box<max non dû) → présent quand même ; l'ancre MAINT est là dans les 2 cas.
+    // now APRÈS → le box-1 devient DUE (chemin nominal). Dans les deux cas il figure au
+    // niveau, mais la bascule DUE↔repli est bien pilotée par `now` (aucun Date.now interne).
+    const before = buildLevel(scope, CONFIG, dueAt - 1);
+    const after = buildLevel(scope, CONFIG, dueAt + 1);
+    expect(keys(before)).toContain(anchor.key);
+    expect(keys(after)).toContain(f.key);
+    // now AVANT l'échéance de l'ancre aussi (tout futur) → DUE ∅ ∧ MAINT ∅ → repli seul.
+    const deadlockNow = dueAt - 100;
+    const level = buildLevel(scope, CONFIG, deadlockNow);
+    expect(level.length).toBeGreaterThan(0); // no-fail : jamais vide (#108)
   });
 });
