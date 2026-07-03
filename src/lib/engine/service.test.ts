@@ -225,6 +225,30 @@ describe("submitAttempt — gardes de forme + domaine (#36)", () => {
     expect(res.state?.wrongCount).toBe(1);
     expect(db.select().from(attempts).all()[0].correct).toBe(false);
   });
+
+  it("un `isRetry` non strictement `true` (truthy) est traité comme NON-retry (=== true)", () => {
+    // Miroir de la garde `correct` : `input.isRetry === true`. Un `1` (truthy mais non
+    // booléen) ne doit PAS compter comme re-essai → la réponse EST comptée (attempts +1
+    // ET mastery upserté). Kill du mutant `=== true` → `Boolean(...)` (Boolean(1)=true
+    // traiterait `1` comme un re-essai non compté → aucune ligne mastery, effet observable).
+    const res = submitAttempt(
+      db,
+      profileId,
+      { ...submitFixture(), isRetry: 1 } as never,
+      config,
+      NOW,
+    );
+    if (!res.ok) throw new Error("unreachable");
+    // NON-retry → réponse comptée : mastery amorcée (juste+rapide → box 1), pas `null`.
+    expect(res.state?.box).toBe(1);
+    expect(res.state?.correctCount).toBe(1);
+    // La ligne attempts est journalisée avec is_retry=0 (garde stricte, pas de re-essai).
+    const attemptRows = db.select().from(attempts).all();
+    expect(attemptRows).toHaveLength(1);
+    expect(attemptRows[0].isRetry).toBe(false);
+    // Et une ligne mastery a bien été upsertée (aucun no-op de re-essai).
+    expect(db.select().from(mastery).all()).toHaveLength(1);
+  });
 });
 
 describe("submitAttempt — écriture atomique (attempts + mastery)", () => {
