@@ -4,6 +4,16 @@ import { VisualScaffold } from "./VisualScaffold";
 import { SKILLS, type Skill } from "@/lib/engine/domain";
 import { strings } from "@/strings";
 
+/**
+ * Fixture de test **locale** (nit review #112) — l'ancien libellé générique du
+ * placeholder de fondation #93 (`RETIRED_GENERIC_SCAFFOLD_LABEL`) a été RETIRÉ de la
+ * table de strings prod : plus aucun composant ne le référence depuis que l'épic #4
+ * est complet (4.2/4.3/4.4 câblent chacun un libellé spécifique). Cette constante
+ * ne sert plus qu'à garder les assertions anti-régression ci-dessous lisibles (« ce
+ * nom accessible n'est PAS l'ancien générique ») sans dépendre d'une clé prod morte.
+ */
+const RETIRED_GENERIC_SCAFFOLD_LABEL = "Un petit dessin pour t'aider à voir le calcul";
+
 /** Opérandes plausibles par compétence (comp10 = 1 opérande, sinon 2). */
 function operandsFor(skill: Skill): readonly number[] {
   return skill === "comp10" ? [3] : [6, 8];
@@ -101,7 +111,7 @@ describe("VisualScaffold — dispatch par compétence (ENGINE §1, WIREFRAMES §
     const expected = strings.play.scaffold.tenFrame.missing.replace("{n}", "7");
     expect(screen.getByRole("img")).toHaveAccessibleName(expected);
     // Ce n'est PAS le libellé générique (garde anti-régression du canal a11y).
-    expect(screen.getByRole("img")).not.toHaveAccessibleName(strings.play.scaffold.label);
+    expect(screen.getByRole("img")).not.toHaveAccessibleName(RETIRED_GENERIC_SCAFFOLD_LABEL);
   });
 
   it("un skill inconnu ne rend RIEN (fallback sûr, pas de crash — no-fail)", () => {
@@ -128,7 +138,7 @@ describe("VisualScaffold — a11y (le visuel est doublé d'un texte)", () => {
     render(<VisualScaffold skill="mult" operands={[7, 5]} correctAnswer={35} />);
     const expected = fill(strings.play.scaffold.matrix.label, { a: "7", b: "5" });
     expect(screen.getByRole("img")).toHaveAccessibleName(expected);
-    expect(screen.getByRole("img")).not.toHaveAccessibleName(strings.play.scaffold.label);
+    expect(screen.getByRole("img")).not.toHaveAccessibleName(RETIRED_GENERIC_SCAFFOLD_LABEL);
   });
 
   it("le glyphe décoratif de la matrice est aria-hidden (info portée par le label)", () => {
@@ -150,14 +160,14 @@ describe("VisualScaffold — a11y (le visuel est doublé d'un texte)", () => {
     // §1) : add → 8+6=14 (somme ≤ 20), sub → 8−6=2 (b ≤ a, résultat ≥ 0).
     render(<VisualScaffold skill="add" operands={[8, 6]} correctAnswer={14} />);
     const addLabel = screen.getByRole("img").getAttribute("aria-label");
-    expect(addLabel).not.toBe(strings.play.scaffold.label);
+    expect(addLabel).not.toBe(RETIRED_GENERIC_SCAFFOLD_LABEL);
 
     const { container } = render(
       <VisualScaffold skill="sub" operands={[8, 6]} correctAnswer={2} />,
     );
     const subImg = container.querySelector('[role="img"]');
     const subLabel = subImg?.getAttribute("aria-label");
-    expect(subLabel).not.toBe(strings.play.scaffold.label);
+    expect(subLabel).not.toBe(RETIRED_GENERIC_SCAFFOLD_LABEL);
     expect(subLabel).not.toBe(addLabel);
   });
 

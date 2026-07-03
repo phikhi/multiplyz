@@ -43,6 +43,26 @@ describe("strings (i18n FR)", () => {
     expect(strings.onboarding.parentPin.method).not.toMatch(/\bte\b/);
   });
 
+  it("onboarding.recovery (étape 4, écran parent) = registre neutre/vouvoiement (issue #51)", () => {
+    // Alignement sur `strings.recovery` (#2.5, même écran « code parent oublié/
+    // secours ») : les DEUX écrans de code de secours sont PARENT → vouvoiement
+    // neutre, jamais le tutoiement enfant de Teddy. Garde à effet observable :
+    // rougit si `\btu\b`/`\bte\b` réapparaît (régression de registre — la marque
+    // RÉELLE de la régression #51 était l'IMPÉRATIF tutoyant « Note »/« note-le »,
+    // pas un pronom `tu`/`te` explicite — donc cette garde teste AUSSI l'impératif
+    // vouvoyant attendu, seul discriminant qui aurait fait rougir l'ancienne copie).
+    const recoveryText =
+      `${strings.onboarding.recovery.title} ${strings.onboarding.recovery.intro}`.toLowerCase();
+    expect(recoveryText).not.toMatch(/\btu\b/);
+    expect(recoveryText).not.toMatch(/\bte\b/);
+    // Impératif 2e pers. pluriel (vouvoiement) attendu, jamais le singulier enfant.
+    expect(strings.onboarding.recovery.title).toMatch(/\bnotez\b/iu);
+    expect(strings.onboarding.recovery.title).not.toMatch(/\bnote\b/iu);
+    expect(strings.onboarding.recovery.intro).toMatch(/\bnotez-le\b/iu);
+    expect(strings.onboarding.recovery.intro).not.toMatch(/\bnote-le\b/iu);
+    expect(strings.onboarding.recovery.intro).toContain("une seule fois");
+  });
+
   it("chaque portrait AVATARS possède un libellé a11y lisible (invariant)", () => {
     const names = strings.onboarding.profile.avatarNames as Record<string, string>;
     for (const avatar of AVATARS) {
