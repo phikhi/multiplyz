@@ -14,7 +14,8 @@ Boucle d'auto-apprentissage (cf. WORKFLOW §13).
 3. **Proposer une promotion** pour les leçons **récurrentes** :
    - règle dans `CLAUDE.md`, ou règle **lint/typecheck**, ou **hook** `settings.json`.
    - Une promotion qui change le contrat → passe par un **ADR**.
+   - **Une promotion qui exige l'aval du propriétaire ne reste JAMAIS un simple paragraphe dans le body d'une PR** (invisible une fois mergée → jamais appliquée, cf. PR #77). L'ouvrir en **issue `needs-owner`** dédiée (titre = la règle proposée, corps = problème/leçon/action + PR source). Elle est ainsi listée au sync `orchestrate §1` et **consommée** dès arbitrage : approuvée → PR de suivi qui applique + ferme l'issue ; refusée → fermer avec note.
 4. Garder concis (signal, pas de bruit).
 
 ## Sortie
-Entrées ajoutées à `LEARNINGS.md` + liste de promotions proposées (à valider par le propriétaire si majeures).
+Entrées ajoutées à `LEARNINGS.md` + promotions **auto-appliquées** (in-contract) ou ouvertes en **issue `needs-owner`** (aval requis) — jamais laissées en texte passif.

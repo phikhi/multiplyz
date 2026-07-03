@@ -16,8 +16,12 @@ git fetch --prune && git status
 gh pr list --state open           # PR en cours à finir/merger d'abord
 gh issue list --state open --limit 50
 gh run list --limit 5             # CI
+# Décisions du propriétaire EN ATTENTE (à consommer — sinon feedback ignoré, cf. PR #77) :
+gh issue list --state open --label needs-owner            # arbitrages de drift / promotions déférées
+gh pr list --state all --limit 15 --json number,comments  # commentaires proprio sur les PR récentes
 ```
 - **Finir l'existant avant de commencer** : PR ouverte prête → boucle review→merge ; branche/worktree orpheline → reprendre ou nettoyer.
+- **Consommer les décisions du propriétaire AVANT tout nouveau travail** : tout commentaire proprio sur une PR/issue (approbation, refus, correction) ou toute issue `needs-owner` **tranchée** est une **instruction à appliquer**, pas un fil clos. Approbation d'une promotion (ex. « ok pour modifier CLAUDE.md ») → **l'appliquer dans une PR de suivi** puis fermer l'issue. Ne **jamais** laisser un feedback proprio sans action ni accusé (anti-régression PR #77).
 
 ## 2. Trier le backlog (grille)
 Classer **chaque** issue ouverte (surtout `discovered`) :
@@ -26,10 +30,11 @@ Classer **chaque** issue ouverte (surtout `discovered`) :
 |---|---|---|
 | **bloquant-maintenant** | correctness/sécurité dont dépend une story du scope courant | intégrer dans l'épic courant, avant la story consommatrice |
 | **prochain-épic** | rattachée à un épic futur précis (ex. entrée Parent → #7) | commenter/lier l'épic cible, différer |
-| **backlog-hygiène** | nice-to-have / durcissement / hygiène, aucun blocage | traiter **opportunément** (quand on touche le code lié) ou en fin d'épic |
-| **gate-déploiement** | requis avant un jalon de déploiement (ex. Nginx X-Real-IP #47) | taguer, différer au pré-déploiement |
+| **backlog-hygiène** | durcissement / sécu / data / hygiène, aucun blocage immédiat (ex. #50 TOCTOU, #82 idempotence, #37 unicité, #44 GC) | **drainé en story de durcissement à la clôture de l'épic** (voir §5) — ne pas laisser traîner |
+| **gate-déploiement** | requis avant un jalon de déploiement (ex. Nginx X-Real-IP #47) | milestone `pre-deploy`, différer au pré-déploiement |
+| **parké-playtest** | calibration ⚙️ qui exige l'enfant qui joue (ex. #66/#76/#83) | milestone `playtest-⚙️`, **parké explicitement** (pas oublié) |
 
-Rapporter le tri (bref). Ne pas absorber une issue hors-scope dans une story (anti-drift).
+Rapporter le tri (bref). Ne pas absorber une issue hors-scope dans une story (anti-drift). **Toute issue `discovered` reçoit une classe + un milestone** → aucune ne reste sans destination.
 
 ## 3. Choisir l'épic + découper en stories
 - **Ordre de build verrouillé** (CLAUDE.md/PLAN) : ne pas sauter. Épic courant fini → épic suivant.
@@ -46,7 +51,13 @@ Le thread orchestrateur **ne construit pas lui-même** (contexte plat, cf. §7).
 3. **Fixes de consensus in-contract** : renvoyer au **subagent de build** (via SendMessage — il a encore son worktree) « applique : … ». **Pas** dans le thread principal.
 4. **Merge** (ADR 0003 : reviews+PO ✅ + CI verte + à jour) → **`retro`** → `LEARNINGS` → **checkpoint statut** (mémoire).
 
-Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les merges. Répéter jusqu'à vider l'épic, puis **clôturer l'épic** et revenir à l'étape 3.
+Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les merges. Répéter jusqu'à vider l'épic.
+
+**Clôture d'épic — DRAIN obligatoire (avant de passer à l'épic suivant) :**
+1. Re-trier **toutes** les `discovered` restantes (grille §2).
+2. Les `backlog-hygiène` du scope de l'épic (durcissement / sécu / data non-bloquants — ex. #50/#82/#37/#44) → **regroupées en UNE story de durcissement** (`hardening`), passée par la boucle normale (§5) **avant** de démarrer l'épic suivant. Ne jamais clore un épic en laissant sa dette sécu/data en suspens.
+3. Les `parké-playtest` et `gate-déploiement` restent sous leur milestone (non drainées ici, mais **visibles et assignées**).
+4. Puis **clôturer l'épic** et revenir à l'étape 3.
 
 ## 6. Escalade — SEULEMENT le drift
 S'arrêter et demander le sign-off du propriétaire **uniquement** si une décision **modifierait une décision verrouillée** : modèle de données PLAN · pédagogie ENGINE · économie · sécurité · scope d'épic. **Sinon, jamais.** (ADR 0004.) Le subagent de build **escalade le drift** à l'orchestrateur (il ne tranche pas). Présenter le choix de drift clairement + option recommandée, attendre l'arbitrage.
