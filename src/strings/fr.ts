@@ -211,6 +211,21 @@ export const fr = {
         /** Phrase-clé de la découverte (`{n}` = 10 − a, cases à compléter). */
         missing: "Il manque {n} pour faire 10",
       },
+      /**
+       * Étayage droite numérique de l'addition/soustraction (story #95, ENGINE §1
+       * add/sub dans 20, PRODUCT §3.4, WIREFRAMES §3d). Voix de Teddy, tutoiement —
+       * `{a}`/`{b}` = opérandes du calcul. Sert **à la fois** de texte visible (sous
+       * la droite, doublé de l'icône flèche) ET de **nom accessible** (via le
+       * registre `label(props)`, rétro #94 : pas de `role="img"` imbriqué). Le sens
+       * du saut (avance/recul) N'EST JAMAIS porté par la seule couleur — texte +
+       * icône (a11y daltonisme).
+       */
+      numberLine: {
+        /** Addition : saut **avant** depuis `a` de `b` (`{a}`/`{b}` = opérandes). */
+        forward: "Depuis {a}, on avance de {b}",
+        /** Soustraction : saut **arrière** depuis `a` de `b`. */
+        backward: "Depuis {a}, on recule de {b}",
+      },
     },
     /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec). */
     results: {

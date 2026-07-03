@@ -3,6 +3,7 @@
 import type { Skill } from "@/lib/engine/domain";
 import { strings } from "@/strings";
 import { TenFrame } from "@/components/game/scaffolds/TenFrame";
+import { NumberLine, numberLineLabel } from "@/components/game/scaffolds/NumberLine";
 
 /**
  * **Dispatcher d'étayage visuel** (épic #4, WIREFRAMES §3d, PRODUCT §2.2).
@@ -113,8 +114,17 @@ interface ScaffoldEntry {
  */
 const SCAFFOLD_BY_SKILL: Record<Skill, ScaffoldEntry> = {
   comp10: { render: (props) => <TenFrame {...props} />, label: tenFrameLabel },
-  add: { render: () => <ScaffoldPlaceholder skill="add" />, label: genericLabel },
-  sub: { render: () => <ScaffoldPlaceholder skill="sub" />, label: genericLabel },
+  // Story #95 : add ET sub partagent le MÊME composant `NumberLine` (droite
+  // numérique, PRODUCT §3.4) — pas de scission. Chaque skill fournit son propre
+  // libellé (« on avance » vs « on recule »), dérivé des props par le registre.
+  add: {
+    render: (props) => <NumberLine {...props} />,
+    label: (props) => numberLineLabel("add", props),
+  },
+  sub: {
+    render: (props) => <NumberLine {...props} />,
+    label: (props) => numberLineLabel("sub", props),
+  },
   mult: { render: () => <ScaffoldPlaceholder skill="mult" />, label: genericLabel },
 };
 
