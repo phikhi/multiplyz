@@ -29,6 +29,13 @@
       "when": 1782982174473,
       "tag": "0003_wide_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1783056286711,
+      "tag": "0004_fair_garia",
+      "breakpoints": true
     }
   ]
 }
