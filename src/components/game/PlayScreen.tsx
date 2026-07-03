@@ -332,6 +332,8 @@ function PlayingGame({
         <FeedbackPanel
           phase={game.current.phase}
           correctAnswer={resolveAnswer(game.current.question.factKey)}
+          skill={game.current.question.skill}
+          operands={game.current.question.operands}
           variantSeed={game.currentIndex}
           onContinue={handleContinue}
           onRetry={handleRetry}

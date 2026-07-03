@@ -189,6 +189,18 @@ export const fr = {
       answerReveal: "La bonne réponse : {n}",
       tryAgain: "Je réessaie",
     },
+    /**
+     * Étayage visuel du re-essai (WIREFRAMES §3d, PRODUCT §2.2, épic #4). Voix de
+     * Teddy, tutoiement. Le **label** décrit la représentation pour un lecteur
+     * d'écran (a11y : le visuel est doublé d'un texte, jamais couleur/forme seule).
+     * Les étayages concrets (dix-cases, droite numérique, matrice) porteront leur
+     * propre libellé détaillé dans les stories 4.2/4.3/4.4 — ici = libellé
+     * **générique** du conteneur, stable pour la fondation.
+     */
+    scaffold: {
+      /** Libellé accessible du conteneur d'étayage (WIREFRAMES §3d « Regarde »). */
+      label: "Un petit dessin pour t'aider à voir le calcul",
+    },
     /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec). */
     results: {
       title: "Niveau bouclé ! 🎉",
