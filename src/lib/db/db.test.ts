@@ -210,4 +210,25 @@ describe("backfillNameKeys", () => {
     // Rejeu : relève à l'identique, ne « répare » pas silencieusement.
     expect(() => backfillNameKeys(db)).toThrow(/même[\s\S]*clé d'unicité/);
   });
+
+  // Collision avec une clé DÉJÀ posée (non-NULL), pas seulement intra-batch : exerce
+  // le pré-chargement `claimedBy` depuis les lignes non-NULL. Rouge si ce SELECT est
+  // neutralisé (la garde ne verrait que les collisions du même batch).
+  it("détecte une collision avec une clé name_key déjà posée en base (#105)", () => {
+    const db = createDatabase(":memory:");
+    db.run(
+      sql`CREATE TABLE profiles (id INTEGER PRIMARY KEY, name TEXT NOT NULL, name_key TEXT UNIQUE)`,
+    );
+    // id 1 : clé déjà posée « élodie » ; id 2 : NULL « Élodie » → nameKey = « élodie ».
+    db.run(
+      sql`INSERT INTO profiles (id, name, name_key) VALUES (1, 'élodie', 'élodie'), (2, 'Élodie', NULL)`,
+    );
+
+    expect(() => backfillNameKeys(db)).toThrow(/même[\s\S]*clé d'unicité/);
+    // La ligne NULL n'est pas écrite ; la clé existante est intouchée.
+    expect(db.all(sql`SELECT id, name_key FROM profiles ORDER BY id`)).toEqual([
+      { id: 1, name_key: "élodie" },
+      { id: 2, name_key: null },
+    ]);
+  });
 });
