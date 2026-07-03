@@ -161,7 +161,7 @@ distracteurs(fact):
 
 - **1ère réponse** = celle qui compte pour la maîtrise. Faux / « je ne sais pas » → rétrograde + étayage + **re-essai** (pratique, non comptée).
 - `response_ms` = du moment où la question s'affiche à la 1ère réponse.
-- **Anti-triche** : réponse **très rapide ET fausse** (< ~600 ms ⚙️) = martèlement → faux, pas de promotion ; détecté via fluence. La transition **QCM→pavé** empêche d'« inflater » la maîtrise en devinant.
+- **Anti-triche** : réponse **très rapide** (< ~600 ms ⚙️, **juste ou fausse**) = martèlement/devinette → **jamais** de promotion (détecté via fluence, cf. §2 : une réponse sous ce seuil n'est jamais comptée fluente). Rapide et faux reste faux (rétrograde) ; rapide et **juste** reste compté **juste** mais retombe sur « juste mais lent » (boîte inchangée, sans crédit de maîtrise) — pas de traitement punitif, seulement pas de promotion. La transition **QCM→pavé** empêche d'« inflater » la maîtrise en devinant.
 
 ---
 

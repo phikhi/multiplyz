@@ -11,7 +11,7 @@
 1. **Accueil** : choisir/créer un profil.
 2. **Création profil** : prénom + choix d'avatar + **PIN 4 chiffres** (gros pavé).
 3. **PIN parent** : le parent pose son **PIN distinct** (1 fois) + courte explé de la méthode.
-4. **Diagnostic déguisé en jeu** : « Petit défi pour préparer ta carte ! » — ~15 calculs répartis sur les 4 compétences, adaptatif, **aucun score montré**. Finit sur « Bravo, ton aventure est prête ! ».
+4. **Diagnostic déguisé en jeu** : « Petit défi pour préparer ta carte ! » — ~18 calculs répartis sur les 4 compétences (cf. ENGINE §3/§12), adaptatif, **aucun score montré**. Finit sur « Bravo, ton aventure est prête ! ».
 5. **Atterrissage** : carte du monde, 1er monde débloqué, compagnon de départ offert.
 
 ### 1.2 Retour quotidien (enfant)
