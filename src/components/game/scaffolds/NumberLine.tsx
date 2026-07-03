@@ -30,15 +30,25 @@ import type { ScaffoldRepresentationProps } from "@/components/game/scaffolds/Vi
  * `DISPLAY_FLOOR`/`DISPLAY_CEILING` sont les 3 constantes ⚙️ à recalibrer au
  * playtest si besoin (élargissement Tier 2, ENGINE §8).
  *
+ * **Saut rendu visuellement** (BLOQUANT game-design, AC #1 « droite numérique **avec
+ * saut** ») : un **arc courbe** (façon manuel scolaire) est tracé au-dessus de la
+ * ligne, de la graduation de départ (`a`) à celle d'arrivée (`correctAnswer`), avec
+ * une **pointe de flèche** à la destination orientée dans le sens du saut (avance →
+ * droite, recul → gauche). L'enfant **voit** le bond (amplitude + sens), pas
+ * seulement sa description. L'arc est un overlay SVG positionné sur le même modèle de
+ * coordonnées que les graduations (fraction `(v − min)/(max − min)`) → alignement
+ * exact départ/arrivée, sans perturber la layout flex responsive (`overflow-x:auto`).
+ *
  * **A11y (rétro #94, contrat hérité)** : ce composant est **purement décoratif**
  * (`aria-hidden`, AUCUN `role="img"` propre) — l'unique `role="img"` est le
  * conteneur `VisualScaffold`, dont le nom accessible est dérivé du registre
- * (`label(props)` dans `VisualScaffold.tsx`, différent pour add/sub). Le texte
- * visible sous la droite (« Depuis {a}, on avance/recule de {b} ») + l'icône flèche
- * (`→`/`←`) **doublent** le sens du saut — jamais porté par la seule couleur de
- * l'arc (daltonisme). Graduations contrastées (`--scaffold-line-tick*`, tokens
- * texte sur surface neutre dans les 2 thèmes, jamais `--color-text-inverse` hors
- * fond accent plein — piège #94).
+ * (`label(props)` dans `VisualScaffold.tsx`, différent pour add/sub). L'arc SVG lui
+ * aussi `aria-hidden`. Le sens du saut est porté par **TROIS canaux** (jamais couleur
+ * seule, daltonisme) : le texte visible (« Depuis {a}, on avance/recule de {b} »),
+ * l'icône flèche (`→`/`←`), ET l'orientation de l'arc/pointe sur la ligne.
+ * Graduations et arc contrastés (`--scaffold-line-*`, ≥ 3:1 sur la surface neutre
+ * dans les 2 thèmes — WCAG 1.4.11, jamais `--color-text-inverse` hors fond accent
+ * plein — piège #94).
  *
  * **Marqueur de dispatch** (LEARNINGS rétro #93/#94) : `data-scaffold-kind`
  * ET `data-skill` sur le nœud racine — dérivés du registre appelant, gardent le
@@ -99,24 +109,65 @@ export function numberLineLabel(
   return fill(template, { a: String(a), b: String(b) });
 }
 
-/** Une graduation de la droite (départ, arrivée, ou intermédiaire). */
+/** Largeur ⚙️ mini d'une colonne de graduation (lisibilité ; scroll horizontal au-delà). */
+const MIN_TICK_COL = "var(--space-6)"; /* 32px — cible ≥ largeur d'un chiffre confortable */
+
+/**
+ * Position horizontale (fraction 0..1) d'une valeur sur la droite affichée `[min, max]`.
+ * `max > min` est **toujours** garanti par `displayBounds` : `LINE_MARGIN ≥ 1` élargit
+ * l'intervalle de chaque côté avant le clamp `[0, 20]`, et aucun couple de bornes
+ * clampées ne dégénère (min point = max point = 0 → `[0, 2]` ; = 20 → `[18, 20]`) →
+ * pas de garde anti-division-par-zéro (branche morte évitée, cf. LEARNINGS #62).
+ */
+function fractionOf(value: number, min: number, max: number): number {
+  return (value - min) / (max - min);
+}
+
+/**
+ * Une graduation de la droite, **positionnée en absolu** à sa fraction horizontale
+ * (même modèle de coordonnées que l'arc de saut → alignement exact). Départ (`a`) et
+ * arrivée (`correctAnswer`) = pastilles ; intermédiaires = petits traits + chiffre.
+ */
 function Tick({
   value,
+  frac,
   kind,
 }: {
   readonly value: number;
+  readonly frac: number;
   readonly kind: "start" | "end" | "intermediate";
 }) {
-  if (kind === "intermediate") {
-    return (
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          gap: "var(--space-1)",
-        }}
-      >
+  const isPoint = kind !== "intermediate";
+  const isStart = kind === "start";
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: `${frac * 100}%`,
+        bottom: 0,
+        transform: "translateX(-50%)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "var(--space-1)",
+      }}
+    >
+      {isPoint ? (
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "var(--scaffold-line-point-size)",
+            height: "var(--scaffold-line-point-size)",
+            borderRadius: "var(--border-radius-full)",
+            backgroundColor: isStart
+              ? "var(--scaffold-line-start-bg)"
+              : "var(--scaffold-line-end-bg)",
+            border: `2px solid ${isStart ? "var(--scaffold-line-start-border)" : "var(--scaffold-line-end-border)"}`,
+          }}
+        />
+      ) : (
         <span
           style={{
             width: "2px",
@@ -124,54 +175,87 @@ function Tick({
             backgroundColor: "var(--scaffold-line-tick)",
           }}
         />
-        <span
-          style={{
-            fontFamily: "var(--font-family-body)",
-            fontSize: "var(--font-size-xs)",
-            color: "var(--scaffold-line-tick-label)",
-          }}
-        >
-          {value}
-        </span>
-      </div>
-    );
-  }
-
-  const isStart = kind === "start";
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "var(--space-1)",
-      }}
-    >
+      )}
       <span
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "var(--scaffold-line-point-size)",
-          height: "var(--scaffold-line-point-size)",
-          borderRadius: "var(--border-radius-full)",
-          backgroundColor: isStart
-            ? "var(--scaffold-line-start-bg)"
-            : "var(--scaffold-line-end-bg)",
-          border: `2px solid ${isStart ? "var(--scaffold-line-start-border)" : "var(--scaffold-line-end-border)"}`,
-        }}
-      />
-      <span
-        style={{
-          fontFamily: "var(--font-family-numeric)",
-          fontSize: "var(--font-size-sm)",
-          fontWeight: "var(--font-weight-semibold)",
-          color: isStart ? "var(--scaffold-line-start-glyph)" : "var(--scaffold-line-end-glyph)",
+          fontFamily: isPoint ? "var(--font-family-numeric)" : "var(--font-family-body)",
+          fontSize: isPoint ? "var(--font-size-sm)" : "var(--font-size-xs)",
+          fontWeight: isPoint ? "var(--font-weight-semibold)" : "var(--font-weight-normal)",
+          color: isPoint
+            ? isStart
+              ? "var(--scaffold-line-start-glyph)"
+              : "var(--scaffold-line-end-glyph)"
+            : "var(--scaffold-line-tick-label)",
         }}
       >
         {value}
       </span>
     </div>
+  );
+}
+
+/**
+ * **Arc du saut** — overlay SVG tracé de la graduation de départ (`a`) à celle
+ * d'arrivée (`correctAnswer`), avec une pointe de flèche à la destination orientée
+ * dans le sens du saut (avance → droite, recul → gauche). `preserveAspectRatio="none"`
+ * + `viewBox` 0..100 en x → l'abscisse de l'arc = la fraction × 100, exactement comme
+ * les graduations (alignement départ/arrivée garanti). Décoratif (`aria-hidden` porté
+ * par la racine). `data-jump` + `data-jump-direction` = marqueurs observables (garde
+ * game-design : l'arc existe ET son orientation dérive du sens du saut).
+ */
+function JumpArc({
+  startFrac,
+  endFrac,
+  forward,
+}: {
+  readonly startFrac: number;
+  readonly endFrac: number;
+  readonly forward: boolean;
+}) {
+  const x1 = startFrac * 100;
+  const x2 = endFrac * 100;
+  // Baseline en bas du viewBox (la ligne), arc bombé vers le haut ; pointe à l'arrivée.
+  const baseY = 92;
+  const peakY = 18;
+  const controlX = (x1 + x2) / 2;
+  const arrow = 5; // demi-largeur de la pointe (unités viewBox)
+  // Direction de la pointe : vers l'arrivée. La branche de la flèche est orientée selon
+  // le SENS du saut (forward → pointe vers la droite, backward → vers la gauche).
+  const dir = forward ? 1 : -1;
+  return (
+    <svg
+      data-jump="true"
+      data-jump-direction={forward ? "forward" : "backward"}
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        overflow: "visible",
+      }}
+    >
+      <path
+        d={`M ${x1} ${baseY} Q ${controlX} ${peakY} ${x2} ${baseY}`}
+        fill="none"
+        stroke="var(--scaffold-line-jump-arc)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Pointe de flèche à l'arrivée, ouverte dans le sens du saut. */}
+      <path
+        d={`M ${x2} ${baseY} l ${dir * arrow} ${-arrow} M ${x2} ${baseY} l ${dir * arrow} ${arrow}`}
+        fill="none"
+        stroke="var(--scaffold-line-jump-arc)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
   );
 }
 
@@ -199,24 +283,32 @@ export function NumberLine({ operands, correctAnswer }: ScaffoldRepresentationPr
         width: "100%",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          width: "100%",
-          overflowX: "auto",
-          paddingBottom: "var(--space-1)",
-          borderBottom: "2px solid var(--scaffold-line-track)",
-        }}
-      >
-        {values.map((value) => (
-          <Tick
-            key={value}
-            value={value}
-            kind={value === a ? "start" : value === correctAnswer ? "end" : "intermediate"}
+      {/* Fenêtre à scroll horizontal (WIREFRAMES §8, reflow tél) : la piste garde une
+          largeur mini par graduation, la fenêtre défile si l'écran est trop étroit. */}
+      <div style={{ width: "100%", overflowX: "auto" }}>
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            minWidth: `calc(${values.length} * ${MIN_TICK_COL})`,
+            height: "var(--space-9)", // 96px — place pour l'arc au-dessus + pastilles + chiffres
+            borderBottom: "2px solid var(--scaffold-line-track)",
+          }}
+        >
+          <JumpArc
+            startFrac={fractionOf(a, min, max)}
+            endFrac={fractionOf(correctAnswer, min, max)}
+            forward={forward}
           />
-        ))}
+          {values.map((value) => (
+            <Tick
+              key={value}
+              value={value}
+              frac={fractionOf(value, min, max)}
+              kind={value === a ? "start" : value === correctAnswer ? "end" : "intermediate"}
+            />
+          ))}
+        </div>
       </div>
       <p
         style={{

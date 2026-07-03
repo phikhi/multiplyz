@@ -138,12 +138,14 @@ describe("VisualScaffold — a11y (le visuel est doublé d'un texte)", () => {
     // Effet observable : si le registre retombait sur le même libellé pour add et
     // sub (ou sur le générique), cette assertion rougirait — le sens du saut doit
     // être porté par le nom accessible du role="img" unique, pas seulement le visuel.
-    render(<VisualScaffold skill="add" operands={[6, 8]} correctAnswer={14} />);
+    // Mêmes operands [8, 6] pour les deux sens, TOUS DEUX dans le domaine v1 (ENGINE
+    // §1) : add → 8+6=14 (somme ≤ 20), sub → 8−6=2 (b ≤ a, résultat ≥ 0).
+    render(<VisualScaffold skill="add" operands={[8, 6]} correctAnswer={14} />);
     const addLabel = screen.getByRole("img").getAttribute("aria-label");
     expect(addLabel).not.toBe(strings.play.scaffold.label);
 
     const { container } = render(
-      <VisualScaffold skill="sub" operands={[6, 8]} correctAnswer={-2} />,
+      <VisualScaffold skill="sub" operands={[8, 6]} correctAnswer={2} />,
     );
     const subImg = container.querySelector('[role="img"]');
     const subLabel = subImg?.getAttribute("aria-label");

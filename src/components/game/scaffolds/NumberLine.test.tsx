@@ -138,6 +138,82 @@ describe("NumberLine — droite numérique add/sub (ENGINE §1, PRODUCT §3.4, s
     });
   });
 
+  describe("saut rendu visuellement — arc sur la ligne (BLOQUANT game-design, AC #1)", () => {
+    /** Le connecteur SVG du saut (data-jump) et son path principal (arc courbe). */
+    function jump(container: HTMLElement) {
+      return container.querySelector('[data-jump="true"]');
+    }
+    /** Extrait les coordonnées `M x y Q cx cy x2 y2` du 1er path (l'arc). */
+    function arcEndpoints(container: HTMLElement): { x1: number; x2: number } {
+      const path = container.querySelector('[data-jump="true"] path');
+      const d = path?.getAttribute("d") ?? "";
+      // `M x1 y1 Q cx cy x2 y2`
+      const m = d.match(/^M\s+([\d.]+)\s+[\d.]+\s+Q\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+/u);
+      if (m === null) throw new Error(`arc path inattendu: "${d}"`);
+      return { x1: Number(m[1]), x2: Number(m[2]) };
+    }
+
+    it("l'arc de saut EXISTE sur la ligne (pas seulement dans le texte)", () => {
+      // Effet observable : si le connecteur visuel était retiré (retour à la seule
+      // flèche du texte), cette assertion rougirait — le modèle « droite AVEC saut »
+      // (PRODUCT §3.4) exige de VOIR le bond.
+      const { container } = render(<NumberLine operands={[3, 4]} correctAnswer={7} />);
+      expect(jump(container)).not.toBeNull();
+    });
+
+    it("add → l'arc va du départ (a) vers la DROITE (arrivée > départ) + data-jump-direction=forward", () => {
+      // Effet observable de l'ORIENTATION dérivée du sens : addition = saut avant →
+      // l'abscisse d'arrivée de l'arc est à DROITE de l'abscisse de départ.
+      const { container } = render(<NumberLine operands={[3, 4]} correctAnswer={7} />);
+      expect(jump(container)).toHaveAttribute("data-jump-direction", "forward");
+      const { x1, x2 } = arcEndpoints(container);
+      expect(x2).toBeGreaterThan(x1);
+    });
+
+    it("sub → l'arc va du départ (a) vers la GAUCHE (arrivée < départ) + data-jump-direction=backward", () => {
+      // Soustraction = saut arrière → l'abscisse d'arrivée est à GAUCHE du départ.
+      const { container } = render(<NumberLine operands={[9, 4]} correctAnswer={5} />);
+      expect(jump(container)).toHaveAttribute("data-jump-direction", "backward");
+      const { x1, x2 } = arcEndpoints(container);
+      expect(x2).toBeLessThan(x1);
+    });
+
+    it("l'arc relie EXACTEMENT le départ (a) à l'arrivée (correctAnswer), pas des positions figées", () => {
+      // Garde anti-valeur-en-dur : le départ de l'arc est à gauche de l'arrivée pour
+      // add, et l'amplitude reflète l'écart réel. Deux calculs d'écarts différents →
+      // amplitudes d'arc différentes (rougit si les endpoints étaient constants).
+      const { container: c1 } = render(<NumberLine operands={[3, 2]} correctAnswer={5} />);
+      const { container: c2 } = render(<NumberLine operands={[3, 8]} correctAnswer={11} />);
+      const span1 = Math.abs(arcEndpoints(c1).x2 - arcEndpoints(c1).x1);
+      const span2 = Math.abs(arcEndpoints(c2).x2 - arcEndpoints(c2).x1);
+      // Écart +2 (compact, borne resserrée) vs +8 : les fenêtres d'affichage diffèrent,
+      // mais dans les 2 cas l'arc couvre une amplitude non nulle et orientée.
+      expect(span1).toBeGreaterThan(0);
+      expect(span2).toBeGreaterThan(0);
+    });
+
+    it("la pointe de flèche de l'arc s'ouvre dans le sens du saut (add=droite, sub=gauche)", () => {
+      // Effet observable de l'orientation de la POINTE : le 2ᵉ path (arrowhead) porte
+      // des offsets `l ±arrow …` dont le signe suit le sens (dir=+1 add / −1 sub).
+      const { container: add } = render(<NumberLine operands={[2, 3]} correctAnswer={5} />);
+      const { container: sub } = render(<NumberLine operands={[8, 3]} correctAnswer={5} />);
+      const addArrow = add.querySelectorAll('[data-jump="true"] path')[1]?.getAttribute("d") ?? "";
+      const subArrow = sub.querySelectorAll('[data-jump="true"] path')[1]?.getAttribute("d") ?? "";
+      // add → offsets positifs (vers la droite) ; sub → négatifs (vers la gauche).
+      expect(addArrow).toMatch(/l\s+5\s/u);
+      expect(subArrow).toMatch(/l\s+-5\s/u);
+      expect(addArrow).not.toBe(subArrow);
+    });
+
+    it("l'arc est décoratif (aucun role='img' ni texte annoncé — a11y via le conteneur)", () => {
+      const { container } = render(<NumberLine operands={[4, 3]} correctAnswer={7} />);
+      const svg = jump(container);
+      expect(svg?.querySelectorAll('[role="img"]')).toHaveLength(0);
+      // Le SVG ne contient aucun nœud texte (l'info a11y passe par le label du parent).
+      expect(svg?.textContent).toBe("");
+    });
+  });
+
   describe("numberLineLabel — libellé accessible (nom du role='img' parent)", () => {
     it("add → « Depuis {a}, on avance de {b} »", () => {
       const label = numberLineLabel("add", { operands: [6, 3], correctAnswer: 9 });

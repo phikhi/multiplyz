@@ -190,10 +190,12 @@
   /* droite numérique (story #95, NumberLine — add/sub) — même famille sémantique
      que --scaffold-*, référence des tokens existants uniquement. Le sens du saut
      (avance/recul) N'EST JAMAIS porté par la seule couleur — texte + icône flèche
-     (a11y daltonisme, cf. rétro #94 : tout glyphe sur fond neutre = token texte
-     contrastant SUR CE fond dans les 2 thèmes, jamais --color-text-inverse). */
+     + ARC tracé sur la ligne (a11y daltonisme, cf. rétro #94 : tout glyphe sur fond
+     neutre = token texte contrastant SUR CE fond dans les 2 thèmes, jamais
+     --color-text-inverse). Les éléments porteurs de sens (graduation, arc) atteignent
+     ≥ 3:1 sur le fond neutre du scaffold (WCAG 1.4.11) dans les 2 thèmes. */
   --scaffold-line-track:        var(--color-border-primary); /* trait de la droite, surface neutre */
-  --scaffold-line-tick:         var(--color-text-tertiary);  /* graduations intermédiaires */
+  --scaffold-line-tick:         var(--color-text-secondary);  /* graduations (≥3:1 sur fond neutre, 2 thèmes) */
   --scaffold-line-tick-label:   var(--color-text-secondary); /* chiffres des graduations */
   --scaffold-line-start-bg:     var(--color-bg-secondary);   /* point de départ (a) */
   --scaffold-line-start-border: var(--color-border-primary);
@@ -201,7 +203,7 @@
   --scaffold-line-end-bg:       var(--color-accent-primary); /* point d'arrivée (correctAnswer) */
   --scaffold-line-end-border:   var(--color-accent-primary-active);
   --scaffold-line-end-glyph:    var(--color-text-inverse);   /* blanc sur l'accent plein (2 thèmes) */
-  --scaffold-line-jump-arc:     var(--color-accent-secondary); /* arc du saut (turquoise, ≠ accent du point d'arrivée) */
+  --scaffold-line-jump-arc:     var(--color-accent-primary-active); /* arc du saut (violet profond, ≥3:1 fond neutre 2 thèmes, distinct du point d'arrivée) */
   --scaffold-line-point-size:   var(--space-5); /* 24px — pastille départ/arrivée */
 
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
