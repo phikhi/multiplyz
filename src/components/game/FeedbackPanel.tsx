@@ -31,7 +31,11 @@ import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
  */
 export interface FeedbackPanelProps {
   readonly phase: Exclude<QuestionPhase, "asking">;
-  /** Bonne réponse du fait (affichée uniquement en re-essai, ENGINE §9). */
+  /**
+   * Bonne réponse du fait (montrée uniquement en re-essai, ENGINE §9), **en synthèse
+   * SOUS l'étayage visuel** (ordre inversé issue #100 / ADR 0007 : l'étayage-découverte
+   * d'abord, le chiffre en conclusion). No-fail : toujours présente en re-essai.
+   */
   readonly correctAnswer: number;
   /** Compétence du fait — indexe l'étayage visuel du re-essai (`VisualScaffold`, épic #4). */
   readonly skill: Skill;
