@@ -84,8 +84,11 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * la config est un **contrat brut non validé de façon croisée** (LEARNINGS #58) — la
  * logique consommatrice ne suppose jamais `leitnerDelaysDays` cohérent avec `maxBox`
  * ni la boîte dans les bornes, elle borne défensivement (jamais d'accès hors tableau).
+ *
+ * **Exporté** : le diagnostic de départ (3.6) amorce ses lignes de maîtrise avec le
+ * **même** barème de délai que les transitions Leitner — pas de second barème réinventé.
  */
-function boxDelayMs(box: number, config: EngineConfig): number {
+export function boxDelayMs(box: number, config: EngineConfig): number {
   const delays = config.leitnerDelaysDays;
   // Clamp dans [0, dernier index] : une boîte cible peut dépasser la table si `maxBox`
   // > longueur des délais (config incohérente) ; on retombe alors sur le dernier délai
@@ -103,8 +106,12 @@ function boxDelayMs(box: number, config: EngineConfig): number {
  * doivent pas promouvoir. Un tel cas retombe donc sur « juste mais lent » (pas de
  * promotion). Le seuil anti-mash borne le bas, le seuil de fluence borne le haut :
  * la fenêtre promotionnelle est `antiMashMs ≤ response_ms ≤ seuil_fluence`.
+ *
+ * **Exporté** : le diagnostic de départ (3.6) classe « juste + rapide » vs « juste +
+ * lent » avec **exactement** ce prédicat (mêmes seuils par compétence + anti-mash) —
+ * pas de second classement réinventé (LEARNINGS #46/#59).
  */
-function isFluent(attempt: Attempt, config: EngineConfig): boolean {
+export function isFluent(attempt: Attempt, config: EngineConfig): boolean {
   const fluenceThreshold = config.fluenceThresholdsMs[attempt.skill];
   return (
     attempt.correct &&
