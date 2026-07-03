@@ -3,7 +3,7 @@
 - **Statut** : accepted
 - **Type** : product
 - **Portée** : majeure (drift — flow verrouillé PRODUCT §2.2 / WIREFRAMES §3d, décision propriétaire cf. issue #100)
-- **Liens** : issue [#100](https://github.com/phikhi/multiplyz/issues/100) · PR [#PLACEHOLDER_PR](https://github.com/phikhi/multiplyz/pull/PLACEHOLDER_PR) · spec(s) impactée(s) : `PRODUCT.md` §2.2, `WIREFRAMES.md` §3d, `ENGINE.md` §9
+- **Liens** : issue [#100](https://github.com/phikhi/multiplyz/issues/100) · PR [#117](https://github.com/phikhi/multiplyz/pull/117) · spec(s) impactée(s) : `PRODUCT.md` §2.2, `WIREFRAMES.md` §3d, `ENGINE.md` §9
 
 ## Contexte
 
