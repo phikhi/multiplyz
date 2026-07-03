@@ -310,12 +310,15 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       }
       const a = parsed.a;
       const missing = parsed.target - parsed.a;
-      const tenFrameLabel = strings.play.scaffold.tenFrame.label.replace("{a}", String(a));
-      const tenFrame = page.getByRole("img", { name: tenFrameLabel });
+      // Unique `role="img"` de l'étayage, dont le NOM ACCESSIBLE porte l'info numérique
+      // « il manque {n} pour faire 10 » (rétro #94 : pas de `role="img"` imbriqué ; le
+      // libellé spécifique EST annoncé, pas un générique). En conditions réelles
+      // (next-dev-loop indispo #24 → E2E).
+      const missingText = strings.play.scaffold.tenFrame.missing.replace("{n}", String(missing));
+      const tenFrame = page.getByRole("img", { name: missingText });
       await expect(tenFrame).toBeVisible();
-      await expect(
-        page.getByText(strings.play.scaffold.tenFrame.missing.replace("{n}", String(missing))),
-      ).toBeVisible();
+      // Le même texte est aussi visible sous la grille (double canal, bénéfice voyants).
+      await expect(page.getByText(missingText)).toBeVisible();
       // Effet observable du modèle (pas seulement le montage) : a cases remplies (●)
       // ET (10-a) cases vides (○), total 10 — le composant réel calcule le bon
       // partage, pas seulement un conteneur générique présent.

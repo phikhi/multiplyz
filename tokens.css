@@ -174,14 +174,18 @@
 
   /* dix-cases (story #94, TenFrame) — cases remplies vs à-compléter distinguées par
      motif ET couleur (jamais couleur seule, a11y daltonisme). Même famille sémantique
-     que --scaffold-*, référence des tokens existants uniquement. */
+     que --scaffold-*, référence des tokens existants uniquement. Le glyphe de chaque
+     état a une COULEUR PROPRE qui contraste sur SON fond (rétro #94 : un token unique
+     rendait le `○` vide invisible sur la surface neutre en light ET dark). */
   --scaffold-cell-size:        var(--space-6); /* 32px — case carrée */
   --scaffold-cell-gap:         var(--space-2);
   --scaffold-cell-radius:      var(--border-radius-sm);
   --scaffold-cell-filled-bg:   var(--color-accent-primary);
   --scaffold-cell-filled-border: var(--color-accent-primary-active);
+  --scaffold-cell-filled-glyph:  var(--color-text-inverse); /* blanc sur l'accent (2 thèmes) */
   --scaffold-cell-empty-bg:    var(--color-bg-secondary);
   --scaffold-cell-empty-border: var(--color-border-primary);
+  --scaffold-cell-empty-glyph:   var(--color-text-primary); /* texte fort sur surface neutre (2 thèmes) */
 
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou

@@ -202,12 +202,12 @@ export const fr = {
       label: "Un petit dessin pour t'aider à voir le calcul",
       /**
        * Étayage dix-cases des compléments à 10 (story #94, ENGINE §1 `a + ? = 10`,
-       * PRODUCT §3.4, WIREFRAMES §3d). Voix de Teddy, tutoiement — le libellé texte
-       * porte l'info numérique (a11y : jamais couleur/forme seule, daltonisme).
+       * PRODUCT §3.4, WIREFRAMES §3d). Voix de Teddy, tutoiement — `missing` porte
+       * l'info numérique et sert **à la fois** de texte visible (sous la grille) ET de
+       * **nom accessible** de l'unique `role="img"` du conteneur (rétro #94 : pas de
+       * `role="img"` imbriqué ; a11y jamais couleur/forme seule, daltonisme).
        */
       tenFrame: {
-        /** Libellé accessible du bloc dix-cases (`{a}` = opérande rempli). */
-        label: "Dix-cases : {a} cases déjà remplies",
         /** Phrase-clé de la découverte (`{n}` = 10 − a, cases à compléter). */
         missing: "Il manque {n} pour faire 10",
       },

@@ -12,14 +12,21 @@ import type { ScaffoldRepresentationProps } from "@/components/game/scaffolds/Vi
  * Total = **10 cases** systématiquement (`filled + empty === 10`), déterministe
  * pour toute valeur de `a` dans le domaine.
  *
- * **A11y (WIREFRAMES §3d, CLAUDE.md a11y)** : remplies vs vides distinguées **par
- * motif ET couleur** (jamais couleur seule, daltonisme) — glyphe plein (`●`) sur
- * fond accent pour les cases remplies, glyphe contour (`○`) sur fond neutre bordé
- * en pointillés pour les cases vides. Glyphes décoratifs `aria-hidden` (l'info
- * passe par le libellé texte, jamais le dessin seul). Le conteneur porte un
- * `role="img"` labellisé (compte de cases remplies) et la phrase-clé « il manque
- * {n} pour faire 10 » est un texte visible + accessible (double canal). Aucun
- * contrôle focusable (étayage illustratif, cf. `VisualScaffold`).
+ * **A11y (WIREFRAMES §3d, CLAUDE.md a11y, rétro #94)** : remplies vs vides distinguées
+ * **par motif ET couleur** (jamais couleur seule, daltonisme) — glyphe plein (`●`) sur
+ * fond accent pour les cases remplies, glyphe contour (`○`) sur fond neutre bordé en
+ * pointillés pour les cases vides. **Le glyphe de chaque état a une couleur qui
+ * contraste sur SON fond** (rempli → `--scaffold-cell-filled-glyph` sur l'accent ;
+ * vide → `--scaffold-cell-empty-glyph`, un token texte visible sur la surface neutre
+ * dans les 2 thèmes) — le motif reste lisible, pas porté par la seule bordure.
+ *
+ * **Rendu purement décoratif (`aria-hidden`)** : ce composant NE porte PAS de
+ * `role="img"` propre — l'unique `role="img"` est le conteneur `VisualScaffold`, dont
+ * le nom accessible est « il manque {n} pour faire 10 » (dérivé du registre). Un
+ * `role="img"` imbriqué rendrait le sous-arbre opaque et avalerait ce libellé. Le
+ * visuel est donc `aria-hidden` ; l'info numérique est portée par le nom accessible du
+ * conteneur. Le texte « il manque {n} … » reste **visible** (bénéfice voyants) sous la
+ * grille — non annoncé deux fois car il vit dans le sous-arbre `aria-hidden`.
  *
  * **Marqueur de dispatch (LEARNINGS rétro #93/#97)** : porte `data-scaffold-kind`
  * ET `data-skill="comp10"` sur son nœud racine — dérivé du registre, garde le test
@@ -27,8 +34,8 @@ import type { ScaffoldRepresentationProps } from "@/components/game/scaffolds/Vi
  * routant vers le mauvais composant fait rougir l'assertion `data-skill`).
  *
  * **Tokens only** : famille `--scaffold-cell-*` (tokens.css), référence des tokens
- * existants (`--color-accent-*`, `--space-*`, `--border-radius-*`) — aucune valeur
- * en dur. S'intègre dans le slot `VisualScaffold` (≤ `--max-width-play`).
+ * existants (`--color-*`, `--space-*`, `--border-radius-*`) — aucune valeur en dur.
+ * S'intègre dans le slot `VisualScaffold` (≤ `--max-width-play`).
  */
 
 /** Nombre total de cases d'une dix-cases (constante du modèle, jamais en dur). */
@@ -43,7 +50,12 @@ function fill(template: string, token: string, value: string): string {
   return template.replace(token, value);
 }
 
-/** Une case de la grille — remplie (`filled`) ou à compléter, motif + couleur. */
+/**
+ * Une case de la grille — remplie (`filled`) ou à compléter. Distinction **motif +
+ * couleur** : le glyphe de chaque état porte une couleur qui contraste sur SON fond
+ * (rétro #94 FIX contraste : un token unique pour les 2 états rendait le `○` vide
+ * invisible sur la surface neutre en light ET dark).
+ */
 function Cell({ filled }: { readonly filled: boolean }) {
   return (
     <span
@@ -61,7 +73,7 @@ function Cell({ filled }: { readonly filled: boolean }) {
         border: filled
           ? "2px solid var(--scaffold-cell-filled-border)"
           : "2px dashed var(--scaffold-cell-empty-border)",
-        color: "var(--color-text-inverse)",
+        color: filled ? "var(--scaffold-cell-filled-glyph)" : "var(--scaffold-cell-empty-glyph)",
         fontSize: "var(--font-size-md)",
         lineHeight: 1,
       }}
@@ -80,8 +92,7 @@ export function TenFrame({ operands, correctAnswer }: ScaffoldRepresentationProp
     <div
       data-scaffold-kind="ten-frame"
       data-skill="comp10"
-      role="img"
-      aria-label={fill(strings.play.scaffold.tenFrame.label, "{a}", String(filledCount))}
+      aria-hidden="true"
       style={{
         display: "flex",
         flexDirection: "column",
