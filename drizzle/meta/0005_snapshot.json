@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8170f820-729d-4bc2-af06-425c658f443f",
+  "id": "b400b064-0b51-4aa0-b17b-76caadc7091b",
   "prevId": "98ad426e-029e-44c2-92be-0e74973445f7",
   "tables": {
     "attempts": {
@@ -289,6 +289,13 @@
           "name": "profiles_name_unique",
           "columns": [
             "name"
+          ],
+          "isUnique": true
+        },
+        "profiles_name_key_unique": {
+          "name": "profiles_name_key_unique",
+          "columns": [
+            "name_key"
           ],
           "isUnique": true
         }

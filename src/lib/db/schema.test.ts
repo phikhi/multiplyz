@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { afterAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index";
@@ -56,7 +56,7 @@ describe("schéma profiles", () => {
   it("index UNIQUE sur name_key : deux clés identiques → doublon rejeté (ADR 0005, #37)", () => {
     const db = freshDb();
     // name distincts (index BINARY sur `name` n'attrape rien) mais name_key identique :
-    // seul l'index UNIQUE `name_key` (posé par la migration à la main) doit lever.
+    // seul l'index UNIQUE `name_key` (déclaré via `.unique()`) doit lever.
     db.insert(profiles)
       .values({ name: "Élodie", nameKey: "élodie", pinHash: "h", avatar: "fox" })
       .run();
@@ -66,6 +66,21 @@ describe("schéma profiles", () => {
         .values({ name: "élodie", nameKey: "élodie", pinHash: "h2", avatar: "cat" })
         .run(),
     ).toThrow();
+  });
+
+  it("GARDE anti-drift : les index de `profiles` en base == exactement {name, name_key} (ADR 0005)", () => {
+    // Garde le contrat drizzle cohérent (schema.ts ↔ snapshot ↔ SQL réel). L'index
+    // `name_key` est déclaré via `.unique()` de colonne → drizzle-kit le sérialise
+    // dans le snapshot ET le SQL (`db:generate` = no-op). Ce test lit l'état RÉEL
+    // en base (`sqlite_master`) après migration : il échoue si une migration perd
+    // l'un des index OU si un index inattendu apparaît (divergence future). Effet
+    // observable : retirer `.unique()` de `name_key` OU casser le SQL 0005 → rouge.
+    const db = freshDb();
+    const rows = db.all<{ name: string }>(
+      sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'profiles' AND name NOT LIKE 'sqlite_autoindex_%'`,
+    );
+    const indexes = rows.map((r) => r.name).sort();
+    expect(indexes).toEqual(["profiles_name_key_unique", "profiles_name_unique"]);
   });
 });
 

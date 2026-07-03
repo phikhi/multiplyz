@@ -3,7 +3,7 @@
 - **Statut** : accepté
 - **Type** : data
 - **Portée** : mineure (durcissement in-contract d'un invariant déjà promis — l'agent orchestrateur accepte, ADR 0003)
-- **Liens** : issues #37 · #89 · PR #— · specs [AUTH.md](../../AUTH.md) §1 · [PLAN.md](../../PLAN.md) §Modèle de données
+- **Liens** : issues #37 · #89 · PR #91 · specs [AUTH.md](../../AUTH.md) §1 · [PLAN.md](../../PLAN.md) §Modèle de données
 
 ## Contexte
 
@@ -23,23 +23,24 @@ nameKey(raw) = sanitizeName(raw)      // trim + espaces compactés
                  .toLocaleLowerCase()  // minuscule locale-aware (couvre É→é)
 ```
 
-- Un **index UNIQUE `profiles_name_key_unique`** est posé sur `name_key` par une **migration à la main** (`drizzle/0005_illegal_fantastic_four.sql`) — pas via le callback d'extras `sqliteTable` (qui casserait le gate 100 % fonctions, LEARNINGS #34/#46). L'index n'est donc **pas** reflété dans le snapshot drizzle (assumé et documenté : un `db:generate` ne le régénère ni ne le supprime).
+- Un **index UNIQUE `profiles_name_key_unique`** est déclaré sur `name_key` via la **méthode chaînée `.unique()` de la colonne** (`text("name_key").notNull().unique("profiles_name_key_unique")`) — **pas** via le callback d'extras 3ᵉ-arg `sqliteTable(name, cols, (t) => [...])`. C'est **ce callback** qui casse le gate 100 % fonctions (jamais invoqué au runtime, LEARNINGS #34/#46) ; le `.unique()` de colonne n'ajoute **aucune** fonction non couverte (vérifié : `schema.ts` reste à 100 % lignes/fonctions/branches). drizzle-kit **sérialise** donc l'index dans le snapshot **et** dans le SQL généré (`drizzle/0005_*.sql`) → `schema.ts` ↔ snapshot ↔ SQL réel **cohérents**, `pnpm db:generate` = **no-op**.
 - L'onboarding (`createHousehold`) **écrit** `name_key = nameKey(name)`. Le check d'unicité (`nameTaken`) **matche** sur `name_key` (plus sur `lower(name)`). Même clé des deux côtés de la comparaison.
 - L'index UNIQUE sur `name` (BINARY) **reste** en garde-fou secondaire.
 
-La normalisation Unicode se fait **côté application** (JS `toLocaleLowerCase` + NFC), là où SQLite est aveugle. Aucune donnée à migrer (greenfield).
+La normalisation Unicode se fait **côté application** (JS `toLocaleLowerCase("fr-FR")` + NFC), là où SQLite est aveugle. Locale **figée** (`fr-FR`) pour ne pas dépendre de la locale du runtime (VPS). Aucune donnée à migrer (greenfield).
 
 ## Alternatives
 
 - **`COLLATE NOCASE` sur `name`** → rejeté : NOCASE de SQLite est **ASCII-only** aussi (ne résout pas `É`/`é`).
 - **Extension SQLite ICU / fonction `lower()` Unicode** → rejeté : dépendance native supplémentaire, hors STACK, pour un foyer single-tenant.
 - **Normalisation des deux côtés du lookup sans colonne ni index** → rejeté : plus simple mais l'invariant ne serait porté **qu'au niveau requête** (pas de défense en profondeur en base ; un futur chemin d'écriture oubliant la normalisation pourrait créer un doublon). La colonne dérivée + index UNIQUE **garantit** l'invariant en base.
-- **`uniqueIndex` dans le schéma drizzle (callback d'extras)** → rejeté : casse le gate 100 % fonctions (LEARNINGS #34/#46). D'où la migration à la main.
+- **`uniqueIndex` dans le callback d'extras 3ᵉ-arg de `sqliteTable`** → rejeté : ce callback n'est jamais invoqué au runtime → casse le gate 100 % fonctions (LEARNINGS #34/#46). Le `.unique()` **de colonne** l'évite (retenu).
+- **Migration SQL à la main + snapshot désynchronisé** (option initiale de la PR) → rejeté en review backend : le contrat drizzle (schema.ts ↔ snapshot ↔ SQL réel) serait rompu silencieusement — ajouter `.unique()` puis `db:generate` régénérerait une migration en doublon. Aucune garde. Remplacé par le `.unique()` de colonne (cohérent) + une **garde testée** (voir Conséquences).
 
 ## Conséquences
 
 - **+** L'invariant d'unicité insensible à la casse **Unicode** est désormais honoré (capitales accentuées incluses) et porté **en base** (index UNIQUE), pas seulement au niveau requête.
-- **+** `nameKey` est une fonction **pure** (couvrable 100 %, déterministe), réutilisable par tout futur lookup par prénom.
+- **+** `nameKey` est une fonction **pure** (couvrable 100 %, déterministe, locale figée `fr-FR`), réutilisable par tout futur lookup par prénom.
+- **+** `schema.ts` ↔ snapshot ↔ SQL réel **cohérents** (`.unique()` de colonne) → `pnpm db:generate` est un **no-op**, pas de drift. **Garde à effet observable** : `schema.test.ts` asserte que les index de `profiles` en base (`sqlite_master`) après migration valent exactement `{profiles_name_unique, profiles_name_key_unique}` → rouge si une migration perd/ajoute un index ou si `.unique()` est retiré.
 - **−** `profiles` porte une colonne dérivée `name_key` **NOT NULL** : tout insert de profil doit la fournir (le vrai chemin `createHousehold` le fait ; les seeds de test l'ajoutent explicitement).
-- **−** L'index UNIQUE `name_key` vit dans la migration à la main, désynchronisé du snapshot drizzle (contrainte du gate coverage, documentée dans `schema.ts`).
 - **Spec** : `AUTH.md` §1 et `PLAN.md` §Modèle de données mis à jour (unicité précisée « insensible à la casse **Unicode** », colonne `name_key` + index UNIQUE).

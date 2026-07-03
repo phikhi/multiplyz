@@ -39,19 +39,23 @@ export const schemaMeta = sqliteTable("schema_meta", {
  *   SQLite étant ASCII-only (`lower('Élodie') ≠ 'élodie'`), la casse accentuée est
  *   normalisée **côté application** : l'onboarding (#2.2) et le login (#2.3)
  *   écrivent/matchent sur `name_key`, jamais sur `lower(name)`. L'index UNIQUE sur
- *   `name` (BINARY) reste un garde-fou secondaire. L'index UNIQUE `name_key` est
- *   posé par la **migration à la main** (pas via le callback d'extras
- *   `sqliteTable`, qui casserait le gate 100 % fonctions — LEARNINGS #34/#46).
+ *   `name` (BINARY) reste un garde-fou secondaire. L'unicité de `name_key` est
+ *   déclarée via la **méthode chaînée `.unique()` de la colonne** (drizzle
+ *   sérialise l'index dans le snapshot + le SQL → schema/snapshot/migration
+ *   cohérents, `db:generate` = no-op). C'est le **callback d'extras 3ᵉ-arg**
+ *   `(t) => [...]` qui casse le gate 100 % fonctions (LEARNINGS #34/#46), PAS le
+ *   `.unique()` de colonne — ce dernier n'ajoute aucune fonction non couverte.
  */
 export const profiles = sqliteTable("profiles", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull().unique(),
   /**
    * Clé d'unicité dérivée du prénom, insensible à la casse Unicode
-   * (`nameKey(name)` — cf. `auth/validation.ts`). Sous index UNIQUE (posé par la
-   * migration à la main). Écrite à l'insertion du profil (et à tout renommage).
+   * (`nameKey(name)` — cf. `auth/validation.ts`). Index UNIQUE déclaré via
+   * `.unique()` (nom explicite = même index que la migration). Écrite à
+   * l'insertion du profil (et à tout renommage éventuel).
    */
-  nameKey: text("name_key").notNull(),
+  nameKey: text("name_key").notNull().unique("profiles_name_key_unique"),
   pinHash: text("pin_hash").notNull(),
   avatar: text("avatar").notNull(),
   /** Hash du PIN parent (espace parent) — porté par le profil propriétaire. */

@@ -48,15 +48,19 @@ export function sanitizeName(raw: string): string {
  *    la valeur stockée dans `profiles.name` ;
  * 2. `normalize("NFC")` — forme composée canonique (un `é` précomposé et un `e`
  *    suivi d'un accent combinant produisent la **même** clé) ;
- * 3. `toLocaleLowerCase()` — minuscule *locale-aware* (couvre les majuscules
- *    accentuées, contrairement au `lower()` SQLite ASCII-only).
+ * 3. `toLocaleLowerCase("fr-FR")` — minuscule *locale-aware* (couvre les majuscules
+ *    accentuées, contrairement au `lower()` SQLite ASCII-only). Locale **figée**
+ *    (`fr-FR`, langue du produit) → clé **déterministe** indépendante de la locale
+ *    du runtime : le VPS OVH peut tourner sous une autre locale par défaut, et
+ *    sans argument le résultat en dépendrait pour certaines langues (ex. turc
+ *    `İ`/`ı`). On fige donc la locale pour un `name_key` stable et reproductible.
  *
  * Persistée dans la colonne dérivée `profiles.name_key` (index UNIQUE) et
  * recalculée à l'identique pour tout lookup (onboarding #2.2, login #2.3) → la
  * même clé des deux côtés de la comparaison. Pure → couvrable, déterministe.
  */
 export function nameKey(raw: string): string {
-  return sanitizeName(raw).normalize("NFC").toLocaleLowerCase();
+  return sanitizeName(raw).normalize("NFC").toLocaleLowerCase("fr-FR");
 }
 
 /**
