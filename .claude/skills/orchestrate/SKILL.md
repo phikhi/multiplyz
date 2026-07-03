@@ -16,12 +16,19 @@ git fetch --prune && git status
 gh pr list --state open           # PR en cours à finir/merger d'abord
 gh issue list --state open --limit 50
 gh run list --limit 5             # CI
-# Décisions du propriétaire EN ATTENTE (à consommer — sinon feedback ignoré, cf. PR #77) :
-gh issue list --state open --label needs-owner            # arbitrages de drift / promotions déférées
-gh pr list --state all --limit 15 --json number,comments  # commentaires proprio sur les PR récentes
+# Décisions du propriétaire EN ATTENTE — DEUX canaux durables uniquement (cf. PR #77) :
+gh issue list --state open --label needs-owner --json number,title,comments   # arbitrages / promotions déférées
+for n in $(gh pr list --state open --json number -q '.[].number'); do \
+  gh pr view "$n" --json number,comments -q '{n:.number,c:[.comments[]|select(.author.login=="phikhi")|.body]}'; done
 ```
+Le propriétaire décide **sur une PR OUVERTE** (lue avant merge) ou **sur une issue `needs-owner`** (ouverte = en attente, fermée = consommée). **Pas** de scan des PR déjà mergées (fenêtre fragile, sans accusé — c'est le trou de #77).
+
 - **Finir l'existant avant de commencer** : PR ouverte prête → boucle review→merge ; branche/worktree orpheline → reprendre ou nettoyer.
-- **Consommer les décisions du propriétaire AVANT tout nouveau travail** : tout commentaire proprio sur une PR/issue (approbation, refus, correction) ou toute issue `needs-owner` **tranchée** est une **instruction à appliquer**, pas un fil clos. Approbation d'une promotion (ex. « ok pour modifier CLAUDE.md ») → **l'appliquer dans une PR de suivi** puis fermer l'issue. Ne **jamais** laisser un feedback proprio sans action ni accusé (anti-régression PR #77).
+- **Consommer les décisions du propriétaire AVANT tout nouveau travail** — tout commentaire proprio (approbation / refus / correction) ou issue `needs-owner` **tranchée** = **instruction à appliquer**, jamais un fil clos. Protocole **ack obligatoire** (marqueur « consommé », anti-régression #77) :
+  1. **Appliquer** (PR de suivi si contrat, sinon direct).
+  2. **Accuser** : répondre sur le fil `→ appliqué dans PR #X` (`gh pr comment` / `gh issue comment`) **et** réagir 👍 (`gh api …/reactions -f content=+1`).
+  3. **Clore** l'issue `needs-owner` (une issue `needs-owner` ouverte = décision **non encore appliquée**, invariant de reprise).
+  - Avant d'agir sur un commentaire : s'il porte déjà l'ack (`→ appliqué dans PR #…`) ou 👍 de l'orchestrateur → **déjà consommé**, ne pas ré-appliquer (idempotence).
 
 ## 2. Trier le backlog (grille)
 Classer **chaque** issue ouverte (surtout `discovered`) :
