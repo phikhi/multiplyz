@@ -98,15 +98,17 @@
 ```
 **3d. Feedback — erreur → étayage visuel** (no-fail, on refait)
 ```
-│        6 × 8 = ?  →  48           │
+│           6 × 8 = ?               │
 │   🧸 « Presque ! Regarde : »      │
 │   ┌── matrice 6×8 ───────────┐    │
 │   │ ▪▪▪▪▪▪▪▪                  │    │
 │   │ ▪▪▪▪▪▪▪▪   6 paquets de 8 │    │
 │   │ … (6 lignes)             │    │
 │   └──────────────────────────┘    │
+│    🧸 « Et voilà, ça fait 48 ! »  │
 │          [ Je réessaie ]          │
 ```
+- **Ordre d'affichage (issue #100, ADR 0007)** : l'**étayage visuel d'abord** (outil de découverte : l'enfant « voit » le calcul par la représentation), **puis la révélation numérique en synthèse APRÈS** (« et voilà, ça fait {n} », conclusion — jamais le chiffre jeté en tête). No-fail intact : la bonne réponse est **toujours** montrée, seulement déplacée sous l'étayage.
 - `✕` = quitter (reprise garantie plus tard). Barre `▣▣□` = progression 10 questions.
 - **Étayage par compétence** : dix-cases (compléments), droite numérique (add/sous), matrice (multi).
 - `❓ aide` = « Je ne sais pas » → montre l'étayage, sans pénalité.

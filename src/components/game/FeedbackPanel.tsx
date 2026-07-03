@@ -12,8 +12,12 @@ import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
  *
  * - `phase === "correct"` : feedback positif bref (variante Teddy), bouton continuer.
  * - `phase === "retry"` : posture croissance — **jamais** « faux »/« erreur » (règle
- *   CLAUDE.md/COPY §6) —, montre la bonne réponse, puis **l'étayage visuel** sous la
- *   révélation (`VisualScaffold`, épic #4, WIREFRAMES §3d) — **jamais** en `"correct"`.
+ *   CLAUDE.md/COPY §6) —, montre **d'abord l'étayage visuel** (`VisualScaffold`, épic #4,
+ *   outil de découverte qui fait « voir » le calcul), **puis la révélation numérique en
+ *   synthèse APRÈS** (« et voilà, ça fait {n} »). Ordre inversé par l'issue #100 (ADR
+ *   0007, WIREFRAMES §3d) : l'étayage-découverte précède le résultat, jamais l'inverse.
+ *   No-fail INTACT : la bonne réponse est **toujours** montrée, juste déplacée après
+ *   l'étayage. **Jamais** d'étayage ni de révélation en `"correct"`.
  *
  * **A11y (LEARNINGS #36/#23)** : le feedback est **doublé d'une icône** (✓ / ↻), jamais
  * la seule couleur (daltonisme) — glyphes en constantes (aucun littéral JSX,
@@ -27,7 +31,11 @@ import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
  */
 export interface FeedbackPanelProps {
   readonly phase: Exclude<QuestionPhase, "asking">;
-  /** Bonne réponse du fait (affichée uniquement en re-essai, ENGINE §9). */
+  /**
+   * Bonne réponse du fait (montrée uniquement en re-essai, ENGINE §9), **en synthèse
+   * SOUS l'étayage visuel** (ordre inversé issue #100 / ADR 0007 : l'étayage-découverte
+   * d'abord, le chiffre en conclusion). No-fail : toujours présente en re-essai.
+   */
   readonly correctAnswer: number;
   /** Compétence du fait — indexe l'étayage visuel du re-essai (`VisualScaffold`, épic #4). */
   readonly skill: Skill;
@@ -124,6 +132,21 @@ export function FeedbackPanel({
         {message}
       </p>
 
+      {/* Étayage visuel PREMIER (au-dessus de la révélation numérique), **uniquement**
+          en re-essai (jamais en « correct » : l'enfant a déjà trouvé). Ordre inversé par
+          l'issue #100 (ADR 0007, WIREFRAMES §3d) : l'étayage est l'**outil de découverte**
+          présenté d'abord (l'enfant « voit » le calcul par la représentation), le chiffre
+          ne vient qu'en synthèse dessous. Le dispatcher choisit la représentation par
+          compétence (épic #4). Il vit à l'intérieur du panneau `role="status"` déjà
+          focalisé au montage → aucun nouveau focus, aucun contrôle focusable ajouté (le
+          focus reste sur le conteneur, LEARNINGS #36). */}
+      {!isCorrect && (
+        <VisualScaffold skill={skill} operands={operands} correctAnswer={correctAnswer} />
+      )}
+
+      {/* Révélation numérique de la bonne réponse en **synthèse APRÈS l'étayage** (issue
+          #100) : se lit comme une conclusion (« et voilà, ça fait {n} »), jamais comme la
+          réponse jetée en tête. No-fail INTACT : toujours montrée en re-essai. */}
       {!isCorrect && (
         <p
           style={{
@@ -136,15 +159,6 @@ export function FeedbackPanel({
         >
           {fill(strings.play.retry.answerReveal, "{n}", String(correctAnswer))}
         </p>
-      )}
-
-      {/* Étayage visuel SOUS la révélation de réponse, **uniquement** en re-essai
-          (jamais en « correct » : l'enfant a déjà trouvé). Le dispatcher choisit la
-          représentation par compétence (épic #4). Il vit à l'intérieur du panneau
-          `role="status"` déjà focalisé au montage → aucun nouveau focus, aucun contrôle
-          focusable ajouté (le focus reste sur le conteneur, LEARNINGS #36). */}
-      {!isCorrect && (
-        <VisualScaffold skill={skill} operands={operands} correctAnswer={correctAnswer} />
       )}
 
       <button type="button" onClick={isCorrect ? onContinue : onRetry} style={primaryButtonStyle}>

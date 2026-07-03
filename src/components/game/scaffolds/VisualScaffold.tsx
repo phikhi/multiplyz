@@ -56,9 +56,10 @@ export interface VisualScaffoldProps {
    */
   readonly operands: readonly number[];
   /**
-   * Bonne réponse du fait (déjà révélée par `FeedbackPanel` au-dessus) — fournie aux
-   * étayages concrets qui l'illustrent (ex. position sur la droite numérique). La
-   * fondation ne l'affiche pas encore ; le contrat la transporte pour 4.2/4.3/4.4.
+   * Bonne réponse du fait — fournie aux étayages concrets qui l'illustrent (ex. position
+   * sur la droite numérique, cases à compléter de la dix-cases). Depuis l'issue #100
+   * (ADR 0007) `FeedbackPanel` révèle le chiffre **en synthèse SOUS** cet étayage (l'étayage
+   * fait « voir » le calcul d'abord), plus au-dessus.
    */
   readonly correctAnswer: number;
 }

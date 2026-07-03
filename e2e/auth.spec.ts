@@ -536,14 +536,36 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(feedbackText.toLowerCase()).not.toMatch(/faux|erreur/u);
     await expect(page.getByRole("button", { name: strings.play.retry.tryAgain })).toBeVisible();
 
-    // Étayage visuel monté SOUS la révélation (épic #4 fondation #93, WIREFRAMES §3d) :
-    // conteneur `role="img"` labellisé, présent uniquement en re-essai. Sa présence ici
-    // (mais jamais dans le feedback juste, cf. tests unitaires) prouve le montage
-    // conditionnel du slot en conditions réelles (next-dev-loop indispo #24 → E2E). Le
-    // nom accessible attendu dépend de la compétence tirée (comp10/add/sub câblés sur
-    // un étayage concret, story #94/#95 ; mult reste sur le placeholder générique).
+    // Étayage visuel monté AU-DESSUS de la révélation (ordre inversé issue #100, ADR
+    // 0007, WIREFRAMES §3d — l'étayage-découverte d'abord, le chiffre en synthèse dessous ;
+    // épic #4 fondation #93) : conteneur `role="img"` labellisé, présent uniquement en
+    // re-essai. Sa présence ici (mais jamais dans le feedback juste, cf. tests unitaires)
+    // prouve le montage conditionnel du slot en conditions réelles (next-dev-loop indispo
+    // #24 → E2E). Le nom accessible attendu dépend de la compétence tirée (comp10/add/sub/
+    // mult tous câblés sur un étayage concret, épic #4 complet).
     const expectedLabel = expectedScaffoldLabel(skill, equation);
-    await expect(page.getByRole("img", { name: expectedLabel })).toBeVisible();
+    const scaffold = page.getByRole("img", { name: expectedLabel });
+    await expect(scaffold).toBeVisible();
+    // Ordre observable en conditions réelles (issue #100) : la révélation numérique
+    // (« et voilà, ça fait {n} ») suit l'étayage dans le DOM. Effet observable — échoue
+    // si l'ordre est remis à l'ancien (révélation au-dessus de l'étayage).
+    const reveal = page.getByText(
+      strings.play.retry.answerReveal.replace("{n}", String(computeAnswer(equation))),
+    );
+    await expect(reveal).toBeVisible();
+    const revealHandle = await reveal.elementHandle();
+    expect(revealHandle).not.toBeNull();
+    const orderOk = await scaffold.evaluate(
+      (el, revealEl) =>
+        Boolean(el.compareDocumentPosition(revealEl) & Node.DOCUMENT_POSITION_FOLLOWING),
+      revealHandle!,
+    );
+    expect(orderOk).toBe(true);
+    // Capture du nouvel ordre (étayage au-dessus, révélation en synthèse) — DoD épic #4.
+    await page.screenshot({
+      path: "docs/captures/100-etayage-avant-revelation.png",
+      fullPage: true,
+    });
     await page.screenshot({ path: "docs/captures/93-etayage-retry.png", fullPage: true });
     await page.screenshot({ path: "docs/captures/64-feedback-erreur.png", fullPage: true });
 
