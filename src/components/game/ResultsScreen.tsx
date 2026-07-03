@@ -92,6 +92,7 @@ export function ResultsScreen({ stars, onContinue }: ResultsScreenProps) {
 
       <button
         type="button"
+        className="mz-focusable"
         onClick={onContinue}
         style={{
           minHeight: "var(--tap-target-min)",

@@ -114,6 +114,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
           <button
             key={digit}
             type="button"
+            className="mz-focusable"
             aria-label={fill(strings.pinPad.digit, "{d}", digit)}
             onClick={() => press(digit)}
             style={keypadKeyStyle}
@@ -123,6 +124,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
         ))}
         <button
           type="button"
+          className="mz-focusable"
           aria-label={strings.pinPad.backspace}
           onClick={backspace}
           style={keypadKeyStyle}
@@ -131,6 +133,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
         </button>
         <button
           type="button"
+          className="mz-focusable"
           aria-label={fill(strings.pinPad.digit, "{d}", ZERO)}
           onClick={() => press(ZERO)}
           style={keypadKeyStyle}
@@ -139,6 +142,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
         </button>
         <button
           type="button"
+          className="mz-focusable"
           onClick={submit}
           disabled={digits.length === 0}
           style={{
@@ -235,6 +239,7 @@ export function QuestionCard({
             <button
               key={choice}
               type="button"
+              className="mz-focusable"
               aria-label={fill(strings.play.question.choiceOption, "{n}", String(choice))}
               onClick={() => onAnswer(choice)}
               style={choiceStyle}
@@ -249,6 +254,7 @@ export function QuestionCard({
 
       <button
         type="button"
+        className="mz-focusable"
         onClick={onDontKnow}
         style={{
           minHeight: "var(--tap-target-min)",

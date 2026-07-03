@@ -29,3 +29,22 @@ test("design tokens — mode sombre (capture)", async ({ page }) => {
 
   await page.screenshot({ path: "docs/captures/11-dark.png", fullPage: true });
 });
+
+test("utilitaire :focus-visible partagé — anneau visible au clavier (issue #38, capture)", async ({
+  page,
+}) => {
+  // Preuve visuelle du changement #38 : le bouton `ThemeToggle` (comme tous les
+  // contrôles interactifs, cf. `mz-focusable` appliqué projet-wide) affiche
+  // désormais l'anneau tokenisé partagé (`--shadow-focus`) au focus CLAVIER
+  // (`:focus-visible`, pas au simple survol/clic souris). `page.keyboard.press`
+  // (Tab) déclenche un vrai focus clavier — contrairement à `.focus()` JS qui ne
+  // déclenche pas toujours `:focus-visible` selon le navigateur.
+  await page.goto("/styleguide");
+  await page.waitForLoadState("networkidle");
+
+  const toggle = page.getByRole("button", { name: "Basculer le thème" });
+  await page.keyboard.press("Tab"); // 1er élément focusable de la page = le toggle (styleguide minimal)
+  await expect(toggle).toBeFocused();
+
+  await page.screenshot({ path: "docs/captures/38-focus-visible.png", fullPage: true });
+});

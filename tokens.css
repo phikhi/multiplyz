@@ -119,7 +119,16 @@
   --shadow-sm:    0 1px 2px rgba(53, 47, 77, 0.06);
   --shadow-md:    0 6px 16px rgba(122, 90, 248, 0.12);
   --shadow-lg:    0 16px 40px rgba(122, 90, 248, 0.18);
-  --shadow-focus: 0 0 0 4px rgba(25, 195, 182, 0.40);
+  /* Anneau de focus (issue #38, utilitaire `.mz-focusable:focus-visible` partagé,
+     globals.css) — turquoise ASSOMBRI (même teinte que --color-border-focus,
+     `#19C3B6` → `#129186`) à opacité PLEINE : la teinte claire d'origine
+     (rgba(25,195,182,0.40)) ne franchissait QUE 1.37:1 une fois composée sur
+     --color-bg-primary (#FAF7FF) — sous le seuil WCAG 1.4.11 (élément non-texte,
+     ≥3:1). `#129186` opaque atteint ≥3.6:1 sur --color-bg-primary ET
+     --color-bg-secondary (garde de test résolue depuis tokens.css, jamais
+     seulement le nom du token — cf. globals.css.test.ts).
+  */
+  --shadow-focus: 0 0 0 4px rgba(18, 145, 134, 1);
 
   /* ---------- MOTION ---------- */
   --duration-instant: 50ms;
@@ -210,6 +219,10 @@
   --scaffold-line-end-glyph:    var(--color-text-primary);
   --scaffold-line-jump-arc:     var(--color-accent-primary-active); /* arc du saut (violet profond, ≥3:1 fond neutre 2 thèmes, distinct du point d'arrivée) */
   --scaffold-line-point-size:   var(--space-5); /* 24px — pastille départ/arrivée */
+  /* Épaisseur du trait de la droite ET de l'arc du saut (issue #110, dette pré-#102) —
+     un seul token pour les deux (même ligne visuelle), jamais `2px`/`strokeWidth`
+     en dur dans NumberLine.tsx. */
+  --scaffold-line-track-width:  2px;
 
   /* matrice (story #96, Matrix — mult) — même famille sémantique que --scaffold-*,
      référence des tokens existants uniquement. Modèle « groupes répétés » (PRODUCT
@@ -284,7 +297,12 @@
   --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.30);
   --shadow-md:    0 6px 16px rgba(0, 0, 0, 0.40);
   --shadow-lg:    0 16px 40px rgba(0, 0, 0, 0.50);
-  --shadow-focus: 0 0 0 4px rgba(63, 217, 204, 0.45);
+  /* Anneau de focus dark (issue #38) : opacité relevée 0.45→0.6 (même teinte
+     `rgb(63,217,204)`) — 0.45 ne franchissait que 2.98:1 sur --color-bg-primary
+     dark (#1C1830), sous le seuil WCAG 1.4.11 (≥3:1). 0.6 atteint ≥4:1 sur
+     --color-bg-primary ET --color-bg-secondary dark (garde résolue depuis
+     tokens.css, cf. globals.css.test.ts). */
+  --shadow-focus: 0 0 0 4px rgba(63, 217, 204, 0.6);
 }
 
 /* Préférence système, sauf si l'utilisateur a explicitement choisi "light" */
@@ -332,7 +350,8 @@
     --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.30);
     --shadow-md:    0 6px 16px rgba(0, 0, 0, 0.40);
     --shadow-lg:    0 16px 40px rgba(0, 0, 0, 0.50);
-    --shadow-focus: 0 0 0 4px rgba(63, 217, 204, 0.45);
+    /* Miroir du bloc [data-theme="dark"] ci-dessus (issue #38, contraste ≥3:1). */
+    --shadow-focus: 0 0 0 4px rgba(63, 217, 204, 0.6);
   }
 }
 

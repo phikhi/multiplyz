@@ -109,6 +109,7 @@ export function PinPad({ value, onChange, label }: PinPadProps) {
           <button
             key={digit}
             type="button"
+            className="mz-focusable"
             aria-label={fill(strings.pinPad.digit, "{d}", digit)}
             onClick={() => pressDigit(digit)}
             style={keyStyle}
@@ -120,6 +121,7 @@ export function PinPad({ value, onChange, label }: PinPadProps) {
         <span aria-hidden="true" />
         <button
           type="button"
+          className="mz-focusable"
           aria-label={fill(strings.pinPad.digit, "{d}", ZERO)}
           onClick={() => pressDigit(ZERO)}
           style={keyStyle}
@@ -128,6 +130,7 @@ export function PinPad({ value, onChange, label }: PinPadProps) {
         </button>
         <button
           type="button"
+          className="mz-focusable"
           aria-label={strings.pinPad.backspace}
           onClick={pressBackspace}
           style={keyStyle}
