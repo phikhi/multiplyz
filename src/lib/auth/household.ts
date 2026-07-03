@@ -1,10 +1,16 @@
-import { isNotNull, sql } from "drizzle-orm";
+import { eq, isNotNull } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { profiles } from "@/lib/db/schema";
 import { isValidAvatarId } from "@/config/avatars";
 import { hashPin, hashSecret } from "./pin";
 import { generateRecoveryCode, hashRecoveryCode } from "./tokens";
-import { isValidName, isValidPin, parentPinDiffersFromChild, sanitizeName } from "./validation";
+import {
+  isValidName,
+  isValidPin,
+  nameKey,
+  parentPinDiffersFromChild,
+  sanitizeName,
+} from "./validation";
 
 /**
  * Logique métier de l'onboarding 1er usage (AUTH.md §2, PRODUCT.md §1.1).
@@ -56,15 +62,18 @@ export function householdExists(db: AppDatabase): boolean {
 }
 
 /**
- * `true` si un profil porte déjà ce prénom (comparaison **insensible à la
- * casse** — une enfant tape sa casse au hasard ; l'index UNIQUE en base est
- * BINARY, on renforce ici au niveau requête, cf. schema.ts + LEARNINGS #34).
+ * `true` si un profil porte déjà ce prénom (comparaison **insensible à la casse
+ * Unicode**, ADR 0005 / #37). On compare la **clé dérivée** `name_key`
+ * (`nameKey(name)` = NFC + minuscule locale-aware) plutôt que `lower(name)` :
+ * `lower()` SQLite est ASCII-only (`lower('Élodie') ≠ 'élodie'`) → un doublon à
+ * capitale accentuée passerait au travers. L'index UNIQUE sur `name_key` (migration
+ * à la main) porte le même invariant en base (défense en profondeur).
  */
 function nameTaken(db: AppDatabase, name: string): boolean {
   const existing = db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(sql`lower(${profiles.name}) = ${name.toLowerCase()}`)
+    .where(eq(profiles.nameKey, nameKey(name)))
     .limit(1)
     .get();
   return existing !== undefined;
@@ -133,7 +142,14 @@ export async function createHousehold(
     if (householdExists(db)) return false;
     if (nameTaken(db, name)) throw new OnboardingError("NAME_TAKEN");
     tx.insert(profiles)
-      .values({ name, avatar: input.avatar, pinHash, parentPinHash, recoveryCodeHash })
+      .values({
+        name,
+        nameKey: nameKey(name),
+        avatar: input.avatar,
+        pinHash,
+        parentPinHash,
+        recoveryCodeHash,
+      })
       .run();
     return true;
   });

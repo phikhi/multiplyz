@@ -1,5 +1,11 @@
 import { getDb } from "@/lib/db";
-import { getValidSession, revokeSession, type ActiveSession } from "./session";
+import { getAuthConfig } from "@/config/server-config";
+import {
+  getValidSession,
+  purgeExpiredSessions,
+  revokeSession,
+  type ActiveSession,
+} from "./session";
 import { clearSessionCookie, readSessionToken, setSessionCookie } from "./session-cookie";
 import { guardedAuthenticateChild } from "./login";
 
@@ -29,10 +35,18 @@ export async function getCurrentChildSession(): Promise<ActiveSession | null> {
  * AUTH.md §4), ouverture de session + pose du cookie. Renvoie `true` si connecté,
  * `false` génériquement sinon (PIN faux, profil inconnu **ou** backoff actif — tous
  * indiscernables). `ip` fourni par l'action (via `headers()`).
+ *
+ * **GC opportuniste** (#44) : à la connexion réussie, si le déclencheur ⚙️
+ * `auth.gcSessionsOnLogin` est actif (défaut, pas de cron en v1), purge au passage
+ * les sessions expirées (`purgeExpiredSessions`). Point de branchement unique du GC
+ * v1 → basculer le flag suffit pour déléguer à une tâche de fond plus tard.
  */
 export async function loginChild(profileId: number, pin: string, ip: string): Promise<boolean> {
-  const created = await guardedAuthenticateChild(getDb(), { profileId, pin, ip }, new Date());
+  const db = getDb();
+  const now = new Date();
+  const created = await guardedAuthenticateChild(db, { profileId, pin, ip }, now);
   if (created === null) return false;
+  if (getAuthConfig().gcSessionsOnLogin) purgeExpiredSessions(db, now);
   await setSessionCookie(created.token, created.expiresAt);
   return true;
 }

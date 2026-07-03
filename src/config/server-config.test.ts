@@ -172,6 +172,24 @@ describe("loadAuthConfig — surcharges ⚙️", () => {
   it("accepte un facteur de backoff fractionnaire (> 1)", () => {
     expect(loadAuthConfig({ AUTH_BACKOFF_FACTOR: "2.5" }).rateLimit.backoffFactor).toBe(2.5);
   });
+
+  it("GC sessions au login : défaut activé (⚙️ #44)", () => {
+    expect(loadAuthConfig({}).gcSessionsOnLogin).toBe(true);
+  });
+
+  it("GC sessions au login : bascule à false via AUTH_GC_SESSIONS_ON_LOGIN", () => {
+    expect(loadAuthConfig({ AUTH_GC_SESSIONS_ON_LOGIN: "false" }).gcSessionsOnLogin).toBe(false);
+    // Insensible à la casse / espaces.
+    expect(loadAuthConfig({ AUTH_GC_SESSIONS_ON_LOGIN: " FALSE " }).gcSessionsOnLogin).toBe(false);
+  });
+
+  it("GC sessions au login : `true` explicite reste activé", () => {
+    expect(loadAuthConfig({ AUTH_GC_SESSIONS_ON_LOGIN: "true" }).gcSessionsOnLogin).toBe(true);
+  });
+
+  it("GC sessions au login : valeur booléenne invalide → retombe sur le défaut (true)", () => {
+    expect(loadAuthConfig({ AUTH_GC_SESSIONS_ON_LOGIN: "oui" }).gcSessionsOnLogin).toBe(true);
+  });
 });
 
 describe("getAuthConfig — accès mémoïsé", () => {

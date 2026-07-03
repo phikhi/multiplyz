@@ -35,7 +35,7 @@ const rng = (): number => 0;
 function seedProfile(name: string): number {
   return db
     .insert(profiles)
-    .values({ name, avatar: "fox", pinHash: "x" })
+    .values({ name, nameKey: name.toLowerCase(), avatar: "fox", pinHash: "x" })
     .returning({ id: profiles.id })
     .get().id;
 }

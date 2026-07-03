@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getValidSession, revokeSession } from "./session";
+import { getValidSession, purgeExpiredSessions, revokeSession } from "./session";
 import { guardedAuthenticateChild } from "./login";
+import { getAuthConfig } from "@/config/server-config";
 import { clearSessionCookie, readSessionToken, setSessionCookie } from "./session-cookie";
 import { getCurrentChildSession, loginChild, logoutChild } from "./current-session";
 
 vi.mock("@/lib/db", () => ({ getDb: () => ({ tag: "db" }) }));
-vi.mock("./session", () => ({ getValidSession: vi.fn(), revokeSession: vi.fn() }));
+vi.mock("@/config/server-config", () => ({ getAuthConfig: vi.fn() }));
+vi.mock("./session", () => ({
+  getValidSession: vi.fn(),
+  revokeSession: vi.fn(),
+  purgeExpiredSessions: vi.fn(),
+}));
 vi.mock("./login", () => ({ guardedAuthenticateChild: vi.fn() }));
 vi.mock("./session-cookie", () => ({
   readSessionToken: vi.fn(),
@@ -15,13 +21,21 @@ vi.mock("./session-cookie", () => ({
 
 const getValidSessionMock = vi.mocked(getValidSession);
 const revokeSessionMock = vi.mocked(revokeSession);
+const purgeExpiredSessionsMock = vi.mocked(purgeExpiredSessions);
 const guardedAuthenticateChildMock = vi.mocked(guardedAuthenticateChild);
+const getAuthConfigMock = vi.mocked(getAuthConfig);
 const readSessionTokenMock = vi.mocked(readSessionToken);
 const setSessionCookieMock = vi.mocked(setSessionCookie);
 const clearSessionCookieMock = vi.mocked(clearSessionCookie);
 
+/** Config auth minimale pour les tests (seul `gcSessionsOnLogin` est lu ici). */
+function authConfig(gcSessionsOnLogin: boolean) {
+  return { gcSessionsOnLogin } as ReturnType<typeof getAuthConfig>;
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  getAuthConfigMock.mockReturnValue(authConfig(true));
 });
 
 describe("getCurrentChildSession", () => {
@@ -69,10 +83,29 @@ describe("loginChild", () => {
     expect(setSessionCookieMock).toHaveBeenCalledOnce();
   });
 
-  it("échec (PIN faux ou backoff) → aucun cookie, renvoie false (générique)", async () => {
+  it("succès + GC activé (défaut) → purge les sessions expirées au passage (#44)", async () => {
+    getAuthConfigMock.mockReturnValue(authConfig(true));
+    guardedAuthenticateChildMock.mockResolvedValue({ token: "tok", expiresAt: new Date() });
+    await loginChild(1, "1234", "1.2.3.4");
+    expect(purgeExpiredSessionsMock).toHaveBeenCalledOnce();
+    // GC borné à la même horloge que l'auth (déterministe).
+    expect(purgeExpiredSessionsMock).toHaveBeenCalledWith({ tag: "db" }, expect.any(Date));
+  });
+
+  it("succès + GC désactivé (⚙️ off) → NE purge PAS (délégué à un cron futur)", async () => {
+    getAuthConfigMock.mockReturnValue(authConfig(false));
+    guardedAuthenticateChildMock.mockResolvedValue({ token: "tok", expiresAt: new Date() });
+    await loginChild(1, "1234", "1.2.3.4");
+    expect(purgeExpiredSessionsMock).not.toHaveBeenCalled();
+    expect(setSessionCookieMock).toHaveBeenCalledOnce(); // le login réussit quand même
+  });
+
+  it("échec (PIN faux ou backoff) → aucun cookie, aucun GC, renvoie false (générique)", async () => {
     guardedAuthenticateChildMock.mockResolvedValue(null);
     await expect(loginChild(1, "0000", "1.2.3.4")).resolves.toBe(false);
     expect(setSessionCookieMock).not.toHaveBeenCalled();
+    // Pas de connexion → pas de GC (le GC est opportuniste sur login RÉUSSI).
+    expect(purgeExpiredSessionsMock).not.toHaveBeenCalled();
   });
 });
 

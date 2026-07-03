@@ -6,6 +6,7 @@ import {
   isValidName,
   isValidPin,
   isValidRecoveryCodeFormat,
+  nameKey,
   parentPinDiffersFromChild,
   sanitizeName,
   sanitizeRecoveryCode,
@@ -51,6 +52,31 @@ describe("sanitizeName", () => {
 
   it("compacte les espaces internes", () => {
     expect(sanitizeName("Jean   Luc")).toBe("Jean Luc");
+  });
+});
+
+describe("nameKey (clé d'unicité insensible à la casse Unicode — #37)", () => {
+  it("minuscule + trim + espaces compactés (comme sanitizeName)", () => {
+    expect(nameKey("  Lina  ")).toBe("lina");
+    expect(nameKey("Jean   Luc")).toBe("jean luc");
+  });
+
+  it("insensible à la casse ACCENTUÉE (le vrai bug #37 : lower() SQLite ASCII-only)", () => {
+    // "Élodie" et "élodie" doivent produire la MÊME clé → doublon détecté.
+    expect(nameKey("Élodie")).toBe(nameKey("élodie"));
+    expect(nameKey("Élodie")).toBe("élodie");
+    // Autres capitales accentuées courantes (français).
+    expect(nameKey("Ève")).toBe(nameKey("ève"));
+    expect(nameKey("Chloé")).toBe(nameKey("CHLOÉ"));
+  });
+
+  it("normalisation Unicode NFC : forme précomposée == forme décomposée", () => {
+    const combiningAcute = String.fromCharCode(0x0301); // accent aigu combinant
+    const precompose = "Élodie"; // 'É' précomposé (U+00C9) + "lodie"
+    const decompose = `E${combiningAcute}lodie`; // 'E' + accent combinant + "lodie"
+    expect(precompose).not.toBe(decompose); // codepoints bruts différents
+    expect([...precompose].length).not.toBe([...decompose].length); // 6 vs 7 codepoints
+    expect(nameKey(precompose)).toBe(nameKey(decompose)); // même clé après NFC
   });
 });
 

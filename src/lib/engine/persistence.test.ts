@@ -28,7 +28,7 @@ const NOW = Date.UTC(2026, 6, 3, 10, 0, 0); // epoch ms injecté, déterministe
 function seedProfile(name: string): number {
   return db
     .insert(profiles)
-    .values({ name, avatar: "fox", pinHash: "x" })
+    .values({ name, nameKey: name.toLowerCase(), avatar: "fox", pinHash: "x" })
     .returning({ id: profiles.id })
     .get().id;
 }

@@ -8,7 +8,7 @@
 ## 1. Modèle (verrouillé)
 
 - **Single-tenant** : un seul foyer sur le serveur → **pas de code famille, pas d'email**.
-- **Profils enfants** : `nom + PIN 4 chiffres` (les prénoms sont uniques dans le foyer).
+- **Profils enfants** : `nom + PIN 4 chiffres` (les prénoms sont uniques dans le foyer, unicité **insensible à la casse Unicode** — `Élodie` = `élodie` ; portée par la colonne dérivée `name_key` + index UNIQUE, cf. ADR 0005).
 - **PIN parent distinct** pour l'espace parent.
 - Multi-profils (frères/sœurs) prêt : plusieurs profils enfants sous le même foyer.
 

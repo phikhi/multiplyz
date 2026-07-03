@@ -39,6 +39,27 @@ export function sanitizeName(raw: string): string {
 }
 
 /**
+ * **Clé d'unicité** d'un prénom, insensible à la casse **Unicode** (AUTH.md §1,
+ * ADR 0005, issue #37). Le `lower()` de SQLite est **ASCII-only**
+ * (`lower('Élodie') = 'Élodie' ≠ 'élodie'`) → l'unicité insensible à la casse
+ * **promise par le contrat** doit être calculée côté application :
+ *
+ * 1. `sanitizeName` (trim + espaces compactés) — même normalisation de forme que
+ *    la valeur stockée dans `profiles.name` ;
+ * 2. `normalize("NFC")` — forme composée canonique (un `é` précomposé et un `e`
+ *    suivi d'un accent combinant produisent la **même** clé) ;
+ * 3. `toLocaleLowerCase()` — minuscule *locale-aware* (couvre les majuscules
+ *    accentuées, contrairement au `lower()` SQLite ASCII-only).
+ *
+ * Persistée dans la colonne dérivée `profiles.name_key` (index UNIQUE) et
+ * recalculée à l'identique pour tout lookup (onboarding #2.2, login #2.3) → la
+ * même clé des deux côtés de la comparaison. Pure → couvrable, déterministe.
+ */
+export function nameKey(raw: string): string {
+  return sanitizeName(raw).normalize("NFC").toLocaleLowerCase();
+}
+
+/**
  * Normalise un code de secours saisi (AUTH.md §5) : majuscules + retrait de tout
  * caractère hors alphabet (espaces, tirets de mise en forme) → le parent peut le
  * taper avec sa casse/espacement au hasard.

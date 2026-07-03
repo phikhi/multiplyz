@@ -20,8 +20,11 @@ const PIN = "1234";
 
 async function seedProfile(name: string, avatar: string, pin: string): Promise<number> {
   const pinHash = await hashPin(pin);
-  return db.insert(profiles).values({ name, avatar, pinHash }).returning({ id: profiles.id }).get()
-    .id;
+  return db
+    .insert(profiles)
+    .values({ name, nameKey: name.toLowerCase(), avatar, pinHash })
+    .returning({ id: profiles.id })
+    .get().id;
 }
 
 beforeEach(() => {

@@ -36,7 +36,9 @@ describe("householdExists", () => {
   it("false quand aucun profil, false quand un profil non-propriétaire seul", () => {
     expect(householdExists(db)).toBe(false);
     // Profil sans parent_pin_hash (frère/sœur potentiel) → pas un propriétaire.
-    db.insert(profiles).values({ name: "Tom", avatar: AVATARS[1].id, pinHash: "h" }).run();
+    db.insert(profiles)
+      .values({ name: "Tom", nameKey: "tom", avatar: AVATARS[1].id, pinHash: "h" })
+      .run();
     expect(householdExists(db)).toBe(false);
   });
 
@@ -129,11 +131,35 @@ describe("createHousehold — validation serveur (rien n'est créé)", () => {
   it("prénom déjà pris (insensible à la casse) → NAME_TAKEN", async () => {
     // Frère/sœur préexistant, pas encore de propriétaire → la garde d'unicité
     // (pas l'idempotence) doit se déclencher.
-    db.insert(profiles).values({ name: "Léa", avatar: AVATARS[1].id, pinHash: "h" }).run();
+    db.insert(profiles)
+      .values({ name: "Léa", nameKey: "léa", avatar: AVATARS[1].id, pinHash: "h" })
+      .run();
     await expect(createHousehold(db, { ...VALID, name: "léa" })).rejects.toMatchObject({
       code: "NAME_TAKEN",
     });
     expect(ownerRow()).toHaveLength(1); // rien ajouté
+  });
+
+  it("prénom déjà pris — capitale ACCENTUÉE insensible à la casse Unicode → NAME_TAKEN (#37)", async () => {
+    // Le vrai bug #37 : `lower()` SQLite est ASCII-only → `lower('Élodie') = 'Élodie'`
+    // (≠ 'élodie'). Avec `nameKey` (NFC + minuscule locale-aware), le doublon à
+    // capitale accentuée EST détecté. Ce test échoue si la normalisation Unicode est
+    // retirée (retour à `lower(name)`), effet observable.
+    const first = await createHousehold(db, { ...VALID, name: "Élodie" });
+    expect(first.created).toBe(true);
+    // Second onboarding avec la variante minuscule accentuée : `householdExists`
+    // renvoie déjà true (idempotence) → no-op, mais on veut prouver que la CLÉ
+    // matche. On teste donc `nameTaken` via une base neuve seedée à la main.
+    const db2 = createDatabase(":memory:");
+    runMigrations(db2);
+    db2
+      .insert(profiles)
+      .values({ name: "Élodie", nameKey: "élodie", avatar: AVATARS[1].id, pinHash: "h" })
+      .run();
+    await expect(createHousehold(db2, { ...VALID, name: "élodie" })).rejects.toMatchObject({
+      code: "NAME_TAKEN",
+    });
+    expect(db2.select().from(profiles).all()).toHaveLength(1); // rien ajouté
   });
 
   it("OnboardingError porte bien le code (type d'erreur)", async () => {
