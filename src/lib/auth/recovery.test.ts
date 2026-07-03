@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { isNotNull } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { eq, isNotNull } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { createDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
@@ -9,6 +9,7 @@ import { AVATARS } from "@/config/avatars";
 import { createHousehold } from "./household";
 import { verifyPin } from "./pin";
 import { attemptKey, recordFailure } from "./pin-attempts";
+import * as tokens from "./tokens";
 import { guardedVerifyRecovery, RecoveryError, resetParentPin, verifyRecovery } from "./recovery";
 
 let db: AppDatabase;
@@ -157,5 +158,65 @@ describe("resetParentPin", () => {
     await expect(
       resetParentPin(db, { code: recoveryCode, newParentPin: "1111", ip: IP }, T0),
     ).rejects.toMatchObject({ code: "CODE_INVALID" });
+  });
+});
+
+describe("resetParentPin — CAS anti-TOCTOU (#50)", () => {
+  function currentRecoveryHash(): string {
+    const row = db
+      .select({ recoveryCodeHash: profiles.recoveryCodeHash })
+      .from(profiles)
+      .where(isNotNull(profiles.parentPinHash))
+      .get();
+    return row?.recoveryCodeHash ?? "";
+  }
+
+  it("rotation du recovery_code_hash entre verify et update → CODE_INVALID (pas de last-write-wins)", async () => {
+    // Simule un reset concurrent : entre `guardedVerifyRecovery` (qui a lu le hash)
+    // et le `UPDATE` CAS, un AUTRE reset commit un nouveau recovery_code_hash. On
+    // rejoue ça de façon déterministe en faisant muter la ligne PENDANT le hash
+    // du nouveau code (fenêtre `await` où l'event loop rend la main), via un spy
+    // sur `hashRecoveryCode`. Le vrai hachage est capturé AVANT le spy (le spy
+    // ajoute juste l'effet de bord « reset concurrent » puis délègue au vrai hash).
+    const ownerId = db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(isNotNull(profiles.parentPinHash))
+      .get()!.id;
+    const rotatedHash = "$argon2id$v=19$m=19456,t=2,p=1$Um90YXRlZFNhbHQ$rotatedByConcurrentReset";
+    const realHashRecoveryCode = tokens.hashRecoveryCode;
+
+    const spy = vi.spyOn(tokens, "hashRecoveryCode").mockImplementation((code: string) => {
+      // « Autre » reset concurrent : remplace le hash lu par notre appelant.
+      db.update(profiles)
+        .set({ recoveryCodeHash: rotatedHash })
+        .where(eq(profiles.id, ownerId))
+        .run();
+      // Puis calcule le vrai hash (comme l'aurait fait l'implémentation réelle).
+      return realHashRecoveryCode(code);
+    });
+
+    try {
+      await expect(
+        resetParentPin(db, { code: recoveryCode, newParentPin: "1111", ip: IP }, T0),
+      ).rejects.toMatchObject({ code: "CODE_INVALID" });
+      // Le CAS a échoué (0 ligne) → l'écriture de NOTRE appelant n'a PAS écrasé
+      // celle du reset concurrent : la ligne porte toujours le hash pivoté.
+      expect(currentRecoveryHash()).toBe(rotatedHash);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("sans rotation → l'update CAS matche (changes === 1) et le reset aboutit", async () => {
+    // Chemin nominal (garde CAS présente mais non déclenchée) : prouve que le CAS
+    // ne casse PAS le cas normal — l'écriture bornée au hash lu passe (1 ligne).
+    const { recoveryCode: fresh } = await resetParentPin(
+      db,
+      { code: recoveryCode, newParentPin: "1111", ip: IP },
+      T0,
+    );
+    expect(fresh).not.toBe(recoveryCode);
+    expect(await verifyRecovery(db, fresh, IP, T0)).toBe(true);
   });
 });

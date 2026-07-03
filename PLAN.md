@@ -37,8 +37,8 @@ Projet **greenfield** : tout est à créer.
 
 ## Modèle de données (SQLite local)
 
-- `profiles` : id, name (unique), pin_hash, avatar, created_at, **parent_pin_hash** (accès espace parent), **recovery_code_hash** (réinit PIN parent sans email — AUTH §5). *Le PIN parent + code de secours sont portés par le profil **propriétaire** du foyer (single-tenant).*
-- `sessions` : token (opaque, PK), profile_id (FK `ON DELETE CASCADE`), kind (`child`|`parent`), created_at, expires_at — **sessions serveur** (source de vérité ; cookie httpOnly ne porte que le token — AUTH §3)
+- `profiles` : id, name (unique), **name_key** (clé dérivée `nameKey(name)` = NFC + minuscule locale-aware ; index UNIQUE → unicité prénom **insensible à la casse Unicode**, `lower()` SQLite étant ASCII-only — ADR 0005), pin_hash, avatar, created_at, **parent_pin_hash** (accès espace parent), **recovery_code_hash** (réinit PIN parent sans email — AUTH §5). *Le PIN parent + code de secours sont portés par le profil **propriétaire** du foyer (single-tenant).*
+- `sessions` : token (opaque, PK), profile_id (FK `ON DELETE CASCADE`), kind (`child`|`parent`), created_at, expires_at — **sessions serveur** (source de vérité ; cookie httpOnly ne porte que le token — AUTH §3). GC des lignes expirées : purge opportuniste au login (⚙️ `auth.gcSessionsOnLogin`, cf. #44).
 - `mastery` : profile_id, fact_id, skill, strength (boîte Leitner 0–5), correct_count, wrong_count, **avg_response_ms** (fluence), last_seen, next_due
 - `attempts` : profile_id, fact_id, skill, correct (bool), **response_ms**, created_at — **une ligne par réponse** ; matière première de l'espace parent (justesse, rapidité, régularité, tendances)
 - `progress` : profile_id, world_index (croît à l'infini), level, stars

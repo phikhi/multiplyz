@@ -4,7 +4,7 @@ import { createDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { profiles, sessions } from "@/lib/db/schema";
 import { getAuthConfig } from "@/config/server-config";
-import { createSession, getValidSession, revokeSession } from "./session";
+import { createSession, getValidSession, purgeExpiredSessions, revokeSession } from "./session";
 
 let db: AppDatabase;
 let profileId: number;
@@ -17,7 +17,7 @@ beforeEach(() => {
   // Un profil est requis (FK sessions.profile_id → profiles.id, ON activé).
   const row = db
     .insert(profiles)
-    .values({ name: "Léa", avatar: "fox", pinHash: "h" })
+    .values({ name: "Léa", nameKey: "léa", avatar: "fox", pinHash: "h" })
     .returning({ id: profiles.id })
     .get();
   profileId = row.id;
@@ -74,5 +74,59 @@ describe("revokeSession", () => {
 
   it("no-op silencieux sur un token absent (idempotent)", () => {
     expect(() => revokeSession(db, "jamais-posé")).not.toThrow();
+  });
+});
+
+describe("purgeExpiredSessions (GC — #44)", () => {
+  function tokens(): string[] {
+    return db
+      .select({ token: sessions.token })
+      .from(sessions)
+      .all()
+      .map((r) => r.token);
+  }
+
+  it("supprime les sessions expirées, conserve les valides", () => {
+    // Session courte (parent) créée à T0 → expire à T0 + parentSessionMs.
+    const { parentSessionMs } = getAuthConfig();
+    const parent = createSession(db, profileId, "parent", T0);
+    // Session longue (enfant) créée à T0 → expire bien plus tard.
+    const child = createSession(db, profileId, "child", T0);
+    expect(tokens()).toHaveLength(2);
+
+    // GC APRÈS l'expiration de la session parent, AVANT celle de l'enfant.
+    const later = new Date(T0.getTime() + parentSessionMs + 1000);
+    const removed = purgeExpiredSessions(db, later);
+
+    expect(removed).toBe(1);
+    expect(tokens()).toEqual([child.token]); // la valide (enfant) survit
+    expect(getValidSession(db, parent.token, later)).toBeNull(); // l'expirée est partie
+  });
+
+  it("borne inclusive `<= now` : une session pile à échéance est purgée (cohérent avec la lecture `> now`)", () => {
+    const { parentSessionMs } = getAuthConfig();
+    const { token } = createSession(db, profileId, "parent", T0);
+    const exactlyAtExpiry = new Date(T0.getTime() + parentSessionMs);
+    // `getValidSession` la considère déjà expirée (`> now` strict) → cohérence.
+    expect(getValidSession(db, token, exactlyAtExpiry)).toBeNull();
+    // Le GC (`<= now`) doit donc aussi la purger : effet observable de la borne.
+    expect(purgeExpiredSessions(db, exactlyAtExpiry)).toBe(1);
+    expect(tokens()).toHaveLength(0);
+  });
+
+  it("conserve une session encore valide (1 ms avant l'échéance) — borne non débordante", () => {
+    const { parentSessionMs } = getAuthConfig();
+    createSession(db, profileId, "parent", T0);
+    const justBefore = new Date(T0.getTime() + parentSessionMs - 1);
+    expect(purgeExpiredSessions(db, justBefore)).toBe(0);
+    expect(tokens()).toHaveLength(1);
+  });
+
+  it("idempotent : relancer sur une table déjà propre supprime 0 ligne", () => {
+    const { parentSessionMs } = getAuthConfig();
+    createSession(db, profileId, "parent", T0);
+    const later = new Date(T0.getTime() + parentSessionMs + 1000);
+    expect(purgeExpiredSessions(db, later)).toBe(1);
+    expect(purgeExpiredSessions(db, later)).toBe(0); // rien à purger la 2ᵉ fois
   });
 });

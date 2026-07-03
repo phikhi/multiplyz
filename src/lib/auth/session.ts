@@ -1,4 +1,4 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, lte } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { sessions, type SessionKind } from "@/lib/db/schema";
 import { getAuthConfig } from "@/config/server-config";
@@ -74,4 +74,21 @@ export function getValidSession(db: AppDatabase, token: string, now: Date): Acti
  */
 export function revokeSession(db: AppDatabase, token: string): void {
   db.delete(sessions).where(eq(sessions.token, token)).run();
+}
+
+/**
+ * **GC des sessions expirées** (#44) : purge `DELETE FROM sessions WHERE
+ * expires_at <= now`. La lecture (`getValidSession`) filtre déjà l'expiration
+ * (`expires_at > now`) → une ligne périmée n'ouvre jamais rien, mais sans purge
+ * elle **s'accumule**. Ce GC est purement d'**hygiène** (jamais un enjeu de
+ * sécurité). Bornage `<= now` (inclusif) cohérent avec la lecture stricte
+ * `> now` : une session pile à échéance est **expirée** des deux côtés, sans
+ * chevauchement ni trou. `now` injecté → déterministe. Idempotent (relancer sur
+ * une table déjà propre = 0 suppression). Renvoie le nombre de lignes purgées.
+ *
+ * Déclencheur ⚙️ `auth.gcSessionsOnLogin` (opportuniste au login, cf.
+ * `server-config.ts`) — appelé par `loginChild` (`current-session.ts`).
+ */
+export function purgeExpiredSessions(db: AppDatabase, now: Date): number {
+  return db.delete(sessions).where(lte(sessions.expiresAt, now)).run().changes;
 }

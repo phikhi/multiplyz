@@ -66,7 +66,8 @@ export interface RateLimitConfig {
 
 /**
  * Config ⚙️ de l'auth-lite (AUTH.md). Durées de session (enfant longue, parent
- * courte), coût de hash, seuils de rate-limit. Aucune valeur en dur ailleurs.
+ * courte), coût de hash, seuils de rate-limit, GC des sessions. Aucune valeur en
+ * dur ailleurs.
  */
 export interface AuthConfig {
   /** Durée de la session enfant (ms) — confort multi-appareils (~30 j). */
@@ -75,6 +76,17 @@ export interface AuthConfig {
   parentSessionMs: number;
   argon2: Argon2Config;
   rateLimit: RateLimitConfig;
+  /**
+   * ⚙️ **Déclencheur du GC des sessions expirées** (#44). `true` (défaut) =
+   * purge **opportuniste au login** : chaque connexion réussie supprime au
+   * passage les sessions périmées (`expires_at <= now`). Défaut retenu car v1
+   * n'a **pas de cron ni de daemon supplémentaire** (STACK : un seul process
+   * web). Basculer à `false` (env `AUTH_GC_SESSIONS_ON_LOGIN=false`) le jour où
+   * un cron/backup (#9) prend le relais — le GC devient alors une tâche de fond
+   * dédiée. La lecture des sessions filtre déjà l'expiration (`expires_at > now`)
+   * → désactiver le GC ne compromet **jamais** la sécurité, seulement l'hygiène.
+   */
+  gcSessionsOnLogin: boolean;
 }
 
 /** Seuils de fluence ⚙️ (ms) par compétence — « rapide » = `response_ms ≤ seuil`. */
@@ -162,6 +174,8 @@ export const CONFIG_DEFAULTS = {
       backoffFactor: 2,
       backoffMaxMs: 5 * 60 * 1000,
     },
+    // GC des sessions expirées : opportuniste au login (pas de cron en v1, #44).
+    gcSessionsOnLogin: true,
   },
   engine: {
     // Délais boîtes Leitner (j) : 0 · 1 · 2 · 4 · 9 · 21 (ENGINE §2/§11).
@@ -227,6 +241,19 @@ function parsePositiveNumber(raw: string | undefined, fallback: number): number 
   if (raw === undefined) return fallback;
   const n = Number.parseFloat(raw);
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/**
+ * Parse un **booléen** de configuration (drapeau ⚙️). Accepte `"true"`/`"false"`
+ * (insensible à la casse et aux espaces) ; toute autre valeur → défaut. Retenu
+ * pour les bascules d'infrastructure (ex. GC des sessions au login, #44).
+ */
+function parseBoolean(raw: string | undefined, fallback: boolean): boolean {
+  if (raw === undefined) return fallback;
+  const v = raw.trim().toLowerCase();
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return fallback;
 }
 
 /**
@@ -310,6 +337,7 @@ export function loadAuthConfig(env: Env): AuthConfig {
       backoffFactor: parsePositiveNumber(env.AUTH_BACKOFF_FACTOR, d.rateLimit.backoffFactor),
       backoffMaxMs: parsePositiveInt(env.AUTH_BACKOFF_MAX_MS, d.rateLimit.backoffMaxMs),
     },
+    gcSessionsOnLogin: parseBoolean(env.AUTH_GC_SESSIONS_ON_LOGIN, d.gcSessionsOnLogin),
   };
 }
 

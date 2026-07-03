@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { afterAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index";
@@ -23,11 +23,14 @@ afterAll(() => rmSync(tmpRoot, { recursive: true, force: true }));
 describe("schéma profiles", () => {
   it("insère et relit un profil (hash parent/récupération nullable)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
 
     const row = db.select().from(profiles).get();
     expect(row).toMatchObject({
       name: "Lina",
+      nameKey: "lina",
       pinHash: "h",
       avatar: "fox",
       parentPinHash: null,
@@ -39,17 +42,54 @@ describe("schéma profiles", () => {
 
   it("contraint l'unicité du prénom (single-tenant)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     expect(() =>
-      db.insert(profiles).values({ name: "Lina", pinHash: "h2", avatar: "cat" }).run(),
+      db
+        .insert(profiles)
+        .values({ name: "Lina", nameKey: "lina", pinHash: "h2", avatar: "cat" })
+        .run(),
     ).toThrow();
+  });
+
+  it("index UNIQUE sur name_key : deux clés identiques → doublon rejeté (ADR 0005, #37)", () => {
+    const db = freshDb();
+    // name distincts (index BINARY sur `name` n'attrape rien) mais name_key identique :
+    // seul l'index UNIQUE `name_key` (déclaré via `.unique()`) doit lever.
+    db.insert(profiles)
+      .values({ name: "Élodie", nameKey: "élodie", pinHash: "h", avatar: "fox" })
+      .run();
+    expect(() =>
+      db
+        .insert(profiles)
+        .values({ name: "élodie", nameKey: "élodie", pinHash: "h2", avatar: "cat" })
+        .run(),
+    ).toThrow();
+  });
+
+  it("GARDE anti-drift : les index de `profiles` en base == exactement {name, name_key} (ADR 0005)", () => {
+    // Garde le contrat drizzle cohérent (schema.ts ↔ snapshot ↔ SQL réel). L'index
+    // `name_key` est déclaré via `.unique()` de colonne → drizzle-kit le sérialise
+    // dans le snapshot ET le SQL (`db:generate` = no-op). Ce test lit l'état RÉEL
+    // en base (`sqlite_master`) après migration : il échoue si une migration perd
+    // l'un des index OU si un index inattendu apparaît (divergence future). Effet
+    // observable : retirer `.unique()` de `name_key` OU casser le SQL 0005 → rouge.
+    const db = freshDb();
+    const rows = db.all<{ name: string }>(
+      sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'profiles' AND name NOT LIKE 'sqlite_autoindex_%'`,
+    );
+    const indexes = rows.map((r) => r.name).sort();
+    expect(indexes).toEqual(["profiles_name_key_unique", "profiles_name_unique"]);
   });
 });
 
 describe("schéma sessions (FK ON DELETE CASCADE)", () => {
   it("purge les sessions à la suppression du profil (RGPD — AUTH §6)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     db.insert(sessions)
       .values({ token: "tok-1", profileId: 1, kind: "child", expiresAt: new Date(1_000_000) })
       .run();
@@ -108,7 +148,9 @@ describe("masteryKey (clé composite (profil, fact) encodée en PK texte)", () =
 describe("schéma mastery (Leitner + fluence — ENGINE §2)", () => {
   it("insère et relit une ligne (défauts DB : box 0, compteurs 0, dates nullables)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     // Insertion minimale → exerce tous les défauts DB (strength/counts/avg = 0).
     db.insert(mastery)
       .values({ id: masteryKey(1, "mult_6x8"), profileId: 1, factId: "mult_6x8", skill: "mult" })
@@ -131,7 +173,9 @@ describe("schéma mastery (Leitner + fluence — ENGINE §2)", () => {
 
   it("persiste force/compteurs/fluence et les timestamps quand fournis", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     db.insert(mastery)
       .values({
         id: masteryKey(1, "comp10_7"),
@@ -155,7 +199,9 @@ describe("schéma mastery (Leitner + fluence — ENGINE §2)", () => {
 
   it("contraint l'unicité (profil, fact) via la PK texte encodée", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     const row = {
       id: masteryKey(1, "add_4+9"),
       profileId: 1,
@@ -169,7 +215,9 @@ describe("schéma mastery (Leitner + fluence — ENGINE §2)", () => {
 
   it("purge la maîtrise à la suppression du profil (FK cascade — RGPD)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     db.insert(mastery)
       .values({ id: masteryKey(1, "mult_6x8"), profileId: 1, factId: "mult_6x8", skill: "mult" })
       .run();
@@ -206,7 +254,9 @@ describe("schéma mastery (Leitner + fluence — ENGINE §2)", () => {
 describe("schéma attempts (journal append-only — ENGINE §10)", () => {
   it("insère et relit une réponse (bool round-trip + défauts is_retry/created_at)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     // Sans `isRetry`/`createdAt` → exerce leurs défauts DB (false / unixepoch()).
     db.insert(attempts)
       .values({ profileId: 1, factId: "mult_6x8", skill: "mult", correct: true, responseMs: 1800 })
@@ -227,7 +277,9 @@ describe("schéma attempts (journal append-only — ENGINE §10)", () => {
 
   it("persiste correct=false et is_retry=true (bool drizzle → 0/1)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     db.insert(attempts)
       .values({
         profileId: 1,
@@ -245,7 +297,9 @@ describe("schéma attempts (journal append-only — ENGINE §10)", () => {
 
   it("est append-only : deux réponses sur le même fait coexistent", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     const base = { profileId: 1, factId: "mult_6x8", skill: "mult" as const };
     db.insert(attempts)
       .values({ ...base, correct: false, responseMs: 6000 })
@@ -258,7 +312,9 @@ describe("schéma attempts (journal append-only — ENGINE §10)", () => {
 
   it("purge les tentatives à la suppression du profil (FK cascade — RGPD)", () => {
     const db = freshDb();
-    db.insert(profiles).values({ id: 1, name: "Lina", pinHash: "h", avatar: "fox" }).run();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
     db.insert(attempts)
       .values({ profileId: 1, factId: "mult_6x8", skill: "mult", correct: true, responseMs: 1800 })
       .run();

@@ -1,4 +1,4 @@
-import { eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { profiles } from "@/lib/db/schema";
 import { getAuthConfig } from "@/config/server-config";
@@ -31,13 +31,26 @@ export class RecoveryError extends Error {
   }
 }
 
-/** Profil propriétaire (porte le PIN parent + le code de secours). */
-interface Owner {
+/** Profil propriétaire tel que **lu** en base (le code de secours est nullable). */
+interface OwnerRow {
   id: number;
   /** Hash du PIN **enfant** — sert à interdire un PIN parent identique. */
   pinHash: string;
   /** Hash du code de secours courant (nullable en base, présent sur l'owner). */
   recoveryCodeHash: string | null;
+}
+
+/**
+ * Propriétaire **vérifié** renvoyé après succès de `guardedVerifyRecovery` : le
+ * `recoveryCodeHash` est le hash **effectivement** confronté au code (jamais null
+ * — un owner sans hash de secours aurait échoué contre `TIMING_EQUALIZER_HASH`).
+ * Ce hash est réutilisé tel quel comme prédicat du CAS anti-TOCTOU (#50).
+ */
+interface Owner {
+  id: number;
+  pinHash: string;
+  /** Hash du code de secours qui a validé (non-null par construction). */
+  recoveryCodeHash: string;
 }
 
 /** Entrée de réinitialisation (code + nouveau PIN restent en clair jusqu'au hash). */
@@ -48,8 +61,8 @@ export interface ResetParentPinInput {
   ip: string;
 }
 
-/** Le profil propriétaire, ou `undefined` si le foyer n'est pas configuré. */
-function getOwner(db: AppDatabase): Owner | undefined {
+/** Le profil propriétaire lu en base, ou `undefined` si le foyer n'est pas configuré. */
+function getOwner(db: AppDatabase): OwnerRow | undefined {
   return db
     .select({
       id: profiles.id,
@@ -98,13 +111,18 @@ export async function guardedVerifyRecovery(
   if (recoveryBlocked || ipBlocked) return null;
 
   const owner = getOwner(db);
-  const ok = await verifyRecoveryCode(owner?.recoveryCodeHash ?? TIMING_EQUALIZER_HASH, code);
+  // Hash **effectivement** confronté au code : le hash de secours de l'owner, ou le
+  // hash factice (foyer absent → `verify` à temps constant, anti-énumération §4).
+  const verifiedHash = owner?.recoveryCodeHash ?? TIMING_EQUALIZER_HASH;
+  const ok = await verifyRecoveryCode(verifiedHash, code);
   // Ordre `owner !== undefined && ok` : foyer absent court-circuite AVANT `ok`
   // (branches toutes atteignables ; le `verify` factice garde un temps constant).
   if (owner !== undefined && ok) {
     resetAttempts(db, recoveryKey);
     resetAttempts(db, ipKey);
-    return owner;
+    // On propage le hash confronté (jamais null : c'est celui qui a validé) → il
+    // sert de prédicat au CAS anti-TOCTOU du reset (#50), sans re-lire la base.
+    return { id: owner.id, pinHash: owner.pinHash, recoveryCodeHash: verifiedHash };
   }
 
   recordFailure(db, recoveryKey, now);
@@ -161,10 +179,26 @@ export async function resetParentPin(
     hashSecret(input.newParentPin),
     hashRecoveryCode(recoveryCode),
   ]);
-  db.update(profiles)
+
+  // **CAS anti-TOCTOU (#50)** : entre la vérif du code (`guardedVerifyRecovery`,
+  // qui a lu `owner.recoveryCodeHash`) et cet `UPDATE`, plusieurs `await` argon2
+  // ont rendu la main à l'event loop → un second reset concurrent avec le même
+  // code valide pourrait s'intercaler (endpoint public ; `disabled={submitting}`
+  // client n'est PAS une garantie serveur). Sans garde, on aurait un
+  // **last-write-wins** : un appelant recevrait un code de secours qui n'est PAS
+  // celui persisté. On borne donc l'écriture au hash **exactement** lu/vérifié
+  // (`WHERE id = ? AND recovery_code_hash = ?`) : le 1er reset consomme le hash,
+  // le 2ᵉ ne matche plus (0 ligne) → `CODE_INVALID` propre plutôt qu'un écrasement
+  // silencieux. Une transaction sync ne suffit PAS ici (le hash est déjà calculé
+  // hors event-loop) : c'est le **prédicat sur l'ancien hash** qui sérialise, à la
+  // manière du pattern transaction-sync de `createHousehold` (LEARNINGS #36), sans
+  // casser « callback argon2 async hors transaction ».
+  const changed = db
+    .update(profiles)
     .set({ parentPinHash, recoveryCodeHash })
-    .where(eq(profiles.id, owner.id))
-    .run();
+    .where(and(eq(profiles.id, owner.id), eq(profiles.recoveryCodeHash, owner.recoveryCodeHash)))
+    .run().changes;
+  if (changed !== 1) throw new RecoveryError("CODE_INVALID");
 
   return { recoveryCode };
 }
