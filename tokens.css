@@ -211,6 +211,22 @@
   --scaffold-line-jump-arc:     var(--color-accent-primary-active); /* arc du saut (violet profond, ≥3:1 fond neutre 2 thèmes, distinct du point d'arrivée) */
   --scaffold-line-point-size:   var(--space-5); /* 24px — pastille départ/arrivée */
 
+  /* matrice (story #96, Matrix — mult) — même famille sémantique que --scaffold-*,
+     référence des tokens existants uniquement. Modèle « groupes répétés » (PRODUCT
+     §3.4 : a × b = a paquets de b) : chaque PAQUET (ligne) est un conteneur bordé +
+     fond distinct de la surface neutre du panneau, séparé par une gouttière — le
+     regroupement est donc VISIBLE par structure/bordure, jamais par la seule couleur
+     (a11y daltonisme, rétro #95 « le modèle doit être DESSINÉ, pas juste décrit »).
+     Points contrastants sur le fond de paquet dans les 2 thèmes (jamais
+     --color-text-inverse hors fond accent plein — piège #94/#104 récurrent). */
+  --scaffold-matrix-row-bg:      var(--color-bg-secondary);   /* fond du paquet, distinct de --scaffold-bg */
+  --scaffold-matrix-row-border:  var(--color-border-primary); /* bordure du paquet (regroupement spatial) */
+  --scaffold-matrix-row-radius:  var(--border-radius-sm);
+  --scaffold-matrix-row-gap:     var(--space-2); /* gouttière ENTRE paquets (rangées) */
+  --scaffold-matrix-dot-size:    var(--space-4); /* 16px — point d'une matrice */
+  --scaffold-matrix-dot-gap:     var(--space-1); /* espace entre points d'un même paquet */
+  --scaffold-matrix-dot-color:   var(--color-accent-primary-active); /* point, ≥3:1 sur fond de paquet (2 thèmes) */
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou
      style inline). Défaut = neutre. Le reste du système ne change pas. */

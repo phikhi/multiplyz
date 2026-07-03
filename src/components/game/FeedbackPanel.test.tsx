@@ -79,24 +79,26 @@ describe("FeedbackPanel — phase retry (no-fail, ENGINE §9)", () => {
 describe("FeedbackPanel — slot d'étayage visuel (épic #4, WIREFRAMES §3d)", () => {
   // L'étayage est un conteneur `role="img"` labellisé (VisualScaffold). Effet observable :
   // ces tests échouent si le montage conditionnel du slot est muté (retry → correct).
+  // `mult` → matrice (story #96) : libellé spécifique « 6 paquets de 8 », plus le
+  // générique (câblé depuis #96, cf. VisualScaffold.tsx SCAFFOLD_BY_SKILL.mult).
+  const matrixLabel = strings.play.scaffold.matrix.label.replace("{a}", "6").replace("{b}", "8");
+
   it("monte l'étayage en re-essai (sous la révélation de réponse)", () => {
     renderPanel({ phase: "retry", skill: "mult", operands: [6, 8] });
-    expect(screen.getByRole("img", { name: strings.play.scaffold.label })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: matrixLabel })).toBeInTheDocument();
   });
 
   it("NE monte PAS l'étayage en feedback juste (correct)", () => {
     renderPanel({ phase: "correct", skill: "mult", operands: [6, 8] });
     // Garde à effet observable : si la condition `!isCorrect` du slot saute, ce
     // `queryByRole` trouverait l'étayage et le test échouerait.
-    expect(
-      screen.queryByRole("img", { name: strings.play.scaffold.label }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: matrixLabel })).not.toBeInTheDocument();
   });
 
   it("l'étayage est rendu SOUS la révélation de la bonne réponse (ordre DOM)", () => {
     renderPanel({ phase: "retry", correctAnswer: 48, skill: "mult", operands: [6, 8] });
     const reveal = screen.getByText(strings.play.retry.answerReveal.replace("{n}", "48"));
-    const scaffold = screen.getByRole("img", { name: strings.play.scaffold.label });
+    const scaffold = screen.getByRole("img", { name: matrixLabel });
     // La révélation précède l'étayage dans l'ordre du document (WIREFRAMES §3d).
     expect(
       reveal.compareDocumentPosition(scaffold) & Node.DOCUMENT_POSITION_FOLLOWING,

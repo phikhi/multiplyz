@@ -4,15 +4,16 @@ import type { Skill } from "@/lib/engine/domain";
 import { strings } from "@/strings";
 import { TenFrame } from "@/components/game/scaffolds/TenFrame";
 import { NumberLine, numberLineLabel } from "@/components/game/scaffolds/NumberLine";
+import { Matrix, matrixLabel } from "@/components/game/scaffolds/Matrix";
 
 /**
  * **Dispatcher d'étayage visuel** (épic #4, WIREFRAMES §3d, PRODUCT §2.2).
  *
- * Story #93 = **fondation** : pose le **contrat de props** commun aux 3 étayages
+ * Story #93 = **fondation** : a posé le **contrat de props** commun aux 3 étayages
  * concrets (4.2 dix-cases `comp10`, 4.3 droite numérique `add`/`sub`, 4.4 matrice
- * `mult`) et le **slot** monté par `FeedbackPanel` en re-essai. Les représentations
- * concrètes sont des **placeholders** ici — chaque story aval remplace son placeholder
- * sans toucher au dispatch ni au contrat (surfaces symétriques, parallélisables).
+ * `mult`) et le **slot** monté par `FeedbackPanel` en re-essai. Épic #4 **complet**
+ * (4.2/4.3/4.4 mergées) : les 4 compétences sont câblées sur un étayage concret,
+ * plus de placeholder générique.
  *
  * **Sélection par `skill`** (ENGINE §1 « Étayage par compétence », WIREFRAMES §3d) :
  * un composant d'étayage par compétence connue. Un `skill` **inconnu** (payload
@@ -30,11 +31,10 @@ import { NumberLine, numberLineLabel } from "@/components/game/scaffolds/NumberL
  * annoncé, pas un générique « un petit dessin ». Le visuel reste doublé d'un texte
  * (daltonisme, LEARNINGS #23/#36).
  *
- * **Contrat symétrique #95/#96** : chaque entrée du registre fournit `render(props)`
- * (visuel décoratif) **et** `label(props)` (nom accessible dérivé des props). Une story
- * aval câble son composant concret + son libellé spécifique via ce même mécanisme, sans
- * jamais réintroduire de `role="img"` dans le composant concret. Les placeholders
- * gardent un libellé **générique** via ce même canal.
+ * **Contrat symétrique #94/#95/#96** : chaque entrée du registre fournit `render(props)`
+ * (visuel décoratif) **et** `label(props)` (nom accessible dérivé des props). Chaque
+ * story a câblé son composant concret + son libellé spécifique via ce même mécanisme,
+ * sans jamais réintroduire de `role="img"` dans le composant concret.
  *
  * **Aucun contrôle focusable** n'est ajouté (les étayages sont illustratifs, non
  * interactifs — #38 `:focus-visible` n'est pas un blocked-by).
@@ -70,32 +70,6 @@ export interface VisualScaffoldProps {
 export type ScaffoldRepresentationProps = Omit<VisualScaffoldProps, "skill">;
 
 /**
- * Placeholder générique de la fondation (#93) : marque la présence du slot d'étayage
- * sans dessiner de représentation concrète (ajoutée en 4.2/4.3/4.4). Le glyphe est
- * **décoratif** (`aria-hidden`) — toute l'information a11y passe par le `aria-label` du
- * conteneur parent (unique `role="img"`). `data-skill` expose la compétence sélectionnée
- * (débogage / E2E), sans texte visible en dur.
- */
-function ScaffoldPlaceholder({ skill }: { readonly skill: Skill }) {
-  return (
-    <div
-      aria-hidden="true"
-      data-skill={skill}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        minHeight: "var(--scaffold-min-height)",
-        color: "var(--scaffold-glyph-color)",
-        fontSize: "var(--font-size-2xl)",
-      }}
-    >
-      {"✳"}
-    </div>
-  );
-}
-
-/**
  * Une entrée du registre d'étayage : `render` produit le **visuel décoratif** (jamais de
  * `role="img"` propre), `label` produit le **nom accessible** dérivé des props, posé par
  * le conteneur sur l'unique `role="img"`. Contrat symétrique #95/#96.
@@ -108,9 +82,9 @@ interface ScaffoldEntry {
 /**
  * Registre **compétence → étayage**. Une entrée par compétence connue (`Record<Skill, …>`
  * → le typage garantit l'exhaustivité : ajouter une compétence au domaine casse la
- * compilation tant que son étayage n'est pas câblé). En 4.2/4.3/4.4, remplacer
- * l'entrée par le composant concret (`TenFrame`/`NumberLine`/`Matrix`) **et** son
- * libellé accessible spécifique. Les placeholders restants gardent le libellé générique.
+ * compilation tant que son étayage n'est pas câblé). Les 4 stories (4.2/4.3/4.4) ont
+ * chacune remplacé l'entrée générique par le composant concret
+ * (`TenFrame`/`NumberLine`/`Matrix`) **et** son libellé accessible spécifique.
  */
 const SCAFFOLD_BY_SKILL: Record<Skill, ScaffoldEntry> = {
   comp10: { render: (props) => <TenFrame {...props} />, label: tenFrameLabel },
@@ -125,13 +99,10 @@ const SCAFFOLD_BY_SKILL: Record<Skill, ScaffoldEntry> = {
     render: (props) => <NumberLine {...props} />,
     label: (props) => numberLineLabel("sub", props),
   },
-  mult: { render: () => <ScaffoldPlaceholder skill="mult" />, label: genericLabel },
+  // Story #96 : matrice (groupes répétés) — libellé spécifique dérivé des
+  // operands (« a paquets de b »), pas le générique (contrat #93/#94).
+  mult: { render: (props) => <Matrix {...props} />, label: matrixLabel },
 };
-
-/** Libellé accessible générique (placeholders #95/#96 non encore câblés). */
-function genericLabel(): string {
-  return strings.play.scaffold.label;
-}
 
 /**
  * Libellé accessible spécifique de la dix-cases (`comp10`) : porte l'**info numérique**
