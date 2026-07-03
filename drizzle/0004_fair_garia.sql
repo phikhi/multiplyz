@@ -1,0 +1,1 @@
+ALTER TABLE `attempts` ADD `client_attempt_id` text;

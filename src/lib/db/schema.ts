@@ -165,10 +165,20 @@ export const mastery = sqliteTable("mastery", {
  * PLAN §Modèle de données). Données **enfant** → FK `profile_id` `ON DELETE
  * CASCADE` (purge RGPD).
  *
- * PK `id` autoincrement simple : append-only, **aucune unicité** (contrairement à
- * `mastery`) → pas de callback extras. Pas d'index secondaire pour l'instant
- * (single-tenant ; l'agrégation dashboard #7 en ajoutera un via migration si le
- * volume le justifie).
+ * PK `id` autoincrement simple : append-only → pas de callback extras. Pas d'index
+ * secondaire pour l'instant (single-tenant ; l'agrégation dashboard #7 en ajoutera
+ * un via migration si le volume le justifie).
+ *
+ * **Idempotence (SYNC §2)** : chaque écriture de réponse porte un `client_attempt_id`
+ * (id opaque **fourni par le client**) → un rejeu réseau (retry après coupure, SYNC
+ * §3) portant le même id **ne crée pas de doublon** et **ne recompte pas** la maîtrise.
+ * SYNC.md est la spec **la plus précise** sur l'idempotence (« chaque écriture porte
+ * un id client ») → colonne **in-contract** (même précédent que `is_retry`, absent de
+ * PLAN §data mais requis par ENGINE §10, cf. LEARNINGS #58). L'unicité `(profil, id
+ * client)` est vérifiée **au niveau requête dans la transaction synchrone** (pas de
+ * callback `sqliteTable` d'extras qui casserait le gate 100 % fonctions, LEARNINGS
+ * #34/#46 ; table single-tenant → scan filtré suffit, index différé). Nullable : le
+ * diagnostic (3.6) amorce `mastery` sans passer par ce journal de réponse client.
  */
 export const attempts = sqliteTable("attempts", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -186,6 +196,12 @@ export const attempts = sqliteTable("attempts", {
   responseMs: integer("response_ms").notNull(),
   /** Reprise après une erreur (« refait une fois », ENGINE §9 / PLAN). */
   isRetry: integer("is_retry", { mode: "boolean" }).notNull().default(false),
+  /**
+   * Id opaque **fourni par le client** pour l'idempotence (SYNC §2). Un rejeu portant
+   * le même `(profile_id, client_attempt_id)` est ignoré (aucune 2ᵉ mutation). Unicité
+   * portée par la requête (dans la transaction sync), pas par un index (single-tenant).
+   */
+  clientAttemptId: text("client_attempt_id"),
   /** Instant de la réponse (régularité / tendances). */
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
