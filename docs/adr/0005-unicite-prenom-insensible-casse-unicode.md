@@ -3,7 +3,8 @@
 - **Statut** : accepté
 - **Type** : data
 - **Portée** : mineure (durcissement in-contract d'un invariant déjà promis — l'agent orchestrateur accepte, ADR 0003)
-- **Liens** : issues #37 · #89 · PR #91 · specs [AUTH.md](../../AUTH.md) §1 · [PLAN.md](../../PLAN.md) §Modèle de données
+- **Liens** : issues #37 · #89 · #105 · PR #91 · #106 · specs [AUTH.md](../../AUTH.md) §1 · [PLAN.md](../../PLAN.md) §Modèle de données
+- **Amendement** : #105 / PR #106 — colonne `name_key` **nullable** (au lieu de `NOT NULL`) + backfill applicatif (voir [Addendum](#addendum-105--colonne-nullable--backfill-applicatif)).
 
 ## Contexte
 
@@ -23,7 +24,7 @@ nameKey(raw) = sanitizeName(raw)      // trim + espaces compactés
                  .toLocaleLowerCase()  // minuscule locale-aware (couvre É→é)
 ```
 
-- Un **index UNIQUE `profiles_name_key_unique`** est déclaré sur `name_key` via la **méthode chaînée `.unique()` de la colonne** (`text("name_key").notNull().unique("profiles_name_key_unique")`) — **pas** via le callback d'extras 3ᵉ-arg `sqliteTable(name, cols, (t) => [...])`. C'est **ce callback** qui casse le gate 100 % fonctions (jamais invoqué au runtime, LEARNINGS #34/#46) ; le `.unique()` de colonne n'ajoute **aucune** fonction non couverte (vérifié : `schema.ts` reste à 100 % lignes/fonctions/branches). drizzle-kit **sérialise** donc l'index dans le snapshot **et** dans le SQL généré (`drizzle/0005_*.sql`) → `schema.ts` ↔ snapshot ↔ SQL réel **cohérents**, `pnpm db:generate` = **no-op**.
+- Un **index UNIQUE `profiles_name_key_unique`** est déclaré sur `name_key` via la **méthode chaînée `.unique()` de la colonne** (`text("name_key").unique("profiles_name_key_unique")` — colonne **nullable** depuis #105, voir Addendum) — **pas** via le callback d'extras 3ᵉ-arg `sqliteTable(name, cols, (t) => [...])`. C'est **ce callback** qui casse le gate 100 % fonctions (jamais invoqué au runtime, LEARNINGS #34/#46) ; le `.unique()` de colonne n'ajoute **aucune** fonction non couverte (vérifié : `schema.ts` reste à 100 % lignes/fonctions/branches). drizzle-kit **sérialise** donc l'index dans le snapshot **et** dans le SQL généré (`drizzle/0005_*.sql`) → `schema.ts` ↔ snapshot ↔ SQL réel **cohérents**, `pnpm db:generate` = **no-op**.
 - L'onboarding (`createHousehold`) **écrit** `name_key = nameKey(name)`. Le check d'unicité (`nameTaken`) **matche** sur `name_key` (plus sur `lower(name)`). Même clé des deux côtés de la comparaison.
 - L'index UNIQUE sur `name` (BINARY) **reste** en garde-fou secondaire.
 
@@ -42,5 +43,19 @@ La normalisation Unicode se fait **côté application** (JS `toLocaleLowerCase("
 - **+** L'invariant d'unicité insensible à la casse **Unicode** est désormais honoré (capitales accentuées incluses) et porté **en base** (index UNIQUE), pas seulement au niveau requête.
 - **+** `nameKey` est une fonction **pure** (couvrable 100 %, déterministe, locale figée `fr-FR`), réutilisable par tout futur lookup par prénom.
 - **+** `schema.ts` ↔ snapshot ↔ SQL réel **cohérents** (`.unique()` de colonne) → `pnpm db:generate` est un **no-op**, pas de drift. **Garde à effet observable** : `schema.test.ts` asserte que les index de `profiles` en base (`sqlite_master`) après migration valent exactement `{profiles_name_unique, profiles_name_key_unique}` → rouge si une migration perd/ajoute un index ou si `.unique()` est retiré.
-- **−** `profiles` porte une colonne dérivée `name_key` **NOT NULL** : tout insert de profil doit la fournir (le vrai chemin `createHousehold` le fait ; les seeds de test l'ajoutent explicitement).
+- **−** `profiles` porte une colonne dérivée `name_key` **nullable** (amendé #105 — voir Addendum) dont le **non-null est un invariant applicatif** : `createHousehold` la fournit toujours, le backfill de migration remplit les lignes `NULL`. L'index UNIQUE enforce l'unicité sur toute valeur non-null.
 - **Spec** : `AUTH.md` §1 et `PLAN.md` §Modèle de données mis à jour (unicité précisée « insensible à la casse **Unicode** », colonne `name_key` + index UNIQUE).
+
+## Addendum (#105) — colonne nullable + backfill applicatif
+
+**Contexte.** La migration 0005 initiale faisait `ALTER TABLE profiles ADD name_key text NOT NULL` sans default. SQLite **refuse** d'ajouter une colonne `NOT NULL` sans default sur une table **déjà peuplée** (`Cannot add a NOT NULL column with default value NULL`) → `pnpm db:migrate` plantait sur toute base dev antérieure à #37 (marchait seulement sur table vide). Le backfill n'est **pas** exprimable en SQL : `nameKey()` = NFC + `toLocaleLowerCase("fr-FR")`, alors que `lower()` SQLite est ASCII-only (cf. Décision).
+
+**Décision (in-contract, HOW-dans-le-WHAT — l'orchestrateur accepte, ADR 0003).** La colonne `name_key` reste **nullable** au niveau moteur, sur les **quatre** plans alignés — `schema.ts` (pas de `.notNull()`) ↔ snapshot (`notNull:false`) ↔ SQL (`ADD name_key text`) ↔ base — pour **préserver la cohérence anti-drift** exigée par la doctrine snapshot/SQL (LEARNINGS #411-419) : `pnpm db:generate` reste **no-op**. L'ancienne piste « `NOT NULL` de type + colonne physiquement nullable + snapshot désynchronisé » est **rejetée** : c'est exactement le drift snapshot↔SQL déjà proscrit (Alternatives, ligne « Migration SQL à la main + snapshot désynchronisé »).
+
+Le **non-null redevient un invariant applicatif** (déjà la posture de défense en profondeur de l'ADR), garanti par : la validation, l'INSERT `createHousehold`, et un **backfill de migration** `runMigrations` → `backfillNameKeys` (`src/lib/db/migrate.ts`) qui remplit toute ligne `name_key IS NULL` via `nameKey()` juste après `migrate()`. Idempotent (ne touche que les `NULL`).
+
+**Collision.** Une base pré-#37 (unique BINARY sur `name`) a pu stocker `Élodie` **et** `élodie` — deux clés convergentes. Le backfill **détecte** la collision **avant toute écriture** et lève une erreur explicite nommant les profils (l'owner renomme, puis relance) ; les écritures sont **transactionnelles** (atomiques, rejeu déterministe, pas de base à demi-migrée).
+
+**Gardes à effet observable** (`src/lib/db/db.test.ts`) : (1) migration sur table **peuplée** ne plante plus + backfille `Élodie → élodie` ; (2) colonne physiquement **nullable** après migration (`PRAGMA table_info` `notnull=0`) — rouge si un futur agent la repasse `NOT NULL` ; (3) backfill accent-correct **dérivé de `nameKey()`** (NFC + sanitize + locale, pas un `lower()` naïf) ; (4) collision → erreur explicite + aucune écriture + rejeu déterministe.
+
+**Édition d'une migration livrée.** 0005 est **éditée** (pas de 0006) : une base pré-0005 crashe *sur* 0005, un 0006 ultérieur ne s'exécuterait jamais. Le migrator drizzle applique par timestamp (`folderMillis > lastDbMigration.created_at`), donc sur une base ayant déjà appliqué l'ancien 0005 la version éditée est **inerte** (pas de re-run). Pas de prod → aucune base tierce impactée.
