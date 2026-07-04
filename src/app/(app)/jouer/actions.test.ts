@@ -8,8 +8,9 @@ import {
   type SubmitAttemptInput,
 } from "@/lib/engine/service";
 import { selectDiagnostic } from "@/lib/engine/diagnostic";
-import { finishLevel, type FinishLevelInput } from "@/lib/game/finish-level";
-import { getUnlockedWorldCount } from "@/lib/game/unlock";
+import { finishLevel, type FinishLevelResult } from "@/lib/game/finish-level";
+import type { RewardBreakdown } from "@/lib/game/reward";
+import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
 import {
   diagnosticPlanAction,
   finishLevelAction,
@@ -37,12 +38,15 @@ const SUBMIT_INPUT: SubmitAttemptInput = {
 const FAKE_CONFIG = { starThresholds: [0.6, 0.85, 1] as const };
 /** Config carte de test : `levelsPerWorld` transmis à `finishLevel`/`getUnlockedWorldCount`. */
 const FAKE_MAP_CONFIG = { levelsPerWorld: 10, treasureEvery: 4, bossQuestionCount: 13 };
+/** Barème ⚙️ de test — transmis à `finishLevel` (source de vérité serveur, ECONOMY §4.1). */
+const FAKE_ECONOMY_CONFIG = { levelBaseCoins: 10, starBonusCoins: 5, treasureBonusCoins: 15 };
 
 vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => "DB") }));
 vi.mock("@/config/server-config", () => ({
   getEngineConfig: vi.fn(() => FAKE_CONFIG),
   getMapConfig: vi.fn(() => FAKE_MAP_CONFIG),
+  getEconomyConfig: vi.fn(() => FAKE_ECONOMY_CONFIG),
 }));
 vi.mock("@/lib/engine/service", () => ({
   startLevel: vi.fn(),
@@ -52,7 +56,10 @@ vi.mock("@/lib/engine/service", () => ({
 }));
 vi.mock("@/lib/engine/diagnostic", () => ({ selectDiagnostic: vi.fn() }));
 vi.mock("@/lib/game/finish-level", () => ({ finishLevel: vi.fn() }));
-vi.mock("@/lib/game/unlock", () => ({ getUnlockedWorldCount: vi.fn() }));
+vi.mock("@/lib/game/unlock", () => ({
+  getUnlockedWorldCount: vi.fn(),
+  resolveCurrentLevelTarget: vi.fn(),
+}));
 
 const profileMock = vi.mocked(getCurrentChildProfileId);
 const startLevelMock = vi.mocked(startLevel);
@@ -62,9 +69,12 @@ const needsDiagnosticMock = vi.mocked(needsDiagnostic);
 const selectDiagnosticMock = vi.mocked(selectDiagnostic);
 const finishLevelMock = vi.mocked(finishLevel);
 const getUnlockedWorldCountMock = vi.mocked(getUnlockedWorldCount);
+const resolveTargetMock = vi.mocked(resolveCurrentLevelTarget);
 
-/** Payload de fin de niveau (l'action ne fait que le transmettre au service mocké). */
-const FINISH_INPUT: FinishLevelInput = { worldIndex: 0, levelIndex: 3, stars: 2 };
+/** Décomposition de gain factice (le service la renvoie ; l'action la transmet au client). */
+const FAKE_REWARD: RewardBreakdown = { base: 10, starBonus: 10, treasureBonus: 0, total: 20 };
+/** Cible résolue **serveur** factice (monde/niveau) — jamais transmise par le client. */
+const FAKE_TARGET = { worldIndex: 0, levelIndex: 3 };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -192,55 +202,104 @@ describe("seedDiagnosticAction", () => {
 });
 
 describe("finishLevelAction", () => {
-  it("non authentifié → { ok: false, error: UNAUTHENTICATED }, aucune écriture", async () => {
+  /** Membre « succès » du résultat service (branche `ok: true`). */
+  type FinishSuccess = Extract<FinishLevelResult, { ok: true }>;
+
+  /** Résultat succès factice du service (avec gains) — surchargeable par test. */
+  function successResult(overrides: Partial<FinishSuccess> = {}): FinishSuccess {
+    return {
+      ok: true,
+      stars: 2,
+      unlockedNextWorld: false,
+      reward: FAKE_REWARD,
+      balance: { coins: 20, shards: 0 },
+      coinsApplied: true,
+      ...overrides,
+    };
+  }
+
+  it("non authentifié → { ok: false, error: UNAUTHENTICATED }, aucune résolution ni écriture", async () => {
     profileMock.mockResolvedValue(null);
-    await expect(finishLevelAction(FINISH_INPUT)).resolves.toEqual({
+    await expect(finishLevelAction(2)).resolves.toEqual({
       ok: false,
       stars: null,
       unlockedNextWorld: false,
+      reward: null,
+      coins: null,
+      coinsApplied: false,
       error: "UNAUTHENTICATED",
     });
+    expect(resolveTargetMock).not.toHaveBeenCalled();
     expect(finishLevelMock).not.toHaveBeenCalled();
   });
 
-  it("niveau verrouillé → { ok: false, error } (mappe le refus service, pas de 500)", async () => {
+  it("refus service → { ok: false, error } (mappe le refus, pas de 500, tous gains à null)", async () => {
     profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
     finishLevelMock.mockReturnValue({ ok: false, error: "LEVEL_LOCKED" });
-    await expect(finishLevelAction(FINISH_INPUT)).resolves.toEqual({
+    await expect(finishLevelAction(2)).resolves.toEqual({
       ok: false,
       stars: null,
       unlockedNextWorld: false,
+      reward: null,
+      coins: null,
+      coinsApplied: false,
       error: "LEVEL_LOCKED",
     });
   });
 
-  it("succès non-boss → { ok: true, stars, unlockedNextWorld: false }, profil de session + config carte + Date injectée", async () => {
+  it("succès non-boss → gains renvoyés ; CIBLE résolue SERVEUR (jamais du client) + barème + Date injectés", async () => {
     profileMock.mockResolvedValue(7);
-    finishLevelMock.mockReturnValue({ ok: true, stars: 2, unlockedNextWorld: false });
-    await expect(finishLevelAction(FINISH_INPUT)).resolves.toEqual({
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
+    finishLevelMock.mockReturnValue(successResult());
+    // Le client n'envoie QUE ses étoiles (jamais un world/level_index, SYNC §1).
+    await expect(finishLevelAction(2)).resolves.toEqual({
       ok: true,
       stars: 2,
       unlockedNextWorld: false,
+      reward: FAKE_REWARD,
+      coins: 20,
+      coinsApplied: true,
       error: null,
     });
+    // La cible est résolue serveur depuis le profil de session + levelsPerWorld.
+    expect(resolveTargetMock).toHaveBeenCalledTimes(1);
+    const [tDb, tProfile, tLevels] = resolveTargetMock.mock.calls[0];
+    expect(tDb).toBe("DB");
+    expect(tProfile).toBe(7);
+    expect(tLevels).toBe(FAKE_MAP_CONFIG.levelsPerWorld);
+    // `finishLevel` reçoit la cible résolue serveur + les étoiles du client + les 2 configs.
     expect(finishLevelMock).toHaveBeenCalledTimes(1);
-    const [dbArg, profileArg, inputArg, configArg, nowArg] = finishLevelMock.mock.calls[0];
+    const [dbArg, profileArg, inputArg, mapArg, ecoArg, nowArg] = finishLevelMock.mock.calls[0];
     expect(dbArg).toBe("DB");
     expect(profileArg).toBe(7); // profil de session, jamais du client
-    expect(inputArg).toBe(FINISH_INPUT);
-    expect(configArg).toBe(FAKE_MAP_CONFIG);
+    expect(inputArg).toEqual({ worldIndex: 0, levelIndex: 3, stars: 2 }); // cible serveur + étoiles client
+    expect(mapArg).toBe(FAKE_MAP_CONFIG);
+    expect(ecoArg).toBe(FAKE_ECONOMY_CONFIG);
     expect(nowArg).toBeInstanceOf(Date);
   });
 
-  it("succès boss → { ok: true, unlockedNextWorld: true } (monde suivant débloqué)", async () => {
+  it("succès boss → { unlockedNextWorld: true } (monde suivant débloqué)", async () => {
     profileMock.mockResolvedValue(7);
-    finishLevelMock.mockReturnValue({ ok: true, stars: 1, unlockedNextWorld: true });
-    await expect(finishLevelAction({ worldIndex: 0, levelIndex: 10, stars: 1 })).resolves.toEqual({
-      ok: true,
-      stars: 1,
-      unlockedNextWorld: true,
-      error: null,
-    });
+    resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 10 });
+    finishLevelMock.mockReturnValue(
+      successResult({ stars: 1, unlockedNextWorld: true, reward: FAKE_REWARD }),
+    );
+    const res = await finishLevelAction(1);
+    expect(res.ok).toBe(true);
+    expect(res.unlockedNextWorld).toBe(true);
+    expect(res.coins).toBe(20);
+  });
+
+  it("rejeu (coinsApplied false) → solde inchangé renvoyé, coinsApplied false (idempotence exposée)", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
+    finishLevelMock.mockReturnValue(
+      successResult({ coinsApplied: false, balance: { coins: 20, shards: 0 } }),
+    );
+    const res = await finishLevelAction(2);
+    expect(res.coinsApplied).toBe(false);
+    expect(res.coins).toBe(20); // solde inchangé (pas de double crédit)
   });
 });
 

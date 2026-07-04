@@ -4,6 +4,7 @@ import { PlayScreen } from "./PlayScreen";
 import { strings } from "@/strings";
 import {
   diagnosticPlanAction,
+  finishLevelAction,
   seedDiagnosticAction,
   startLevelAction,
   submitAttemptAction,
@@ -15,12 +16,14 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: 
 vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 vi.mock("@/app/(app)/jouer/actions", () => ({
   diagnosticPlanAction: vi.fn(),
+  finishLevelAction: vi.fn(),
   seedDiagnosticAction: vi.fn(),
   startLevelAction: vi.fn(),
   submitAttemptAction: vi.fn(),
 }));
 
 const diagnosticPlanMock = vi.mocked(diagnosticPlanAction);
+const finishLevelActionMock = vi.mocked(finishLevelAction);
 const seedDiagnosticMock = vi.mocked(seedDiagnosticAction);
 const startLevelMock = vi.mocked(startLevelAction);
 const submitAttemptMock = vi.mocked(submitAttemptAction);
@@ -52,6 +55,17 @@ function question(
 beforeEach(() => {
   vi.clearAllMocks();
   diagnosticPlanMock.mockResolvedValue({ items: [] }); // profil déjà amorcé par défaut
+  // Fin de niveau réussie par défaut (avec gain) — les tests qui atteignent l'écran de
+  // résultats déclenchent `finishLevelAction` (persistance + crédit). Surchargé au besoin.
+  finishLevelActionMock.mockResolvedValue({
+    ok: true,
+    stars: 0,
+    unlockedNextWorld: false,
+    reward: { base: 10, starBonus: 0, treasureBonus: 0, total: 10 },
+    coins: 10,
+    coinsApplied: true,
+    error: null,
+  });
 });
 
 describe("PlayScreen — chargement", () => {
@@ -358,6 +372,90 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText(strings.play.results.byStars[3])).toBeInTheDocument();
+  });
+
+  // GARDE CÂBLAGE #136 (effet observable) : à la fin d'un niveau, `finishLevelAction` est
+  // appelée avec les **étoiles jugées localement** (le client n'envoie QUE ses étoiles,
+  // jamais un world/level_index — SYNC §1) → persistance + crédit serveur. Rouge si le
+  // câblage sautait (l'ancien #64 n'appelait AUCUNE action de fin de niveau).
+  it("CÂBLAGE #136 : fin de niveau ⇒ finishLevelAction(stars) appelée + pièces gagnées affichées", async () => {
+    const fact68 = makeFact("mult", 6, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    // Le serveur tranche le gain (base + étoiles) → solde 25 pièces (barème mocké).
+    finishLevelActionMock.mockResolvedValue({
+      ok: true,
+      stars: 3,
+      unlockedNextWorld: false,
+      reward: { base: 10, starBonus: 15, treasureBonus: 0, total: 25 },
+      coins: 25,
+      coinsApplied: true,
+      error: null,
+    });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    // La fin de niveau est persistée serveur avec les étoiles jugées localement (3★).
+    await waitFor(() => expect(finishLevelActionMock).toHaveBeenCalledWith(3));
+    // Les pièces gagnées (solde serveur) s'affichent sur l'écran de résultats.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("img", {
+          name: strings.play.results.coinsPlural.replace("{n}", "25"),
+        }),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  // GARDE NO-FAIL (effet observable) : si `finishLevelAction` échoue (erreur réseau/refus),
+  // l'écran de résultats reste affiché **sans les pièces** (jamais bloquant, PRODUCT §2.2).
+  it("NO-FAIL : échec de finishLevelAction ⇒ résultats affichés SANS pièces (jamais bloquant)", async () => {
+    const fact68 = makeFact("mult", 6, 8);
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    finishLevelActionMock.mockResolvedValue({
+      ok: false,
+      stars: null,
+      unlockedNextWorld: false,
+      reward: null,
+      coins: null,
+      coinsApplied: false,
+      error: "UNAUTHENTICATED",
+    });
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    // Les résultats s'affichent (étoiles), le câblage a bien tenté la persistance...
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.results.title }),
+      ).toBeInTheDocument(),
+    );
+    await waitFor(() => expect(finishLevelActionMock).toHaveBeenCalledWith(3));
+    // ...mais AUCUNE ligne de pièces (l'échec serveur ne bloque pas, no-fail).
+    expect(screen.queryByText(/pièce/u)).not.toBeInTheDocument();
   });
 
   it("continuer depuis les résultats recharge un niveau (ou re-diagnostique)", async () => {

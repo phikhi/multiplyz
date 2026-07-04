@@ -5,10 +5,12 @@ import {
   ConfigError,
   getAuthConfig,
   getConfig,
+  getEconomyConfig,
   getEngineConfig,
   getMapConfig,
   loadAuthConfig,
   loadConfig,
+  loadEconomyConfig,
   loadEngineConfig,
   loadMapConfig,
   resetConfigCache,
@@ -450,6 +452,45 @@ describe("loadMapConfig — surcharges ⚙️ par env", () => {
   });
 });
 
+describe("loadEconomyConfig — défauts ⚙️ (ECONOMY §4.1/§5)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadEconomyConfig({})).toEqual(CONFIG_DEFAULTS.economy);
+  });
+
+  it("barème = base 10 + 5/étoile + 15 trésor (ECONOMY §5)", () => {
+    const eco = loadEconomyConfig({});
+    expect(eco.levelBaseCoins).toBe(10);
+    expect(eco.starBonusCoins).toBe(5);
+    expect(eco.treasureBonusCoins).toBe(15);
+  });
+});
+
+describe("loadEconomyConfig — surcharges ⚙️ par env", () => {
+  it("surcharge les trois paramètres du barème", () => {
+    const eco = loadEconomyConfig({
+      ECONOMY_LEVEL_BASE_COINS: "20",
+      ECONOMY_STAR_BONUS_COINS: "8",
+      ECONOMY_TREASURE_BONUS_COINS: "40",
+    });
+    expect(eco.levelBaseCoins).toBe(20);
+    expect(eco.starBonusCoins).toBe(8);
+    expect(eco.treasureBonusCoins).toBe(40);
+  });
+
+  it("accepte 0 (barème désactivable) mais retombe sur le défaut si négatif / non numérique", () => {
+    // parseNonNegativeInt : 0 est légitime (désactive une source de gain).
+    expect(loadEconomyConfig({ ECONOMY_TREASURE_BONUS_COINS: "0" }).treasureBonusCoins).toBe(0);
+    // Négatif (aberrant pour un gain) → défaut.
+    expect(loadEconomyConfig({ ECONOMY_LEVEL_BASE_COINS: "-5" }).levelBaseCoins).toBe(
+      CONFIG_DEFAULTS.economy.levelBaseCoins,
+    );
+    // Non numérique → défaut.
+    expect(loadEconomyConfig({ ECONOMY_STAR_BONUS_COINS: "x" }).starBonusCoins).toBe(
+      CONFIG_DEFAULTS.economy.starBonusCoins,
+    );
+  });
+});
+
 describe("loadConfig — bloc engine intégré", () => {
   it("expose le bloc engine dans la config applicative", () => {
     expect(loadConfig({ NODE_ENV: "development" }).engine).toEqual(CONFIG_DEFAULTS.engine);
@@ -457,6 +498,10 @@ describe("loadConfig — bloc engine intégré", () => {
 
   it("expose le bloc map dans la config applicative", () => {
     expect(loadConfig({ NODE_ENV: "development" }).map).toEqual(CONFIG_DEFAULTS.map);
+  });
+
+  it("expose le bloc economy dans la config applicative", () => {
+    expect(loadConfig({ NODE_ENV: "development" }).economy).toEqual(CONFIG_DEFAULTS.economy);
   });
 });
 
@@ -475,6 +520,15 @@ describe("getEngineConfig — accès mémoïsé", () => {
 
   it("expose le bloc engine de la config applicative", () => {
     expect(getEngineConfig()).toBe(getConfig().engine);
+  });
+});
+
+describe("getEconomyConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc economy de la config applicative", () => {
+    expect(getEconomyConfig()).toBe(getConfig().economy);
   });
 });
 

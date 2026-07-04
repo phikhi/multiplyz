@@ -1,27 +1,32 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { profiles } from "@/lib/db/schema";
-import type { MapConfig } from "@/config/server-config";
+import { ledger, profiles } from "@/lib/db/schema";
+import type { EconomyConfig, MapConfig } from "@/config/server-config";
 import { loadStars, recordStars } from "./progress";
 import { getUnlockedWorldCount } from "./unlock";
-import { finishLevel, type FinishLevelInput } from "./finish-level";
+import { loadWallet } from "./wallet";
+import { finishLevel, levelRewardRefId, type FinishLevelInput } from "./finish-level";
 
 /**
- * Tests d'intégration de la **fin de niveau** (5.3, MAP §1/§4/§6) sur **base réelle**
- * (SQLite en mémoire + migrations). Prouvent, à effet observable (rouge si la garde est
- * mutée) : persistance monotone, idempotence (pas de double effet / double déblocage),
- * **boss ⇒ déblocage**, **niveau non-boss ⇒ PAS de déblocage**, **étoiles ≠ barrière**, et
- * les gardes de déblocage linéaire (monde/niveau verrouillé) + gardes de forme.
+ * Tests d'intégration de la **fin de niveau** (5.3 progression + 5.5 gains de pièces,
+ * MAP §1/§4/§6, ECONOMY §4.1) sur **base réelle** (SQLite en mémoire + migrations).
+ * Prouvent, à effet observable (rouge si la garde est mutée) : persistance monotone,
+ * idempotence (pas de double effet / double déblocage / **double crédit**), gains de pièces
+ * (base + étoiles + trésor), **atomicité multi-écritures (rollback)**, boss ⇒ déblocage,
+ * niveau non-boss ⇒ PAS de déblocage, étoiles ≠ barrière, gardes de déblocage + de forme.
  */
 
 let db: AppDatabase;
 let profileId: number;
 const NOW = new Date(Date.UTC(2026, 6, 4, 10, 0, 0));
 const LATER = new Date(Date.UTC(2026, 6, 4, 11, 0, 0));
-/** 10 niveaux + boss (index 10). */
+/** 10 niveaux + boss (index 10). `treasureEvery: 4` → nœuds 3 et 7 sont des trésors. */
 const CONFIG: MapConfig = { levelsPerWorld: 10, treasureEvery: 4, bossQuestionCount: 13 };
 const BOSS = CONFIG.levelsPerWorld; // 10
+/** Barème ⚙️ (ECONOMY §5) : base 10, +5/étoile, +15 trésor. */
+const ECONOMY: EconomyConfig = { levelBaseCoins: 10, starBonusCoins: 5, treasureBonusCoins: 15 };
 
 function seedProfile(name: string): number {
   return db
@@ -47,6 +52,17 @@ function input(worldIndex: number, levelIndex: number, stars: number): FinishLev
   return { worldIndex, levelIndex, stars };
 }
 
+/** Wrapper : injecte le barème `ECONOMY` par défaut (surchargeable pour les tests de barème). */
+function finish(
+  worldIndex: number,
+  levelIndex: number,
+  stars: number,
+  when: Date = NOW,
+  economy: EconomyConfig = ECONOMY,
+) {
+  return finishLevel(db, profileId, input(worldIndex, levelIndex, stars), CONFIG, economy, when);
+}
+
 beforeEach(() => {
   db = createDatabase(":memory:");
   runMigrations(db);
@@ -55,30 +71,202 @@ beforeEach(() => {
 
 describe("finishLevel — persistance (MAP §4)", () => {
   it("persiste la fin du niveau courant (0) → progress écrit, étoiles stockées, point de reprise", () => {
-    const result = finishLevel(db, profileId, input(0, 0, 2), CONFIG, NOW);
-    expect(result).toEqual({ ok: true, stars: 2, unlockedNextWorld: false });
+    const result = finish(0, 0, 2);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.stars).toBe(2);
+    expect(result.ok && result.unlockedNextWorld).toBe(false);
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(2);
   });
 
   it("avance linéairement : compléter 0 ouvre 1, compléter 1 ouvre 2", () => {
-    finishLevel(db, profileId, input(0, 0, 3), CONFIG, NOW);
-    expect(finishLevel(db, profileId, input(0, 1, 3), CONFIG, NOW).ok).toBe(true);
-    expect(finishLevel(db, profileId, input(0, 2, 3), CONFIG, NOW).ok).toBe(true);
+    finish(0, 0, 3);
+    expect(finish(0, 1, 3).ok).toBe(true);
+    expect(finish(0, 2, 3).ok).toBe(true);
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 2 })).toBe(3);
   });
 
   // GARDE MONOTONE (MAP §4 / SYNC) : rejouer un niveau moins bien ne baisse jamais les étoiles.
   it("MONOTONE : rejoue le niveau 0 à 3★ puis 1★ → reste 3★", () => {
-    finishLevel(db, profileId, input(0, 0, 3), CONFIG, NOW);
-    const after = finishLevel(db, profileId, input(0, 0, 1), CONFIG, LATER);
-    expect(after).toEqual({ ok: true, stars: 3, unlockedNextWorld: false });
+    finish(0, 0, 3);
+    const after = finish(0, 0, 1, LATER);
+    expect(after.ok && after.stars).toBe(3);
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(3);
   });
 
   it("MONOTONE : une meilleure reprise fait progresser (1★ puis 3★ → 3★)", () => {
-    finishLevel(db, profileId, input(0, 0, 1), CONFIG, NOW);
-    const after = finishLevel(db, profileId, input(0, 0, 3), CONFIG, LATER);
+    finish(0, 0, 1);
+    const after = finish(0, 0, 3, LATER);
     expect(after.ok && after.stars).toBe(3);
+  });
+});
+
+describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () => {
+  // GARDE « base + bonus étoiles » : un niveau normal à 2★ = 10 + 2×5 = 20 pièces créditées.
+  it("niveau normal 2★ ⇒ base 10 + 2×5 = 20 pièces créditées + ledger + solde", () => {
+    const result = finish(0, 0, 2); // nœud 0 = normal
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.reward).toEqual({ base: 10, starBonus: 10, treasureBonus: 0, total: 20 });
+    expect(result.coinsApplied).toBe(true);
+    expect(result.balance.coins).toBe(20);
+    // Solde persisté réellement (pas seulement la valeur renvoyée).
+    expect(loadWallet(db, profileId).coins).toBe(20);
+    // Ligne ledger tracée (earn/coins/level, ref_id de rejeu).
+    const rows = db
+      .select({ amount: ledger.amount, reason: ledger.reason, refId: ledger.refId })
+      .from(ledger)
+      .all();
+    expect(rows).toEqual([{ amount: 20, reason: "level", refId: levelRewardRefId(0, 0) }]);
+  });
+
+  // GARDE « 0★ crédite quand même la base » (no-fail : terminer rapporte toujours, ECONOMY §1).
+  it("niveau normal 0★ ⇒ base 10 seule créditée (no-fail : terminer rapporte toujours)", () => {
+    const result = finish(0, 0, 0);
+    expect(result.ok && result.reward.total).toBe(10);
+    expect(loadWallet(db, profileId).coins).toBe(10);
+  });
+
+  // GARDE « bonus TRÉSOR » (effet observable) : le nœud 3 (treasureEvery=4 → (3+1)%4===0) est un
+  // trésor → +15. À 1★ : 10 + 5 + 15 = 30. Le type est dérivé SERVEUR de la position (jamais
+  // du client). Rouge si le bonus trésor cessait de s'appliquer, ou s'appliquait à un nœud normal.
+  it("nœud TRÉSOR (index 3) ⇒ bonus trésor +15 ajouté (10 + 1×5 + 15 = 30)", () => {
+    completeUpTo(0, 3); // ouvre le nœud 3 (trésor)
+    const result = finish(0, 3, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.reward).toEqual({ base: 10, starBonus: 5, treasureBonus: 15, total: 30 });
+    expect(loadWallet(db, profileId).coins).toBe(30);
+  });
+
+  // GARDE « nœud NORMAL n'a PAS de bonus trésor » (contraste avec le test ci-dessus) : le nœud 2
+  // (voisin du trésor 3) ne reçoit AUCUN bonus trésor.
+  it("nœud NORMAL voisin d'un trésor (index 2) ⇒ AUCUN bonus trésor", () => {
+    completeUpTo(0, 2);
+    const result = finish(0, 2, 1);
+    expect(result.ok && result.reward.treasureBonus).toBe(0);
+    expect(result.ok && result.reward.total).toBe(15); // 10 + 5, pas de +15
+  });
+
+  // GARDE « boss NE reçoit PAS le bonus trésor » (hors scope 5.5 : gros lot boss = 5.6) : le boss
+  // (dernier nœud) rapporte le gain de niveau standard, jamais un bonus trésor.
+  it("BOSS (dernier nœud) ⇒ gain de niveau standard, AUCUN bonus trésor (gros lot boss = 5.6)", () => {
+    completeUpTo(0, BOSS);
+    const result = finish(0, BOSS, 3);
+    expect(result.ok && result.reward.treasureBonus).toBe(0);
+    expect(result.ok && result.reward.total).toBe(25); // 10 + 3×5
+  });
+
+  // GARDE « barème = config versionnée » : un barème différent change le montant (rouge si un
+  // montant était figé en dur au lieu de lire EconomyConfig).
+  it("barème ⚙️ différent ⇒ montant différent (config versionnée, pas de valeur en dur)", () => {
+    const richConfig: EconomyConfig = {
+      levelBaseCoins: 100,
+      starBonusCoins: 50,
+      treasureBonusCoins: 0,
+    };
+    const result = finish(0, 0, 2, NOW, richConfig);
+    expect(result.ok && result.reward.total).toBe(200); // 100 + 2×50
+    expect(loadWallet(db, profileId).coins).toBe(200);
+  });
+
+  // GARDE « barème entièrement nul ⇒ aucun crédit » (branche total===0, coverage 100%) : un
+  // niveau à 0★ avec base 0 ne crédite rien (creditWalletInTx exige amount > 0) — solde reste 0.
+  it("barème NUL + 0★ ⇒ aucun crédit (solde inchangé), coinsApplied false, progress quand même écrit", () => {
+    const zeroConfig: EconomyConfig = {
+      levelBaseCoins: 0,
+      starBonusCoins: 0,
+      treasureBonusCoins: 0,
+    };
+    const result = finish(0, 0, 0, NOW, zeroConfig);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.reward.total).toBe(0);
+    expect(result.coinsApplied).toBe(false);
+    expect(result.balance.coins).toBe(0);
+    expect(loadWallet(db, profileId).coins).toBe(0);
+    // Aucune ligne ledger (aucun crédit tenté).
+    expect(db.select({ id: ledger.id }).from(ledger).all()).toEqual([]);
+    // Mais la progression EST écrite (fin de niveau persistée même sans gain).
+    expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(0);
+  });
+});
+
+describe("finishLevel — idempotence du gain (SYNC §2, story #126)", () => {
+  // GARDE « pas de DOUBLE crédit au rejeu » (effet observable) : rejouer la même fin de niveau
+  // ne recrédite PAS (ref_id déjà journalisé) — le solde reste le gain d'un seul niveau, une
+  // seule ligne ledger. Rouge si l'idempotence du crédit sautait (double pièces).
+  it("REJEU d'une même fin ⇒ PAS de double crédit (solde inchangé, une seule ligne ledger)", () => {
+    const first = finish(0, 0, 2, NOW);
+    expect(first.ok && first.coinsApplied).toBe(true);
+    expect(first.ok && first.balance.coins).toBe(20);
+
+    const replay = finish(0, 0, 2, LATER); // rejeu réseau
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    // Aucun 2ᵉ crédit : solde toujours 20, crédit NON appliqué.
+    expect(replay.coinsApplied).toBe(false);
+    expect(replay.balance.coins).toBe(20);
+    expect(loadWallet(db, profileId).coins).toBe(20);
+    // Une SEULE ligne ledger (pas de doublon).
+    expect(db.select({ id: ledger.id }).from(ledger).all()).toHaveLength(1);
+  });
+
+  // GARDE « rejeu MEILLEUR ne recrédite pas non plus » : même un rejeu à plus d'étoiles ne
+  // recrédite pas (la clé de rejeu est (world, level), indépendante des étoiles) → le crédit
+  // reste celui du 1er passage (idempotence par ref_id).
+  it("rejeu à plus d'étoiles ⇒ étoiles progressent (monotone) MAIS crédit NON re-appliqué", () => {
+    finish(0, 0, 1, NOW); // 10 + 5 = 15
+    const better = finish(0, 0, 3, LATER); // meilleur score
+    expect(better.ok && better.stars).toBe(3); // étoiles montées (monotone)
+    expect(better.ok && better.coinsApplied).toBe(false); // mais pas de 2ᵉ crédit
+    expect(loadWallet(db, profileId).coins).toBe(15); // solde = crédit du 1er passage
+  });
+});
+
+describe("finishLevel — ATOMICITÉ multi-écritures / rollback (règle #122/#124, story #126)", () => {
+  // GARDE ROLLBACK MULTI-ÉCRITURES (effet observable, mutation-prouvé) :
+  // La transaction protège ≥2 écritures : (1) recordStars (progress), puis (2)/(3) creditWalletInTx
+  // (upsert wallet + INSERT ledger). On induit la panne à la 2ᵉ/3ᵉ écriture GARDÉE — l'INSERT
+  // `ledger` — en DROPPANT la colonne `amount` de `ledger` (rebuild sans `amount`). Le
+  // `creditExists` en amont fait `SELECT id FROM ledger WHERE …` : il reste requêtable (colonnes
+  // id/profile_id/reason/ref_id présentes) → il NE court-circuite PAS avant la 1ʳᵉ écriture (règle
+  // #122 : la panne frappe l'écriture gardée, jamais une lecture en amont). L'ordre observé :
+  //   1. recordStars réussit (progress écrit)   ← 1ʳᵉ écriture
+  //   2. upsert wallet réussit (+coins)          ← 2ᵉ écriture
+  //   3. INSERT ledger ÉCHOUE (colonne `amount` manquante) ← 3ᵉ écriture gardée
+  //   ⇒ la transaction ROLLBACK : ni progress, ni wallet ne persistent.
+  // PREUVE : retirer le wrapper `db.transaction` de finishLevel casse PRÉCISÉMENT ce test
+  // (progress + wallet resteraient écrits malgré l'échec du ledger). Vérifié par mutation manuelle.
+  it("ROLLBACK : panne de l'INSERT ledger (2ᵉ/3ᵉ écriture) ⇒ progress ET wallet annulés (aucun état partiel)", () => {
+    // Rebuild `ledger` SANS la colonne `amount` : le SELECT de `creditExists` (id/reason/ref_id)
+    // reste valide → l'échec survient à l'INSERT (qui pose `amount`), APRÈS recordStars + wallet.
+    db.run(sql`DROP TABLE ledger`);
+    db.run(
+      sql`CREATE TABLE ledger (
+        id integer PRIMARY KEY AUTOINCREMENT,
+        profile_id integer NOT NULL,
+        direction text NOT NULL,
+        currency text NOT NULL,
+        reason text NOT NULL,
+        ref_id text,
+        created_at integer NOT NULL DEFAULT (unixepoch())
+      )`,
+    );
+
+    expect(() => finish(0, 0, 2)).toThrow();
+
+    // ROLLBACK PROUVÉ : aucune ligne progress (étoiles = 0 = jamais joué), solde à 0.
+    expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(0);
+    expect(loadWallet(db, profileId).coins).toBe(0);
+  });
+
+  // Contrôle NÉGATIF du test ci-dessus : le MÊME scénario SANS panne écrit bien progress + wallet
+  // (prouve que la panne ci-dessus est la SEULE cause du rollback, pas une garde en amont).
+  it("CONTRÔLE : sans panne, la même fin écrit bien progress ET wallet (le rollback n'est dû qu'à la panne)", () => {
+    const result = finish(0, 0, 2);
+    expect(result.ok).toBe(true);
+    expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(2);
+    expect(loadWallet(db, profileId).coins).toBe(20);
   });
 });
 
@@ -87,15 +275,16 @@ describe("finishLevel — déblocage linéaire boss ⇒ monde suivant (MAP §6)"
   // le monde suivant. Rouge si `unlockedNextWorld` cessait de dépendre de `levelIndex === boss`.
   it("BOSS COMPLÉTÉ ⇒ unlockedNextWorld: true ET monde suivant réellement débloqué", () => {
     completeUpTo(0, BOSS); // ouvre le boss (nœud courant = 10)
-    const result = finishLevel(db, profileId, input(0, BOSS, 3), CONFIG, NOW);
-    expect(result).toEqual({ ok: true, stars: 3, unlockedNextWorld: true });
+    const result = finish(0, BOSS, 3);
+    expect(result.ok && result.stars).toBe(3);
+    expect(result.ok && result.unlockedNextWorld).toBe(true);
     // Effet réel dérivé du progress : le monde 1 est désormais débloqué.
     expect(getUnlockedWorldCount(db, profileId, CONFIG.levelsPerWorld)).toBe(2);
   });
 
   // GARDE « niveau NON-boss ne débloque PAS » (effet observable, contraste avec le test ci-dessus).
   it("NIVEAU NON-BOSS complété ⇒ unlockedNextWorld: false ET monde suivant TOUJOURS verrouillé", () => {
-    const result = finishLevel(db, profileId, input(0, 0, 3), CONFIG, NOW);
+    const result = finish(0, 0, 3);
     expect(result.ok && result.unlockedNextWorld).toBe(false);
     expect(getUnlockedWorldCount(db, profileId, CONFIG.levelsPerWorld)).toBe(1); // pas de déblocage
   });
@@ -103,17 +292,18 @@ describe("finishLevel — déblocage linéaire boss ⇒ monde suivant (MAP §6)"
   // GARDE « ÉTOILES ≠ BARRIÈRE » (MAP §1/§8) : boss à 1★ débloque EXACTEMENT comme à 3★.
   it("ÉTOILES ≠ BARRIÈRE : boss complété avec 1★ débloque le monde suivant (comme 3★)", () => {
     completeUpTo(0, BOSS);
-    const result = finishLevel(db, profileId, input(0, BOSS, 1), CONFIG, NOW);
-    expect(result).toEqual({ ok: true, stars: 1, unlockedNextWorld: true });
+    const result = finish(0, BOSS, 1);
+    expect(result.ok && result.stars).toBe(1);
+    expect(result.ok && result.unlockedNextWorld).toBe(true);
     expect(getUnlockedWorldCount(db, profileId, CONFIG.levelsPerWorld)).toBe(2);
   });
 });
 
-describe("finishLevel — idempotence (SYNC §2)", () => {
+describe("finishLevel — idempotence progression + déblocage (SYNC §2)", () => {
   it("rejeu de la même fin de niveau ⇒ pas de double ligne, étoiles inchangées (monotone)", () => {
     completeUpTo(0, BOSS);
-    finishLevel(db, profileId, input(0, BOSS, 2), CONFIG, NOW);
-    finishLevel(db, profileId, input(0, BOSS, 2), CONFIG, LATER);
+    finish(0, BOSS, 2, NOW);
+    finish(0, BOSS, 2, LATER);
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: BOSS })).toBe(2);
   });
 
@@ -121,8 +311,8 @@ describe("finishLevel — idempotence (SYNC §2)", () => {
   // donc rejouer le boss ne double jamais le compte de mondes.
   it("rejeu du boss ⇒ PAS de double déblocage (déblocage dérivé, pas incrémenté)", () => {
     completeUpTo(0, BOSS);
-    finishLevel(db, profileId, input(0, BOSS, 3), CONFIG, NOW);
-    finishLevel(db, profileId, input(0, BOSS, 3), CONFIG, LATER); // rejeu
+    finish(0, BOSS, 3, NOW);
+    finish(0, BOSS, 3, LATER); // rejeu
     // Toujours exactement 2 mondes débloqués (monde 0 + monde 1), pas 3.
     expect(getUnlockedWorldCount(db, profileId, CONFIG.levelsPerWorld)).toBe(2);
   });
@@ -132,79 +322,75 @@ describe("finishLevel — gardes de déblocage linéaire (source de vérité ser
   // GARDE « monde verrouillé refusé » (effet observable) : on ne persiste pas la fin d'un
   // niveau d'un monde non débloqué (boss du précédent non fait).
   it("monde verrouillé (boss du monde 0 non complété) ⇒ WORLD_LOCKED, aucune écriture", () => {
-    const result = finishLevel(db, profileId, input(1, 0, 3), CONFIG, NOW);
+    const result = finish(1, 0, 3);
     expect(result).toEqual({ ok: false, error: "WORLD_LOCKED" });
     expect(loadStars(db, { profileId, worldIndex: 1, levelIndex: 0 })).toBe(0); // rien écrit
+    expect(loadWallet(db, profileId).coins).toBe(0); // aucun crédit non plus
   });
 
   it("monde débloqué → la fin de son 1ᵉʳ niveau passe", () => {
     completeUpTo(0, BOSS);
-    finishLevel(db, profileId, input(0, BOSS, 3), CONFIG, NOW); // ouvre le monde 1
-    const result = finishLevel(db, profileId, input(1, 0, 2), CONFIG, NOW);
-    expect(result).toEqual({ ok: true, stars: 2, unlockedNextWorld: false });
+    finish(0, BOSS, 3); // ouvre le monde 1
+    const result = finish(1, 0, 2);
+    expect(result.ok && result.stars).toBe(2);
+    expect(result.ok && result.unlockedNextWorld).toBe(false);
   });
 
   // GARDE « niveau verrouillé refusé » (effet observable) : sauter un niveau dans un monde
   // débloqué est refusé (déblocage linéaire intra-monde).
   it("niveau sauté (au-delà du courant) ⇒ LEVEL_LOCKED, aucune écriture", () => {
     // courant du monde 0 = niveau 0 ; tenter le niveau 3 (sauté).
-    const result = finishLevel(db, profileId, input(0, 3, 3), CONFIG, NOW);
+    const result = finish(0, 3, 3);
     expect(result).toEqual({ ok: false, error: "LEVEL_LOCKED" });
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 3 })).toBe(0);
+    expect(loadWallet(db, profileId).coins).toBe(0);
   });
 
   it("rejoue d'un niveau déjà complété (monotone) est autorisée", () => {
     complete(0, 0, 1);
-    const result = finishLevel(db, profileId, input(0, 0, 3), CONFIG, LATER);
-    expect(result).toEqual({ ok: true, stars: 3, unlockedNextWorld: false });
+    const result = finish(0, 0, 3, LATER);
+    expect(result.ok && result.stars).toBe(3);
+    expect(result.ok && result.unlockedNextWorld).toBe(false);
   });
 });
 
 describe("finishLevel — gardes de forme (payload public non fiable, #36)", () => {
   it("worldIndex non-entier ⇒ INVALID_INPUT", () => {
-    expect(finishLevel(db, profileId, input(0.5, 0, 2), CONFIG, NOW)).toEqual({
-      ok: false,
-      error: "INVALID_INPUT",
-    });
+    expect(finish(0.5, 0, 2)).toEqual({ ok: false, error: "INVALID_INPUT" });
   });
 
   it("worldIndex négatif ⇒ INVALID_INPUT", () => {
-    expect(finishLevel(db, profileId, input(-1, 0, 2), CONFIG, NOW)).toEqual({
-      ok: false,
-      error: "INVALID_INPUT",
-    });
+    expect(finish(-1, 0, 2)).toEqual({ ok: false, error: "INVALID_INPUT" });
   });
 
   it("levelIndex non-numérique ⇒ INVALID_INPUT", () => {
     expect(
-      finishLevel(db, profileId, { worldIndex: 0, levelIndex: "boss", stars: 2 }, CONFIG, NOW),
+      finishLevel(
+        db,
+        profileId,
+        { worldIndex: 0, levelIndex: "boss", stars: 2 },
+        CONFIG,
+        ECONOMY,
+        NOW,
+      ),
     ).toEqual({ ok: false, error: "INVALID_INPUT" });
   });
 
   it("stars hors bornes (4) ⇒ INVALID_INPUT", () => {
-    expect(finishLevel(db, profileId, input(0, 0, 4), CONFIG, NOW)).toEqual({
-      ok: false,
-      error: "INVALID_INPUT",
-    });
+    expect(finish(0, 0, 4)).toEqual({ ok: false, error: "INVALID_INPUT" });
   });
 
   it("stars négatif ⇒ INVALID_INPUT", () => {
-    expect(finishLevel(db, profileId, input(0, 0, -1), CONFIG, NOW)).toEqual({
-      ok: false,
-      error: "INVALID_INPUT",
-    });
+    expect(finish(0, 0, -1)).toEqual({ ok: false, error: "INVALID_INPUT" });
   });
 
   it("stars non-entier ⇒ INVALID_INPUT", () => {
-    expect(finishLevel(db, profileId, input(0, 0, 2.5), CONFIG, NOW)).toEqual({
-      ok: false,
-      error: "INVALID_INPUT",
-    });
+    expect(finish(0, 0, 2.5)).toEqual({ ok: false, error: "INVALID_INPUT" });
   });
 
   it("stars = 0 accepté (niveau complété sans étoile — no-fail, étoiles ≠ barrière)", () => {
-    const result = finishLevel(db, profileId, input(0, 0, 0), CONFIG, NOW);
-    expect(result).toEqual({ ok: true, stars: 0, unlockedNextWorld: false });
+    const result = finish(0, 0, 0);
+    expect(result.ok && result.stars).toBe(0);
     // Le niveau est bien complété (ligne progress présente) même à 0★.
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(0);
   });

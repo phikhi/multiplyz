@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { CONFIG_DEFAULTS, type MapConfig } from "@/config/server-config";
-import { buildMap, type BuildMapInput, type MapBuildConfig, type MapStars } from "./map";
+import {
+  baseNodeTypeAt,
+  buildMap,
+  type BuildMapInput,
+  type MapBuildConfig,
+  type MapStars,
+} from "./map";
 
 /**
  * Config carte réelle (⚙️ défauts de 3.2) → on teste contre le contrat effectif, pas
@@ -360,5 +366,41 @@ describe("buildMap — étoiles d'affichage (MAP §4)", () => {
   it("un niveau jamais joué a 0 étoile (no-fail : 0 est un état normal)", () => {
     const { nodes } = buildMap(1, input(), mapConfig());
     nodes.forEach((n) => expect(n.stars).toBe(0));
+  });
+});
+
+// ── baseNodeTypeAt : type de base d'un level_index (MAP §2/§3/§6, gains #126) ──
+describe("baseNodeTypeAt — type de base d'un level_index (dérivé serveur, gains #126)", () => {
+  // GARDE « cohérent avec buildMap » (effet observable) : le type dérivé par level_index doit
+  // matcher exactement le type de base du nœud correspondant de `buildMap` (dette 0, aucun
+  // overlay révision). Rouge si `baseNodeTypeAt` divergeait de la géométrie de la carte.
+  it("matche le type de base de chaque nœud de buildMap (MAP défaut)", () => {
+    const { nodes } = buildMap(1, input(), mapConfig());
+    for (const node of nodes) {
+      expect(baseNodeTypeAt(node.index, MAP)).toBe(node.type);
+    }
+  });
+
+  it("boss au dernier index (levelsPerWorld) — même si multiple de la cadence trésor", () => {
+    // levelsPerWorld=3, treasureEvery=4 : index 3 = boss (prime sur trésor).
+    expect(baseNodeTypeAt(3, { levelsPerWorld: 3, treasureEvery: 4, bossQuestionCount: 13 })).toBe(
+      "boss",
+    );
+  });
+
+  it("trésor aux positions de cadence (index 3 et 7 au défaut), normal ailleurs", () => {
+    expect(baseNodeTypeAt(3, MAP)).toBe("treasure");
+    expect(baseNodeTypeAt(7, MAP)).toBe("treasure");
+    expect(baseNodeTypeAt(0, MAP)).toBe("normal");
+    expect(baseNodeTypeAt(2, MAP)).toBe("normal");
+  });
+
+  // GARDE « jamais l'overlay révision » : `baseNodeTypeAt` renvoie le type de BASE (le gain
+  // dépend de la position, pas de l'état de dette). Un nœud normal reste normal quelle que
+  // soit la dette — le type de base ne connaît pas la révision (overlay d'affichage seul).
+  it("ne renvoie JAMAIS `revision` (type de base seul, indépendant de la dette)", () => {
+    for (let i = 0; i <= MAP.levelsPerWorld; i += 1) {
+      expect(baseNodeTypeAt(i, MAP)).not.toBe("revision");
+    }
   });
 });

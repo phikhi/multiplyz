@@ -1,50 +1,59 @@
 /**
- * Orchestration serveur de la **fin de niveau** (MAP §1/§4/§6, PRODUCT §1.3, SYNC).
+ * Orchestration serveur de la **fin de niveau** (MAP §1/§4/§6, PRODUCT §1.3/§2.2/§2.3,
+ * ECONOMY §4.1, SYNC).
  *
- * Câble la lecture de déblocage (`unlock.ts`) à l'écriture monotone (`recordStars`, 5.1)
- * dans **UNE** transaction synchrone better-sqlite3 (`db.transaction`, callback **sans
- * `await`**).
+ * Câble, dans **UNE** transaction synchrone better-sqlite3 (`db.transaction`, callback
+ * **sans `await`**), la garde de déblocage (`unlock.ts`) à **trois écritures atomiques** :
+ * 1. la progression monotone (`recordStars`, 5.1) — 1ʳᵉ écriture ;
+ * 2. le crédit de pièces au portefeuille (`creditWalletInTx`, 5.1) — 2ᵉ écriture ;
+ * 3. la ligne de journal `ledger` (dans `creditWalletInTx`) — 3ᵉ écriture.
  *
- * **Nature exacte de la transaction ici (pas d'overclaim)** :
- * - `finishLevel` est **entièrement synchrone** (better-sqlite3, binding synchrone, aucun
- *   `await` dans le callback) → dans le daemon Node **mono-process** (STACK.md), l'event-loop
- *   sérialise déjà les requêtes ; il n'y a **aucun entrelacement intra-process** à empêcher
- *   entre le check de déblocage et l'écriture (le check-then-write s'exécute d'un bloc).
- * - L'écriture protégée est **UNIQUE** (`recordStars`, un seul upsert) → elle est atomique
- *   **par elle-même** ; il n'y a **rien à rollback** (pas d'état partiel possible d'une seule
- *   écriture). Il n'existe donc **aujourd'hui aucun test d'atomicité à effet observable** pour
- *   cette fonction : en écrire un serait **vacuous** (« aucune ligne écrite » passe **avec ou
- *   sans** la transaction, puisqu'une écriture unique qui throw ne laisse jamais d'état
- *   partiel — cf. règle durcie CLAUDE.md §Tests/CI / rétro #122). On n'en ajoute donc pas.
- * - Rôle réel du `db.transaction` : (a) **cohérence de snapshot lecture↔écriture** pour le
- *   check-then-write (le BEGIN…COMMIT garantit que la garde et l'écriture voient la même vue
- *   sous WAL, y compris inter-connexions) ; (b) surtout, c'est **la structure correcte pour le
- *   couplage multi-écritures à venir en 5.5** (crédit de pièces au boss : `recordStars` +
- *   `creditWallet` + ligne `ledger` devront être **atomiques ensemble**). **C'est à ce
- *   moment-là** — quand une 2ᵉ écriture protégée existera — que la règle #122 (test de rollback
- *   frappant l'écriture protégée) deviendra **requise et non-vacuous**.
+ * **Transaction MULTI-ÉCRITURES (≥2)** — atomicité **requise et prouvée** (règle #122/#124) :
+ * depuis 5.5 la transaction protège **plusieurs écritures** (progress + wallet + ledger).
+ * Si une écriture **postérieure** à la 1ʳᵉ échoue (ex. l'INSERT `ledger`), la transaction
+ * **rollback** : ni les étoiles, ni le crédit ne sont persistés (aucun état partiel — un
+ * enfant ne peut pas se retrouver crédité sans progression, ni l'inverse). Cette propriété
+ * est **mutation-prouvée** : retirer le wrapper `db.transaction` casse le test de rollback
+ * de `finish-level.test.ts` (la panne frappe l'écriture **gardée** — colonne `ledger`
+ * manquante — APRÈS la 1ʳᵉ écriture `recordStars`, jamais une lecture en amont ; cf. règle
+ * durcie #122 : `DROP TABLE` d'une table lue en amont = anti-pattern, on casse l'écriture).
+ *
+ * **Idempotence** (progression idempotente CLAUDE.md, SYNC §2) — rejeu d'une **même fin de
+ * niveau** ⇒ **aucun double effet** :
+ * - `recordStars` upsert par PK encodée → une seule ligne progress, `max(existant, nouveau)` ;
+ * - `creditWalletInTx` détecte la clé de rejeu `ref_id = level:<world>:<level>` déjà
+ *   journalisée → **aucun 2ᵉ crédit, aucune 2ᵉ ligne ledger** (`applied: false`).
+ * Le rejeu renvoie donc le solde **inchangé** et le breakdown du barème (idempotent, pas
+ * de double pièces) — testé à effet observable (`finish-level.test.ts`).
+ *
+ * **Barème = config versionnée** (ECONOMY §3) : le montant vient de `EconomyConfig` +
+ * `computeLevelReward` (`reward.ts`, pur) — **jamais** de valeur en dur. Le **type de nœud**
+ * (pour le bonus trésor) est **dérivé serveur** de la géométrie (`baseNodeTypeAt`), jamais
+ * transmis par le client (source de vérité serveur, SYNC §1).
  *
  * **SERVER-ONLY** (importe la couche DB). Le `profileId` vient **toujours** de la session
- * (jamais du client, SYNC §1) ; l'appelant (server action) le résout via
- * `getCurrentChildProfileId`. `now` est injecté (horloge serveur, LEARNINGS #46).
+ * (jamais du client, SYNC §1). `now` est injecté (horloge serveur, LEARNINGS #46).
  *
  * **Invariants** :
  * - **Source de vérité serveur** : un client ne peut pas persister la complétion d'un
  *   niveau **verrouillé** (au-delà du nœud courant) — la garde `isLevelPlayable` rejette
  *   (déblocage linéaire MAP §1). Seul le nœud courant (ou un déjà-complété, rejoue) passe.
  * - **Déblocage jamais fondé sur les étoiles** (MAP §1/§8) : compléter le boss (dernier
- *   nœud) ouvre le monde suivant quel que soit le nombre d'étoiles (1★ comme 3★).
- * - **Monotone + idempotent** (MAP §4, SYNC) : `recordStars` applique `max(existant, nouveau)`
- *   côté SQL → une reprise moins réussie ne baisse jamais les étoiles ; rejouer la même fin
- *   de niveau ne crée pas de doublon ni ne débloque deux fois (l'unlock est **dérivé** du
- *   progress, pas incrémenté — pas de double effet possible).
+ *   nœud) ouvre le monde suivant quel que soit le nombre d'étoiles.
+ * - **L'éco ne bloque jamais l'apprentissage** (ECONOMY §1) : le crédit est **earn-side**
+ *   pur (jamais de débit ici), et un échec de crédit rollback la fin de niveau entière —
+ *   mais le barème est ≥ 0 par construction (`EconomyConfig`), donc le seul chemin d'échec
+ *   réel est une panne d'infrastructure (colonne/table), pas une valeur métier.
  */
 
 import type { AppDatabase } from "@/lib/db";
-import type { MapConfig } from "@/config/server-config";
+import type { EconomyConfig, MapConfig } from "@/config/server-config";
 import type { Stars } from "@/lib/db/schema";
 import { recordStars } from "./progress";
 import { isLevelPlayable, isWorldUnlocked, loadWorldProgress } from "./unlock";
+import { baseNodeTypeAt } from "./map";
+import { computeLevelReward, type RewardBreakdown } from "./reward";
+import { assertPositiveAmount, creditWalletInTx, loadWallet, type WalletBalance } from "./wallet";
 
 /**
  * Cible **brute** (non fiable) d'une fin de niveau (endpoint public) — chaque champ est
@@ -71,17 +80,31 @@ export type FinishLevelError =
 
 /** Issue d'une fin de niveau. */
 export type FinishLevelResult =
-  /** Persistée (ou rejouée) : étoiles **stockées** (le max monotone) + si le monde suivant est ouvert. */
+  /** Persistée (ou rejouée) : étoiles **stockées** + pièces gagnées + si le monde suivant est ouvert. */
   | {
       readonly ok: true;
       /** Étoiles effectivement stockées après l'écriture monotone (`max(existant, nouveau)`). */
       readonly stars: Stars;
       /**
        * `true` si compléter ce niveau était le **boss** (dernier nœud) → monde suivant
-       * **débloqué** (dérivé du progress, MAP §6). `false` pour un niveau non-boss (ne
-       * débloque **pas** le monde suivant, garde testée à effet observable).
+       * **débloqué** (dérivé du progress, MAP §6). `false` pour un niveau non-boss.
        */
       readonly unlockedNextWorld: boolean;
+      /**
+       * **Décomposition** du gain de pièces (base + bonus étoiles + bonus trésor, ECONOMY
+       * §4.1/§5). Toujours renvoyée (même montant au rejeu — barème déterministe). Le
+       * `total` a été **crédité** au 1ᵉʳ passage ; au rejeu il n'est **pas re-crédité**
+       * (idempotence) mais reste affiché (le breakdown décrit ce que le niveau **vaut**).
+       */
+      readonly reward: RewardBreakdown;
+      /**
+       * **Solde du portefeuille après** la fin de niveau (pièces + éclats, ECONOMY §3.1).
+       * Reflète le crédit s'il a été appliqué ; au rejeu, c'est le solde **inchangé**
+       * (aucun double crédit) → l'UI affiche un solde cohérent (source de vérité serveur).
+       */
+      readonly balance: WalletBalance;
+      /** `false` si le crédit était un **rejeu** déjà journalisé (aucun 2ᵉ crédit appliqué). */
+      readonly coinsApplied: boolean;
     }
   /** Refus **propre** (pas un 500) : forme invalide ou niveau/monde verrouillé. */
   | { readonly ok: false; readonly error: FinishLevelError };
@@ -97,29 +120,47 @@ function isStars(value: unknown): value is Stars {
 }
 
 /**
- * **Persiste la fin d'un niveau** (MAP §1/§4/§6, SYNC), avec garde de déblocage linéaire côté
- * serveur. Étapes :
- * 1. **gardes de forme** (payload public non fiable, #36) : `worldIndex`/`levelIndex` entiers
- *    ≥ 0, `stars` entier 0..3 → refus propre sinon ;
- * 2. **transaction SYNCHRONE** (callback sans `await`) : garde de déblocage (monde débloqué
- *    `isWorldUnlocked` + niveau jouable `isLevelPlayable` d'après le progress **lu dans la même
- *    transaction** → cohérence de snapshot) → refus si verrouillé ; sinon `recordStars`
- *    (**écriture unique**, monotone, idempotente — rien à rollback ici, cf. docstring module) ;
- * 3. `unlockedNextWorld` = le niveau complété **était le boss** (dernier nœud, index
- *    `levelsPerWorld`) → le monde suivant est désormais débloqué (dérivé, MAP §6), **jamais**
+ * **Clé de rejeu** (`ledger.ref_id`) d'un gain de fin de niveau (idempotence, ECONOMY §3.7).
+ * Stable pour un `(monde, niveau)` donné → un rejeu réseau portant le même `(profileId,
+ * reason, refId)` **ne recrédite pas** (`creditWalletInTx`). Pure : mêmes index ⇒ même clé.
+ * Format `level:<world>:<level>` (les index sont des entiers → pas d'ambiguïté).
+ */
+export function levelRewardRefId(worldIndex: number, levelIndex: number): string {
+  return `level:${worldIndex}:${levelIndex}`;
+}
+
+/**
+ * **Persiste la fin d'un niveau** (MAP §1/§4/§6, ECONOMY §4.1, SYNC), avec garde de
+ * déblocage linéaire côté serveur, puis **crédite les pièces** (base + bonus étoiles +
+ * bonus trésor) — le tout dans **une transaction multi-écritures atomique**. Étapes :
+ * 1. **gardes de forme** (payload public non fiable, #36) : `worldIndex`/`levelIndex`
+ *    entiers ≥ 0, `stars` entier 0..3 → refus propre sinon ;
+ * 2. **barème hors transaction** : le type du nœud est dérivé serveur (`baseNodeTypeAt`) et
+ *    le montant calculé (`computeLevelReward`) — pur, sans I/O, avant d'ouvrir la
+ *    transaction (barème ≥ 0 ⇒ `total` ≥ 0) ;
+ * 3. **transaction SYNCHRONE** (callback sans `await`) : garde de déblocage (monde débloqué
+ *    + niveau jouable, lu dans la même transaction → cohérence de snapshot) → refus si
+ *    verrouillé ; sinon **1ʳᵉ écriture** `recordStars` (monotone, idempotente), **puis**
+ *    crédit `creditWalletInTx` (**2ᵉ/3ᵉ écritures** : upsert wallet + ligne ledger,
+ *    idempotent via `ref_id`) — un crédit **strictement positif** seulement (si le barème
+ *    donne 0, aucun crédit : `creditWalletInTx` exige `amount > 0`, garde `total > 0`) ;
+ * 4. `unlockedNextWorld` = le niveau complété **était le boss** (MAP §6), **jamais**
  *    conditionné aux étoiles (MAP §1/§8).
  *
  * @param db connexion applicative (source de vérité serveur).
  * @param profileId profil **de la session** (jamais un profil client).
  * @param input cible brute (monde/niveau/étoiles) — validée ici.
- * @param config ⚙️ carte (`MapConfig`) — `levelsPerWorld` fixe la géométrie (boss = dernier).
+ * @param mapConfig ⚙️ carte (`MapConfig`) — `levelsPerWorld` fixe la géométrie (boss =
+ *   dernier), `treasureEvery` le type du nœud (bonus trésor).
+ * @param economyConfig ⚙️ barème (`EconomyConfig`, config versionnée) — base/étoile/trésor.
  * @param now instant serveur injecté (jamais un `Date.now()` interne, LEARNINGS #46).
  */
 export function finishLevel(
   db: AppDatabase,
   profileId: number,
   input: FinishLevelInput,
-  config: MapConfig,
+  mapConfig: MapConfig,
+  economyConfig: EconomyConfig,
   now: Date,
 ): FinishLevelResult {
   // 1. Gardes de forme (avant toute lecture/écriture, #36).
@@ -132,15 +173,19 @@ export function finishLevel(
   const worldIndex = input.worldIndex;
   const levelIndex = input.levelIndex;
   const stars = input.stars;
-  const { levelsPerWorld } = config;
+  const { levelsPerWorld } = mapConfig;
   // Géométrie invariante (MAP §4) : `levelsPerWorld + 1` nœuds ; le boss est le dernier.
   const nodeCount = levelsPerWorld + 1;
   const bossIndex = levelsPerWorld;
 
-  // 2. Garde de déblocage + persistance dans une transaction SYNCHRONE (callback sans await).
-  //    Ici l'écriture est unique (`recordStars`) → rien à rollback ; la transaction fournit la
-  //    cohérence de snapshot lecture↔écriture (WAL) pour le check-then-write, et est la
-  //    structure prête pour le couplage multi-écritures de 5.5 (crédit boss) — cf. docstring.
+  // 2. Barème (hors transaction, pur) : type de nœud dérivé **serveur** (jamais du client,
+  //    SYNC §1) → montant de pièces. Le barème est ≥ 0 (EconomyConfig) → `total` ≥ 0.
+  const nodeType = baseNodeTypeAt(levelIndex, mapConfig);
+  const reward = computeLevelReward(nodeType, stars, economyConfig);
+
+  // 3. Garde de déblocage + persistance dans une transaction SYNCHRONE (callback sans await).
+  //    MULTI-ÉCRITURES : recordStars (1ʳᵉ) + creditWalletInTx (2ᵉ/3ᵉ) sont atomiques ensemble
+  //    — un échec de la 2ᵉ/3ᵉ écriture rollback la 1ʳᵉ (aucun état partiel, règle #122).
   return db.transaction((tx): FinishLevelResult => {
     // Déblocage linéaire inter-mondes : le monde doit être ouvert (boss des mondes
     // précédents complété). Jamais fondé sur les étoiles (MAP §1/§8).
@@ -155,13 +200,43 @@ export function finishLevel(
       return { ok: false, error: "LEVEL_LOCKED" };
     }
 
-    // Persistance monotone + idempotente (5.1) : `max(existant, nouveau)` côté SQL.
+    // 1ʳᵉ ÉCRITURE : progression monotone + idempotente (5.1) : `max(existant, nouveau)`.
     const storedStars = recordStars(tx, { profileId, worldIndex, levelIndex }, stars, now);
 
+    // 2ᵉ/3ᵉ ÉCRITURES : crédit de pièces + ligne ledger, **dans la même transaction**
+    // (atomique avec la progression). Idempotent via `ref_id = level:<world>:<level>` → un
+    // rejeu ne recrédite pas (`applied: false`). Un crédit **strictement positif** seulement
+    // (creditWalletInTx exige `amount > 0`) : si le barème donne 0, aucune écriture de crédit
+    // n'est tentée (le total ne peut être ≤ 0 qu'avec un barème entièrement nul, cas de
+    // calibration extrême — on affiche alors le solde courant, non modifié).
+    let balance: WalletBalance;
+    let coinsApplied: boolean;
+    if (reward.total > 0) {
+      assertPositiveAmount(reward.total);
+      const credit = creditWalletInTx(
+        tx,
+        {
+          profileId,
+          currency: "coins",
+          amount: reward.total,
+          reason: "level",
+          refId: levelRewardRefId(worldIndex, levelIndex),
+        },
+        now,
+      );
+      balance = credit.balance;
+      coinsApplied = credit.applied;
+    } else {
+      // Barème entièrement nul (⚙️ tout à 0) : aucun crédit à porter — on lit le solde tel
+      // quel (dans la transaction) pour renvoyer un contrat de retour stable (pas de crédit
+      // ⇒ `coinsApplied` false).
+      balance = loadWallet(tx, profileId);
+      coinsApplied = false;
+    }
+
     // Déblocage du monde suivant = ce niveau était le boss (dernier nœud). Dérivé du progress
-    // (la ligne boss vient d'être écrite) — jamais un incrément séparé (pas de double effet
-    // au rejeu). Indépendant des étoiles (MAP §1/§8).
+    // — jamais un incrément séparé (pas de double effet au rejeu). Indépendant des étoiles.
     const unlockedNextWorld = levelIndex === bossIndex;
-    return { ok: true, stars: storedStars, unlockedNextWorld };
+    return { ok: true, stars: storedStars, unlockedNextWorld, reward, balance, coinsApplied };
   });
 }

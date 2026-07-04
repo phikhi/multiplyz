@@ -207,3 +207,48 @@ export function isLevelPlayable(
   // au-delà du courant est verrouillé (déblocage linéaire).
   return levelIndex <= currentNodeIndex(completedLevels, nodeCount);
 }
+
+/** Cible **serveur** d'une fin de niveau : le `(monde, niveau)` que l'enfant joue **maintenant**. */
+export interface CurrentLevelTarget {
+  /** Dernier monde débloqué (le seul avec des nœuds non terminés, MAP §1/§6). */
+  readonly worldIndex: number;
+  /** Nœud courant du monde = 1ᵉʳ non terminé (ou le boss si tout le reste est fait). */
+  readonly levelIndex: number;
+}
+
+/**
+ * **Résout, côté serveur, le niveau que l'enfant joue actuellement** — la cible d'une fin
+ * de niveau **sans faire confiance au client** (source de vérité serveur, SYNC §1 : le
+ * client ne transmet **jamais** de `world_index`/`level_index`, il envoie seulement ses
+ * étoiles). Dérive tout du `progress` :
+ * - **monde** = le dernier débloqué (`getUnlockedWorldCount − 1`, déblocage linéaire MAP §1/§6) ;
+ * - **niveau** = le nœud **courant** (1ᵉʳ non terminé, `currentNodeIndex`).
+ *
+ * **Invariant** : le dernier monde débloqué a **toujours** un nœud courant (`< nodeCount`).
+ * Par définition de `getUnlockedWorldCount`, le monde `count − 1` est le dernier ouvert **parce
+ * que son boss n'est pas complété** (sinon le monde suivant serait ouvert et `count` plus grand)
+ * — donc au moins le boss y est non terminé → `currentNodeIndex` renvoie un index `< nodeCount`,
+ * jamais `nodeCount` (« monde 100 % bouclé »). Un monde 100 % terminé n'est **jamais** le dernier
+ * débloqué (son boss aurait ouvert le suivant). La cible est donc toujours dans la géométrie.
+ *
+ * Lecture seule (dérivée du `progress`). À appeler par la server action de fin de niveau
+ * pour obtenir `(worldIndex, levelIndex)` avant `finishLevel` (qui re-garde le déblocage
+ * dans sa propre transaction — cohérence de snapshot).
+ *
+ * @param db handle de lecture (connexion ou transaction).
+ * @param profileId profil **de la session** (jamais un profil client).
+ * @param levelsPerWorld ⚙️ nombre de niveaux/monde (fixe `nodeCount = levelsPerWorld + 1`).
+ */
+export function resolveCurrentLevelTarget(
+  db: DbHandle,
+  profileId: number,
+  levelsPerWorld: number,
+): CurrentLevelTarget {
+  const worldIndex = getUnlockedWorldCount(db, profileId, levelsPerWorld) - 1;
+  const nodeCount = levelsPerWorld + 1;
+  const { starsByLevel } = loadWorldProgress(db, profileId, worldIndex);
+  // Nœud courant (1ᵉʳ non terminé). Toujours `< nodeCount` pour le dernier monde débloqué
+  // (invariant ci-dessus : son boss est non complété), donc jamais la valeur « monde bouclé ».
+  const levelIndex = currentNodeIndex(new Set(starsByLevel.keys()), nodeCount);
+  return { worldIndex, levelIndex };
+}

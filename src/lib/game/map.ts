@@ -152,6 +152,29 @@ function typeForPosition(index: number, lastIndex: number, treasureEvery: number
 }
 
 /**
+ * **Type de base d'un nœud à un `level_index` donné** (MAP §2/§3/§6), dérivé de la seule
+ * géométrie ⚙️ (`levelsPerWorld`, `treasureEvery`) — **pur, sans I/O, sans dette**. Sert au
+ * **serveur** (fin de niveau, 5.5) à déterminer le type du nœud complété (ex. bonus trésor)
+ * **sans faire confiance au client** (source de vérité serveur, SYNC §1) : le montant de
+ * pièces dépend du type, qui est recalculé côté serveur depuis la position, jamais transmis.
+ *
+ * Renvoie le type **de base** (`normal`/`treasure`/`boss`) — **pas** l'overlay `revision`,
+ * qui est un état dynamique de l'affichage carte (MAP §5) : du point de vue du **gain**, un
+ * nœud en révision reste le nœud de base à cette position (son bonus est celui de sa
+ * position). La géométrie étant **invariante à la dette** (MAP §4, cf. `baseNodeTypes`), ce
+ * type est **stable** pour un `level_index` donné → cohérent avec la clé de persistance.
+ *
+ * @param levelIndex position 0-based du nœud (son `level_index` de progression).
+ * @param config ⚙️ carte (`MapConfig`) — `levelsPerWorld` fixe la position du boss (dernier),
+ *   `treasureEvery` la cadence des trésors.
+ */
+export function baseNodeTypeAt(levelIndex: number, config: MapConfig): NodeType {
+  // Géométrie invariante (MAP §4) : `levelsPerWorld + 1` nœuds, boss = dernier index.
+  const lastIndex = config.levelsPerWorld;
+  return typeForPosition(levelIndex, lastIndex, config.treasureEvery);
+}
+
+/**
  * PRNG **déterministe** seedé (mulberry32) — aucune dépendance à `Math.random`. Produit
  * une suite reproductible de flottants `[0, 1)` à partir d'une seed entière. Utilisé pour
  * jitterer les positions des nœuds : même `world_index` ⇒ même suite ⇒ mêmes positions

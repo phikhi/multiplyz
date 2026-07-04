@@ -596,24 +596,25 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       page.getByRole("heading", { level: 1, name: strings.play.results.title }),
     ).toBeVisible();
     await expect(page.getByRole("img", { name: /étoile/u })).toBeVisible();
+    // Gains de pièces (#126, ferme #136) : la fin de niveau persiste la progression ET
+    // crédite les pièces (base + étoiles) → l'écran de résultats affiche les pièces gagnées
+    // (solde serveur, source de vérité). Doublage a11y : `role="img"` au nom accessible
+    // « … pièce(s) 🪙 ». On attend son apparition (la persistance/crédit est async, no-fail).
+    await expect(page.getByRole("img", { name: /pièce/u })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
-    await page.screenshot({ path: "docs/captures/64-resultats.png", fullPage: true });
+    await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
   });
 
-  test("carte du monde → nœud courant navigable, nœuds suivants verrouillés (capture)", async ({
+  test("carte du monde → nœud 0 COMPLÉTÉ (boucle jouer→résultats→carte, #136), suivant courant (capture)", async ({
     page,
   }) => {
     // Reconnexion (nouveau contexte de test, cookie absent — même profil, déjà amorcé).
-    // NB (discovered, hors scope #125) : `/jouer` (#64) ne câble pas encore
-    // `finishLevelAction` (5.3/#124) — jouer un niveau via l'écran de jeu nu n'écrit
-    // donc pas encore de ligne `progress` (ce câblage arrive avec l'écran de résultats
-    // économique, story #5.5, ECONOMY §4.1). La carte affiche donc fidèlement l'état
-    // SERVEUR réel du profil à ce stade : nœud 0 encore COURANT (aucun niveau
-    // persisté), tous les suivants VERROUILLÉS (déblocage linéaire, MAP §1) — la
-    // composition serveur (`currentMapAction` → `loadCurrentWorldMap`, 5.2+5.3+moteur)
-    // est vérifiée sur base réelle par `current-map.test.ts` (y compris le cas
-    // "nœud complété" scénarisé en intégration) ; cet E2E vérifie le rendu + la
-    // navigation en conditions réelles (next-dev-loop indispo < Next 16.3, #24).
+    // CÂBLAGE #136 (story #126) : le test précédent a terminé un niveau via l'écran de jeu
+    // → `finishLevelAction` a PERSISTÉ la progression (5.3) ET crédité les pièces (ECONOMY
+    // §4.1) dans une transaction atomique. La carte reflète donc l'état SERVEUR réel : le
+    // nœud 0 est désormais **COMPLÉTÉ** (une ligne `progress` existe), le nœud 1 devient
+    // **COURANT** (déblocage linéaire, MAP §1). C'est la boucle jouer→résultats→carte
+    // complète, vérifiée en conditions réelles (next-dev-loop indispo < Next 16.3, #24).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
@@ -631,20 +632,30 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // libellé de TYPE (« — Niveau », doublage a11y, `nodeAccessibleName`).
     const total = "11";
 
-    // Nœud 0 (position 1) : COURANT — point de reprise, lien navigable vers /jouer.
+    // Nœud 0 (position 1) : COMPLÉTÉ (#136 câblé) — le niveau terminé au test précédent est
+    // persisté (une ligne `progress`). Reste navigable (rejoue monotone, MAP §1). Le nom
+    // accessible inclut les étoiles obtenues (`nodeCompleted`) — on matche sur le préfixe
+    // « terminé » (les étoiles varient selon le score réel du niveau joué).
+    const completedNode = page
+      .getByRole("link", { name: new RegExp(`^Nœud 1 sur ${total} — terminé`, "u") })
+      .first();
+    await expect(completedNode).toBeVisible();
+    await expect(completedNode).toHaveAttribute("href", "/jouer");
+
+    // Nœud 1 (position 2) : désormais COURANT (le nœud 0 complété a ouvert le suivant,
+    // déblocage linéaire MAP §1) — lien navigable vers /jouer.
     const currentName = `${strings.map.nodeCurrent
-      .replace("{n}", "1")
+      .replace("{n}", "2")
       .replace("{total}", total)} — ${strings.map.type.normal}`;
     const currentNode = page.getByRole("link", { name: currentName });
     await expect(currentNode).toBeVisible();
     await expect(currentNode).toHaveAttribute("href", "/jouer");
 
-    // Nœud 1 (position 2) : VERROUILLÉ — jamais un lien (déblocage linéaire, MAP §1).
+    // Nœud 2 (position 3) : VERROUILLÉ — jamais un lien (déblocage linéaire, MAP §1).
     const lockedName = `${strings.map.nodeLocked
-      .replace("{n}", "2")
+      .replace("{n}", "3")
       .replace("{total}", total)} — ${strings.map.type.normal}`;
-    const lockedNode = page.getByRole("img", { name: lockedName });
-    await expect(lockedNode).toBeVisible();
+    await expect(page.getByRole("img", { name: lockedName })).toBeVisible();
 
     // Nœud trésor (position 4, cadence ⚙️ tous les 4 nœuds, MAP §3) : type doublé du
     // libellé « Trésor » dans le nom accessible (a11y daltonisme, jamais couleur seule).
@@ -659,7 +670,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       .replace("{total}", total)} — ${strings.map.type.boss}`;
     await expect(page.getByRole("img", { name: bossName })).toBeVisible();
 
-    await page.screenshot({ path: "docs/captures/125-carte.png", fullPage: true });
+    await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
     // cliquer le nœud courant ramène bien à l'écran de jeu.

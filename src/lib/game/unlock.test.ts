@@ -12,6 +12,7 @@ import {
   isLevelPlayable,
   isWorldUnlocked,
   loadWorldProgress,
+  resolveCurrentLevelTarget,
 } from "./unlock";
 
 /**
@@ -228,5 +229,54 @@ describe("isLevelPlayable — déblocage linéaire intra-monde (MAP §1)", () =>
 
   it("index ≥ nodeCount → refusé (hors géométrie du monde)", () => {
     expect(isLevelPlayable(NODE_COUNT, new Set(), NODE_COUNT)).toBe(false);
+  });
+});
+
+describe("resolveCurrentLevelTarget — cible serveur (source de vérité, SYNC §1, gains #126)", () => {
+  // GARDE « monde 0, nœud 0 au démarrage » : un profil vierge joue le monde 0, niveau 0.
+  it("profil vierge ⇒ monde 0, niveau 0 (nœud courant du 1ᵉʳ monde)", () => {
+    expect(resolveCurrentLevelTarget(db, profileId, LEVELS_PER_WORLD)).toEqual({
+      worldIndex: 0,
+      levelIndex: 0,
+    });
+  });
+
+  // GARDE « nœud courant = 1ᵉʳ non terminé » (effet observable) : compléter les niveaux 0..2
+  // fait avancer la cible au niveau 3. Rouge si la résolution ne suivait pas la progression.
+  it("après avoir complété 0,1,2 du monde 0 ⇒ cible = monde 0, niveau 3", () => {
+    complete(0, 0, 3);
+    complete(0, 1, 3);
+    complete(0, 2, 3);
+    expect(resolveCurrentLevelTarget(db, profileId, LEVELS_PER_WORLD)).toEqual({
+      worldIndex: 0,
+      levelIndex: 3,
+    });
+  });
+
+  // GARDE « suit le monde débloqué » (effet observable) : compléter tout le monde 0 (jusqu'au
+  // boss) débloque le monde 1 → la cible passe au monde 1, niveau 0.
+  it("monde 0 entièrement complété (boss inclus) ⇒ cible = monde 1, niveau 0 (monde suivant)", () => {
+    for (let i = 0; i <= BOSS; i += 1) {
+      complete(0, i, 3);
+    }
+    expect(resolveCurrentLevelTarget(db, profileId, LEVELS_PER_WORLD)).toEqual({
+      worldIndex: 1,
+      levelIndex: 0,
+    });
+  });
+
+  // GARDE « cible = nœud courant du monde partiellement fait » : le dernier monde débloqué a
+  // TOUJOURS un nœud courant (< nodeCount) car son boss n'est pas complété (invariant du
+  // module). Ici le monde 1 est ouvert (monde 0 bouclé) puis on complète 0..BOSS-1 du monde 1
+  // (boss NON fait) → cible = boss du monde 1 (dernier nœud non terminé), jamais hors géométrie.
+  it("dernier monde ouvert avec tout SAUF le boss ⇒ cible = boss (nœud courant, dans la géométrie)", () => {
+    for (let i = 0; i <= BOSS; i += 1) complete(0, i, 3); // monde 0 complet → ouvre monde 1
+    for (let i = 0; i < BOSS; i += 1) complete(1, i, 3); // monde 1 : tout sauf le boss
+    // Le monde 1 reste le dernier débloqué (son boss n'est pas fait) → cible = boss (index 10),
+    // qui est dans la géométrie (jamais nodeCount=11).
+    expect(resolveCurrentLevelTarget(db, profileId, LEVELS_PER_WORLD)).toEqual({
+      worldIndex: 1,
+      levelIndex: BOSS,
+    });
   });
 });

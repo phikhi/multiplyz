@@ -253,7 +253,7 @@ export const fr = {
         label: "{a} paquets de {b}",
       },
     },
-    /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec). */
+    /** Résultats de fin de niveau (WIREFRAMES §4, ENGINE §5 : jamais d'échec, ECONOMY §4.1). */
     results: {
       title: "Niveau bouclé ! 🎉",
       /** Libellé accessible du total d'étoiles (`{n}` = 0 à 3). */
@@ -266,6 +266,15 @@ export const fr = {
         2: "Super, presque parfait !",
         3: "Trois étoiles ?! Une championne ! 🌟",
       },
+      /**
+       * Pièces gagnées (ECONOMY §4.1, gains #126) — voix de Teddy, tutoiement.
+       * `{n}` = nombre de pièces créditées ce niveau (base + bonus étoiles + trésor).
+       * Singulier/pluriel (1 pièce vs N pièces). Sert **à la fois** de texte visible ET de
+       * nom accessible de la ligne de pièces (`role="img"`), doublage a11y (jamais la seule
+       * icône 🪙, daltonisme).
+       */
+      coins: "Tu gagnes {n} pièce 🪙",
+      coinsPlural: "Tu gagnes {n} pièces 🪙",
       continue: "Continuer",
     },
   },

@@ -178,6 +178,34 @@ export interface MapConfig {
   bossQuestionCount: number;
 }
 
+/**
+ * ⚙️ **Barème économique** (ECONOMY §4.1/§5) — taux de gain de pièces en fin de niveau.
+ * **Config versionnée** (ECONOMY §3 note : « taux, prix, odds = fichier de config
+ * versionné, pas en DB ») : ces valeurs se calibrent au playtest sans migration ni
+ * écriture DB. Consommé par la couche gains (`game/reward.ts`, fonction pure) — jamais
+ * de montant en dur dans le crédit (le portefeuille `game/wallet.ts` écrit ce qu'on lui
+ * donne, ECONOMY §4.1 : « aucune logique de barème dans le portefeuille »).
+ *
+ * **Périmètre 5.5** : gain de **fin de niveau** (base + bonus par étoile) + **bonus
+ * trésor** (nœud trésor = « mini-défi court → pièces bonus », PRODUCT §2.1). Le **gros
+ * lot de pièces du boss** (`+50`, ECONOMY §5) et la **créature légendaire** sont **hors
+ * scope 5.5** (story 5.6, boss/collection) — un nœud boss ne rapporte ici que le gain de
+ * niveau standard (base + étoiles), le bonus boss sera additionné en 5.6.
+ */
+export interface EconomyConfig {
+  /** Pièces de **base** par niveau terminé (ECONOMY §5, défaut `10`). Entier ≥ 0. */
+  levelBaseCoins: number;
+  /** Pièces **bonus par étoile** obtenue (ECONOMY §5, défaut `+5`/étoile). Entier ≥ 0. */
+  starBonusCoins: number;
+  /**
+   * Pièces **bonus** additionnelles pour un nœud **trésor** (« mini-défi court → pièces
+   * bonus », PRODUCT §2.1). S'ajoute au gain de niveau standard. ECONOMY §5 ne chiffre
+   * pas le trésor séparément (le coffre **quotidien** = 20, distinct) → valeur de départ
+   * ⚙️ prudente `15`, à calibrer au playtest. Entier ≥ 0.
+   */
+  treasureBonusCoins: number;
+}
+
 export interface AppConfig {
   mode: AppMode;
   database: DatabaseConfig;
@@ -185,6 +213,7 @@ export interface AppConfig {
   auth: AuthConfig;
   engine: EngineConfig;
   map: MapConfig;
+  economy: EconomyConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -259,6 +288,13 @@ export const CONFIG_DEFAULTS = {
     treasureEvery: 4,
     // Boss : ~12-15 questions → 13 par défaut (MAP §6).
     bossQuestionCount: 13,
+  },
+  economy: {
+    // Fin de niveau : base 10 + 5/étoile (ECONOMY §5).
+    levelBaseCoins: 10,
+    starBonusCoins: 5,
+    // Bonus trésor (mini-défi court, PRODUCT §2.1) — départ prudent, à calibrer.
+    treasureBonusCoins: 15,
   },
 } as const;
 
@@ -483,6 +519,27 @@ export function loadMapConfig(env: Env): MapConfig {
 }
 
 /**
+ * Bloc **économie** de la config (ECONOMY §4.1/§5), isolé en fonction pure. Source unique
+ * du **barème** de gains ⚙️ (base niveau, bonus par étoile, bonus trésor) — jamais de
+ * montant en dur dans le crédit (`game/wallet.ts` écrit ce qu'on lui donne, la logique de
+ * barème vit ici + `game/reward.ts`). Barème **versionné** (fichier de config, pas en DB —
+ * ECONOMY §3) pour un calibrage playtest sans migration.
+ *
+ * `parseNonNegativeInt` : un barème `0` est légitime (désactive une source de gain — ex.
+ * `treasureBonusCoins = 0` fait retomber le trésor sur le gain de niveau standard), et une
+ * valeur négative (aberrante pour un gain) retombe sur le défaut. Comme `loadMapConfig`,
+ * sans validation de secrets : réglages purs, pas de clé.
+ */
+export function loadEconomyConfig(env: Env): EconomyConfig {
+  const d = CONFIG_DEFAULTS.economy;
+  return {
+    levelBaseCoins: parseNonNegativeInt(env.ECONOMY_LEVEL_BASE_COINS, d.levelBaseCoins),
+    starBonusCoins: parseNonNegativeInt(env.ECONOMY_STAR_BONUS_COINS, d.starBonusCoins),
+    treasureBonusCoins: parseNonNegativeInt(env.ECONOMY_TREASURE_BONUS_COINS, d.treasureBonusCoins),
+  };
+}
+
+/**
  * Construit la config typée depuis un environnement. Fonction pure (testable).
  * En mode `production`, lève `ConfigError` si une variable requise manque (fail-fast).
  */
@@ -513,6 +570,7 @@ export function loadConfig(env: Env): AppConfig {
     auth: loadAuthConfig(env),
     engine: loadEngineConfig(env),
     map: loadMapConfig(env),
+    economy: loadEconomyConfig(env),
   };
 }
 
@@ -547,6 +605,15 @@ export function getEngineConfig(): EngineConfig {
  */
 export function getMapConfig(): MapConfig {
   return getConfig().map;
+}
+
+/**
+ * Bloc **économie** de la config applicative (mémoïsé). Consommé par la couche gains de
+ * fin de niveau (5.5, `game/reward.ts` + `game/finish-level.ts`) qui tourne DANS le
+ * runtime Next. Source unique du barème ⚙️ (base/étoile/trésor).
+ */
+export function getEconomyConfig(): EconomyConfig {
+  return getConfig().economy;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */

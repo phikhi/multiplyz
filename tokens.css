@@ -302,6 +302,15 @@
   --map-node-star-filled:  var(--color-text-primary);
   --map-node-star-empty:   var(--color-text-secondary);
 
+  /* étoiles de l'écran de RÉSULTATS (fin de niveau, story #126/5.5) — même piège
+     que --map-node-star-* ci-dessus : --color-star/--color-star-empty sont des
+     accents décoratifs qui échouent le contraste sur le fond de page neutre
+     --color-bg-primary (~1.45:1 / 1.21:1, quasi invisibles — rétro #104/#125).
+     Mêmes tokens texte fiables (≥4.5:1 les 2 thèmes), remplie vs vide distinguées
+     par FORME (★ plein / ☆ contour) ET couleur (rétro #94 : jamais la forme seule). */
+  --results-star-filled:  var(--color-text-primary);
+  --results-star-empty:   var(--color-text-secondary);
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou
      style inline). Défaut = neutre. Le reste du système ne change pas. */
