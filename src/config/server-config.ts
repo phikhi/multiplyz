@@ -139,11 +139,13 @@ export interface EngineConfig {
   diagnosticSize: number;
   /**
    * **Seuil de dette de révision** (MAP §5) : au-delà de ce **nombre de faits DUE**
-   * (« facts en retard », cf. `computeRevisionDebt`), la carte (5.2) insère un nœud
-   * **révision** à la place du nœud normal suivant. Défaut `12` (MAP §5 pseudo-code
-   * `> 12 facts en retard`). Vit dans `EngineConfig` car c'est un seuil **pédagogique**
-   * comparé à une quantité calculée par le moteur (dus/dette), même famille que
-   * `consolidationThreshold` — pas de la géométrie de carte (cf. `MapConfig`).
+   * (« facts en retard », cf. `computeRevisionDebt`), la carte (5.2) **type en révision
+   * le nœud courant** (prochain à jouer, jamais le boss) — un **overlay de type**, pas un
+   * nœud ajouté : la géométrie du monde (nombre de nœuds, positions, `level_index`) reste
+   * **inchangée** (remédiation immédiate + progression stable, MAP §4/§5). Borne stricte
+   * `>` (MAP §5 `> 12 facts en retard`). Défaut `12`. Vit dans `EngineConfig` car c'est
+   * un seuil **pédagogique** comparé à une quantité calculée par le moteur (dus/dette),
+   * même famille que `consolidationThreshold` — pas de la géométrie de carte (`MapConfig`).
    */
   revisionDebtThreshold: number;
 }

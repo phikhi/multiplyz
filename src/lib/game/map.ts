@@ -9,13 +9,19 @@
  * - **Déterminisme total** : même `world_index` ⇒ mêmes positions. Aucun `Math.random`
  *   ni `Date.now()` — la seule source d'aléa est un **PRNG seedé** par `world_index`
  *   (LEARNINGS aléa/#34 : pas de branche probabiliste sous gate coverage 100 %).
+ * - **Géométrie invariante** (MAP §4) : le monde a **toujours** `levelsPerWorld + 1`
+ *   nœuds aux **mêmes positions** — la dette **ne change JAMAIS** le nombre de nœuds ni
+ *   les positions ni les `level_index` (progression `progress` stable et monotone).
  * - **Boss toujours en dernier** (MAP §6) : le dernier nœud du chemin est le boss,
- *   quelles que soient la cadence des trésors et l'insertion de révision.
+ *   quelle que soit la cadence des trésors ; **jamais** typé révision.
  * - **Cadence trésor** (MAP §3) : un nœud trésor ~tous les `treasureEvery` nœuds ⚙️
  *   (jamais à la place du boss).
- * - **Révision dynamique** (MAP §5) : si `dette_revision > revisionDebtThreshold` ⚙️,
- *   un nœud **révision** est inséré (le monde compte alors un nœud de plus — on ne
- *   « vole » pas un niveau normal, l'aventure garde son fil).
+ * - **Révision = overlay de type sur le nœud courant** (MAP §5) : si
+ *   `dette_revision > revisionDebtThreshold` ⚙️ et le nœud **courant** (prochain à jouer)
+ *   n'est pas le boss, ce **seul** nœud courant est **typé** `revision` au lieu de son
+ *   type de base (remédiation **immédiate**). Ce n'est **pas** un nœud ajouté : la
+ *   géométrie reste inchangée (MAP §4). L'overlay écrase le type de base même s'il était
+ *   trésor (la remédiation prime le bonus pour ce créneau).
  * - **Déblocage linéaire** (MAP §1) : l'état d'un nœud dérive du **progrès** (niveaux
  *   terminés), **jamais** des étoiles — les étoiles sont une récompense d'affichage,
  *   **jamais** une barrière. Un seul nœud « courant » (le 1ᵉʳ non terminé) ; les
@@ -121,10 +127,10 @@ export interface BuildMapInput {
 }
 
 /**
- * **Type intrinsèque** d'un nœud selon sa position (avant état de progression). Boss en
- * dernier (prime sur tout), sinon trésor à cadence, sinon normal. La révision n'apparaît
- * pas ici : elle est **insérée dynamiquement** (cf. `buildMap`), pas dérivée d'une
- * position fixe (MAP §5).
+ * **Type de base** d'un nœud selon sa position (avant overlay/état). Boss en dernier
+ * (prime sur tout), sinon trésor à cadence, sinon normal. La révision n'apparaît pas
+ * ici : c'est un **overlay dynamique** posé sur le nœud **courant** (cf. `buildMap`),
+ * pas un type dérivé d'une position fixe (MAP §5).
  *
  * @param index position 0-based du nœud dans le chemin.
  * @param lastIndex index du **dernier** nœud (= boss).
@@ -216,19 +222,17 @@ function statusForNode(index: number, currentIndex: number, completed: boolean):
 }
 
 /**
- * Séquence des **types** de nœuds d'un monde (MAP §3/§5/§6), dans l'ordre du chemin.
+ * Séquence des **types de base** des nœuds d'un monde (MAP §3/§6), dans l'ordre du
+ * chemin — **indépendante de la dette**. Base = `levelsPerWorld` niveaux (normal/trésor
+ * selon la cadence) + 1 boss en dernier, soit `levelsPerWorld + 1` nœuds.
  *
- * Base = `levelsPerWorld` niveaux (normal/trésor selon la cadence) + 1 boss en dernier.
- * **Insertion révision** (MAP §5) : si `debt > revisionDebtThreshold`, un nœud
- * **révision** est **ajouté** juste avant le boss (le monde a alors un nœud de plus) —
- * on ne remplace pas un niveau normal (le fil de l'aventure et le compte de niveaux
- * normaux sont préservés ; la révision est un « en plus » pour résorber la dette).
- *
- * Le boss reste **toujours en dernier** après insertion (garde-fou testé à effet
- * observable). La cadence des trésors est calculée sur les positions **normales** (avant
- * insertion révision) → l'ajout d'un nœud révision ne décale pas la cadence des trésors.
+ * **Géométrie invariante** (MAP §4, exigence data) : la dette **ne change JAMAIS** le
+ * nombre de nœuds ni les positions. La révision est un **overlay de type** sur le nœud
+ * courant (cf. `buildMap`), pas un nœud ajouté — le monde a toujours le même nombre de
+ * nœuds et les mêmes `level_index` d'une visite à l'autre → `progress` stable et monotone
+ * (MAP §4). Le boss reste **toujours en dernier** (dernier index).
  */
-function nodeTypes(debt: number, config: MapBuildConfig): NodeType[] {
+function baseNodeTypes(config: MapBuildConfig): NodeType[] {
   const { levelsPerWorld, treasureEvery } = config;
   // Nœuds normaux + boss. Le boss est le **dernier** — son index dans la base est
   // `levelsPerWorld` (0-based), soit `levelsPerWorld + 1` nœuds au total.
@@ -238,54 +242,96 @@ function nodeTypes(debt: number, config: MapBuildConfig): NodeType[] {
   for (let i = 0; i < baseCount; i += 1) {
     types.push(typeForPosition(i, bossIndex, treasureEvery));
   }
-  // Insertion **révision** dynamique (MAP §5) : au-dessus du seuil, ajouter un nœud
-  // révision **juste avant le boss** (avant-dernière position). `splice(len − 1, 0, …)`
-  // insère avant le dernier élément → le boss reste en dernier.
-  if (debt > config.revisionDebtThreshold) {
-    types.splice(types.length - 1, 0, "revision");
-  }
   return types;
+}
+
+/**
+ * Index du **nœud courant** = 1ᵉʳ index **non terminé** (déblocage linéaire, MAP §1). Un
+ * niveau est terminé s'il a une entrée de progression. Renvoie `count` (au-delà du dernier
+ * index) si **tout** est terminé → **aucun** nœud courant (le monde est bouclé, le boss
+ * ouvre le monde suivant, hors 5.2). Balayage unique, déterministe.
+ */
+function firstUnfinishedIndex(starsByLevel: WorldProgress["starsByLevel"], count: number): number {
+  for (let i = 0; i < count; i += 1) {
+    if (!starsByLevel.has(i)) {
+      return i;
+    }
+  }
+  return count;
+}
+
+/**
+ * `true` si le **nœud courant** doit être typé **révision** (MAP §5) : la dette dépasse
+ * **strictement** le seuil ⚙️ (`debt > revisionDebtThreshold`, jamais `>=` — MAP §5
+ * « > 12 »), un nœud courant existe (`currentIndex` dans les bornes → monde non 100 %
+ * terminé), **et** ce nœud courant n'est **pas le boss** (le boss reste boss, priorité
+ * MAP §6). L'overlay remplace le type de base du **seul** nœud courant (« prochain nœud à
+ * jouer = révision », remédiation **immédiate**) — la géométrie (nombre de nœuds,
+ * positions, `level_index`) reste **inchangée** (MAP §4).
+ */
+function shouldOverlayRevision(
+  currentIndex: number,
+  baseTypes: readonly NodeType[],
+  debt: number,
+  config: MapBuildConfig,
+): boolean {
+  // Pas de nœud courant (monde 100 % terminé) → `currentIndex === baseTypes.length` →
+  // hors bornes → pas d'overlay.
+  if (currentIndex >= baseTypes.length) {
+    return false;
+  }
+  // Le nœud courant est le boss (il ne reste que lui) → pas d'overlay (priorité boss).
+  if (baseTypes[currentIndex] === "boss") {
+    return false;
+  }
+  // Borne stricte du seuil (MAP §5 « > 12 »).
+  return debt > config.revisionDebtThreshold;
 }
 
 /**
  * **Compose la carte procédurale** d'un monde (MAP §3/§5/§6). Pure et déterministe :
  * mêmes `(worldIndex, input, config)` ⇒ même `WorldMap`.
  *
- * 1. **types** des nœuds (normal/trésor/boss + révision dynamique selon la dette) ;
- * 2. **positions** déterministes seedées par `worldIndex` (une par nœud, révision
- *    comprise) ;
- * 3. **état** de chaque nœud dérivé du progrès (déblocage linéaire, jamais des étoiles) ;
- * 4. **étoiles** d'affichage reportées depuis le progrès.
+ * 1. **types de base** (normal/trésor/boss) + **positions**, déterministes depuis la seed
+ *    `worldIndex` — **géométrie invariante** : indépendante de la dette (MAP §4) ;
+ * 2. **nœud courant** = 1ᵉʳ non terminé (déblocage linéaire, MAP §1) ;
+ * 3. **overlay révision** (MAP §5) : si `debt > seuil` et le nœud courant n'est pas le
+ *    boss, ce **seul** nœud courant est typé `revision` (remédiation immédiate) — l'overlay
+ *    écrase le type de base même s'il était trésor (la remédiation prime le bonus pour ce
+ *    créneau) ; la géométrie ne bouge pas ;
+ * 4. **état** de chaque nœud dérivé du progrès (jamais des étoiles) + **étoiles**
+ *    d'affichage reportées.
  *
  * @param worldIndex index du monde (seed de la géométrie, MAP §3).
  * @param input progrès du monde (5.1) + dette de révision (moteur 3.4).
  * @param config ⚙️ carte (`MapBuildConfig`) — nb de niveaux, cadence trésor, seuil
  *   révision. Jamais de valeur en dur (CLAUDE.md §Paramètres ⚙️).
- * @returns la carte du monde (nœuds ordonnés, boss en dernier).
+ * @returns la carte du monde (nœuds ordonnés, boss en dernier ; nombre de nœuds et
+ *   positions **indépendants de la dette**).
  */
 export function buildMap(
   worldIndex: number,
   input: BuildMapInput,
   config: MapBuildConfig,
 ): WorldMap {
-  const types = nodeTypes(input.debt, config);
-  const positions = computePositions(worldIndex, types.length);
+  // 1. Géométrie **invariante** : types de base + positions ne dépendent que de la seed et
+  //    de la config de structure — **jamais** de la dette (MAP §4 : `level_index` stable).
+  const baseTypes = baseNodeTypes(config);
+  const positions = computePositions(worldIndex, baseTypes.length);
   const { starsByLevel } = input.progress;
 
-  // Nœud courant = 1ᵉʳ index **non terminé** (déblocage linéaire, MAP §1). Un niveau est
-  // terminé s'il a une entrée de progression. `types.length` (au-delà du dernier index)
-  // si **tout** est terminé → aucun nœud « courant » (le monde est bouclé, le boss ouvre
-  // le monde suivant, hors 5.2).
-  let currentIndex = types.length;
-  for (let i = 0; i < types.length; i += 1) {
-    if (!starsByLevel.has(i)) {
-      currentIndex = i;
-      break;
-    }
-  }
+  // 2. Nœud courant (déblocage linéaire, MAP §1).
+  const currentIndex = firstUnfinishedIndex(starsByLevel, baseTypes.length);
 
-  const nodes: MapNode[] = types.map((type, index) => {
+  // 3. Overlay révision sur le **seul** nœud courant (MAP §5) — remédiation immédiate,
+  //    géométrie inchangée. Décidé une fois (pas dans la boucle) : un seul overlay possible.
+  const overlayRevision = shouldOverlayRevision(currentIndex, baseTypes, input.debt, config);
+
+  const nodes: MapNode[] = baseTypes.map((baseType, index) => {
     const completed = starsByLevel.has(index);
+    // Le type effectif = révision si l'overlay s'applique à CE nœud (le courant), sinon
+    // le type de base. Le boss n'est jamais overlay-é (garanti par `shouldOverlayRevision`).
+    const type: NodeType = overlayRevision && index === currentIndex ? "revision" : baseType;
     return {
       index,
       position: positions[index],

@@ -41,6 +41,8 @@ sinon:
 ```
 → garde la mémorisation à jour sans casser le fil de l'aventure.
 
+> **Précision (cohérence §3/§4)** : « **prochain nœud = révision** » signifie que le **nœud courant** (prochain à jouer — le 1ᵉʳ non terminé, jamais le boss) est **typé** révision — un **overlay de type**, pas un nœud ajouté. La **géométrie du monde reste inchangée** (nombre de nœuds et positions constants), donc `level_index` **stable** (§4, progression monotone) et remédiation **immédiate** (la révision est là où l'enfant joue, pas reportée en fin de monde). Si le seul nœud restant est le **boss** (tous les niveaux faits) ou si le monde est 100 % terminé, **pas d'overlay** (priorité boss, §6). L'overlay écrase le type de base même si c'était un **trésor** (la remédiation prime le bonus pour ce créneau). Borne **stricte** (`>`, pas `≥`).
+
 ## 6. Boss
 
 - Débloqué quand les niveaux du monde sont faits.

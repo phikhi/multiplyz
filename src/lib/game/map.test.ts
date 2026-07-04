@@ -113,12 +113,12 @@ describe("buildMap — boss toujours en dernier (MAP §6)", () => {
     nodes.slice(0, -1).forEach((n) => expect(n.type).not.toBe("boss"));
   });
 
-  it("le boss reste en dernier MÊME avec insertion de révision (dette haute)", () => {
-    // Garde-fou clé : l'insertion révision ne doit jamais déplacer le boss.
+  it("le boss reste en dernier MÊME avec overlay de révision (dette haute)", () => {
+    // Garde-fou clé : l'overlay révision ne touche que le nœud courant, jamais le boss.
     const { nodes } = buildMap(1, input({ debt: REVISION_THRESHOLD + 1 }), mapConfig());
     expect(nodes[nodes.length - 1].type).toBe("boss");
-    // La révision est insérée AVANT le boss (avant-dernière position).
-    expect(nodes[nodes.length - 2].type).toBe("revision");
+    // L'overlay est sur le nœud courant (0 ici, aucun niveau fait), pas avant le boss.
+    expect(nodes[0].type).toBe("revision");
   });
 
   it("le boss reste boss même si sa position tombe sur un multiple de la cadence trésor", () => {
@@ -164,24 +164,46 @@ describe("buildMap — cadence des trésors (MAP §3)", () => {
   });
 });
 
-// ── Insertion révision selon la dette (MAP §5) — borne exacte du seuil ────────
-describe("buildMap — insertion révision selon la dette (MAP §5)", () => {
-  it("dette JUSTE AU-DESSUS du seuil ⇒ un nœud révision inséré", () => {
+// ── Révision = overlay de type sur le nœud courant (MAP §5) ───────────────────
+describe("buildMap — révision = overlay de type sur le nœud courant (MAP §5)", () => {
+  it("dette JUSTE AU-DESSUS du seuil ⇒ le nœud COURANT devient révision (remédiation immédiate)", () => {
+    // Nœud 0 courant (rien de fait) → il devient révision. Remédiation immédiate : la
+    // révision est LÀ OÙ L'ENFANT VA JOUER, pas reportée à la fin du monde.
     const { nodes } = buildMap(1, input({ debt: REVISION_THRESHOLD + 1 }), mapConfig());
-    const revisionCount = nodes.filter((n) => n.type === "revision").length;
-    expect(revisionCount).toBe(1);
-    // Le monde a un nœud de PLUS (on n'a pas volé un niveau normal).
-    expect(nodes).toHaveLength(MAP.levelsPerWorld + 2); // 11 + 1 révision = 12
+    expect(nodes[0].type).toBe("revision");
+    expect(nodes[0].status).toBe("current");
+    // Un SEUL nœud révision (l'overlay ne touche que le courant).
+    expect(nodes.filter((n) => n.type === "revision")).toHaveLength(1);
   });
 
-  it("dette JUSTE EN-DESSOUS OU ÉGALE au seuil ⇒ AUCUNE révision (borne stricte >)", () => {
-    // Borne exacte : `debt > threshold`. À `debt === threshold`, pas d'insertion.
+  it("remédiation IMMÉDIATE : la révision suit le nœud courant, pas la fin du monde", () => {
+    // Effet observable clé du fix : dette haute alors que l'enfant est au nœud 2 → c'est
+    // le nœud 2 (courant) qui devient révision, PAS un nœud à la fin. Casse si on revient
+    // à un modèle « révision insérée avant le boss ».
+    const p = progress([
+      [0, 3],
+      [1, 2],
+    ]);
+    const { nodes } = buildMap(
+      1,
+      input({ progress: p, debt: REVISION_THRESHOLD + 1 }),
+      mapConfig(),
+    );
+    expect(nodes[2].status).toBe("current");
+    expect(nodes[2].type).toBe("revision");
+    // Aucun autre nœud n'est révision (pas de nœud révision fantôme en fin de monde).
+    expect(nodes.filter((n) => n.type === "revision")).toHaveLength(1);
+  });
+
+  it("dette ÉGALE au seuil ⇒ AUCUN overlay (borne stricte >) ; JUSTE EN-DESSOUS non plus", () => {
+    // Borne exacte : `debt > threshold`. À `debt === threshold`, pas d'overlay. Muter
+    // `>` en `>=` DOIT casser ce test (le cas `== seuil` deviendrait révision).
     const atThreshold = buildMap(1, input({ debt: REVISION_THRESHOLD }), mapConfig());
     const below = buildMap(1, input({ debt: REVISION_THRESHOLD - 1 }), mapConfig());
     expect(atThreshold.nodes.some((n) => n.type === "revision")).toBe(false);
     expect(below.nodes.some((n) => n.type === "revision")).toBe(false);
-    // Taille de base préservée (pas d'ajout).
-    expect(atThreshold.nodes).toHaveLength(MAP.levelsPerWorld + 1);
+    // Le nœud courant garde son type de base (normal au nœud 0).
+    expect(atThreshold.nodes[0].type).toBe("normal");
   });
 
   it("dette 0 ⇒ pas de révision (cas nominal)", () => {
@@ -189,20 +211,84 @@ describe("buildMap — insertion révision selon la dette (MAP §5)", () => {
     expect(nodes.some((n) => n.type === "revision")).toBe(false);
   });
 
-  it("la révision est insérée juste avant le boss (le fil de l'aventure est préservé)", () => {
-    const { nodes } = buildMap(1, input({ debt: REVISION_THRESHOLD + 5 }), mapConfig());
-    const revisionIndex = nodes.findIndex((n) => n.type === "revision");
-    expect(revisionIndex).toBe(nodes.length - 2); // avant-dernier
-    expect(nodes[nodes.length - 1].type).toBe("boss"); // boss toujours dernier
+  it("l'overlay écrase un TRÉSOR sur le nœud courant (remédiation prime le bonus, MAP §5)", () => {
+    // Nœud courant = 3 (trésor de base à treasureEvery=4) → sous dette haute il devient
+    // révision malgré son type de base trésor. Effet observable : la remédiation prime.
+    const p = progress([
+      [0, 3],
+      [1, 3],
+      [2, 3],
+    ]);
+    const baseline = buildMap(1, input({ progress: p, debt: 0 }), mapConfig());
+    expect(baseline.nodes[3].type).toBe("treasure"); // type de base = trésor
+    const withDebt = buildMap(1, input({ progress: p, debt: REVISION_THRESHOLD + 1 }), mapConfig());
+    expect(withDebt.nodes[3].status).toBe("current");
+    expect(withDebt.nodes[3].type).toBe("revision"); // overlay écrase le trésor
   });
 
-  it("le seuil est ⚙️ configurable (un seuil plus bas insère plus tôt)", () => {
-    // Effet observable du seuil : à seuil 3, une dette de 4 insère ; à seuil 12, non.
+  it("current == boss (tous les niveaux faits sauf le boss) ⇒ PAS d'overlay (priorité boss)", () => {
+    // Tous les niveaux normaux terminés, il ne reste que le boss (courant). Dette haute :
+    // le boss reste boss, jamais overlay-é (MAP §6). Effet observable : boss ≠ révision.
+    const entries: Array<[number, MapStars]> = [];
+    for (let i = 0; i < MAP.levelsPerWorld; i += 1) entries.push([i, 3]); // 0..9 faits
+    const { nodes } = buildMap(
+      1,
+      input({ progress: progress(entries), debt: REVISION_THRESHOLD + 5 }),
+      mapConfig(),
+    );
+    const boss = nodes[nodes.length - 1];
+    expect(boss.status).toBe("current"); // le boss est le prochain à jouer
+    expect(boss.type).toBe("boss"); // jamais overlay-é
+    expect(nodes.some((n) => n.type === "revision")).toBe(false);
+  });
+
+  it("monde 100 % terminé (aucun nœud courant) ⇒ PAS d'overlay même dette haute", () => {
+    const entries: Array<[number, MapStars]> = [];
+    for (let i = 0; i < MAP.levelsPerWorld + 1; i += 1) entries.push([i, 3]); // tout fait
+    const { nodes } = buildMap(
+      1,
+      input({ progress: progress(entries), debt: REVISION_THRESHOLD + 5 }),
+      mapConfig(),
+    );
+    expect(nodes.some((n) => n.type === "revision")).toBe(false);
+    expect(nodes.some((n) => n.status === "current")).toBe(false);
+  });
+
+  it("le seuil est ⚙️ configurable (un seuil plus bas déclenche l'overlay plus tôt)", () => {
+    // Effet observable du seuil : à seuil 3, une dette de 4 pose l'overlay ; à 12, non.
     const lowThreshold = mapConfig({ revisionDebtThreshold: 3 });
-    const inserted = buildMap(1, input({ debt: 4 }), lowThreshold);
-    const notInserted = buildMap(1, input({ debt: 4 }), mapConfig()); // seuil 12
-    expect(inserted.nodes.some((n) => n.type === "revision")).toBe(true);
-    expect(notInserted.nodes.some((n) => n.type === "revision")).toBe(false);
+    const on = buildMap(1, input({ debt: 4 }), lowThreshold);
+    const off = buildMap(1, input({ debt: 4 }), mapConfig()); // seuil 12
+    expect(on.nodes[0].type).toBe("revision");
+    expect(off.nodes[0].type).toBe("normal");
+  });
+});
+
+// ── Géométrie invariante à la dette (MAP §4) — préoccupation data PO ──────────
+describe("buildMap — géométrie invariante à la dette (MAP §4)", () => {
+  it("dette au-dessus vs en-dessous du seuil ⇒ MÊME nb de nœuds, MÊMES positions, MÊMES level_index", () => {
+    // Garde data (PO) : la dette ne doit JAMAIS changer la géométrie. Ce test CASSE si on
+    // revient à un `splice` qui ajoute un nœud (nb de nœuds / level_index divergeraient).
+    const high = buildMap(3, input({ debt: REVISION_THRESHOLD + 10 }), mapConfig());
+    const low = buildMap(3, input({ debt: 0 }), mapConfig());
+    // Même nombre de nœuds.
+    expect(high.nodes).toHaveLength(low.nodes.length);
+    expect(high.nodes).toHaveLength(MAP.levelsPerWorld + 1); // toujours 11, jamais 12
+    // Mêmes level_index (index contigus identiques).
+    expect(high.nodes.map((n) => n.index)).toEqual(low.nodes.map((n) => n.index));
+    // Mêmes positions (géométrie seedée, indépendante de la dette).
+    expect(high.nodes.map((n) => n.position)).toEqual(low.nodes.map((n) => n.position));
+  });
+
+  it("SEUL le type du nœud courant diffère entre dette haute et basse (le reste identique)", () => {
+    // Le nœud courant (0) passe de normal→révision ; TOUS les autres nœuds sont identiques
+    // (type, position, index, statut). Effet observable : l'overlay est chirurgical.
+    const high = buildMap(3, input({ debt: REVISION_THRESHOLD + 10 }), mapConfig());
+    const low = buildMap(3, input({ debt: 0 }), mapConfig());
+    expect(high.nodes[0].type).toBe("revision");
+    expect(low.nodes[0].type).toBe("normal");
+    // Tous les nœuds SAUF le courant (0) sont strictement égaux.
+    expect(high.nodes.slice(1)).toEqual(low.nodes.slice(1));
   });
 });
 
