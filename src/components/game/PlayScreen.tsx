@@ -8,6 +8,7 @@ import { FeedbackPanel } from "@/components/game/FeedbackPanel";
 import { ResultsScreen } from "@/components/game/ResultsScreen";
 import {
   diagnosticPlanAction,
+  finishLevelAction,
   seedDiagnosticAction,
   startLevelAction,
   submitAttemptAction,
@@ -28,14 +29,20 @@ import {
 } from "@/lib/game/session";
 
 /**
- * Orchestrateur client de l'écran de jeu **nu** (story #64) — PRODUCT §2.2/§1.4,
- * ENGINE §3/§4/§5/§9. Enchaîne : chargement → (diagnostic 1ʳᵉ session OU niveau
- * normal) → questions → résultats (étoiles) → niveau suivant. Aucun habillage visuel
- * (étayages, animations, récompenses éco = épic #4/#5, hors scope).
+ * Orchestrateur client de l'écran de jeu (story #64, gains #126) — PRODUCT §2.2/§1.4,
+ * ENGINE §3/§4/§5/§9, ECONOMY §4.1. Enchaîne : chargement → (diagnostic 1ʳᵉ session OU
+ * niveau normal) → questions → **résultats (étoiles + pièces gagnées)** → niveau suivant.
+ *
+ * **Fin de niveau persistée serveur** (story #126, ferme #136) : à la dernière question,
+ * les résultats s'affichent **immédiatement** (no-fail, jamais bloquant) avec les étoiles
+ * jugées localement, puis `finishLevelAction` **persiste** la progression + **crédite les
+ * pièces** (barème versionné ECONOMY, transaction atomique serveur) et l'écran est enrichi
+ * du **solde de pièces**. Le client n'envoie **que ses étoiles** (jamais un `world/level_index`,
+ * source de vérité serveur SYNC §1). Une erreur réseau ne bloque jamais l'enfant (no-fail).
  *
  * Toute la **logique** (progression, no-fail, comptage 1ʳᵉ réponse, étoiles) vit dans
  * les modules purs `@/lib/game/session` + `@/lib/engine/stars` — ce composant ne fait
- * que dispatcher les événements UI et appeler les server actions (3.7).
+ * que dispatcher les événements UI et appeler les server actions (3.7 + #126).
  *
  * **Temps mesuré en silence** (ENGINE §9) : `performance.now()` à chaque transition,
  * jamais affiché à l'enfant. La soumission au serveur est **fire-and-forget** côté
@@ -58,7 +65,14 @@ type ScreenState =
       /** ⚙️ seuils étoiles (ENGINE §5/§11) — capturés avec le niveau, jamais lus hors état/props (react-hooks/refs). */
       readonly starThresholds: EngineConfig["starThresholds"];
     }
-  | { readonly kind: "results"; readonly stars: StarCount };
+  /**
+   * Résultats de fin de niveau : étoiles (jugées localement, ENGINE §5) + **pièces
+   * gagnées** (`coins`, tranchées **serveur** — barème versionné ECONOMY §4.1 —, `null`
+   * tant que la fin de niveau n'a pas répondu / a échoué réseau ; no-fail : les résultats
+   * s'affichent même sans les pièces). La progression + le crédit sont persistés par
+   * `finishLevelAction` (transaction atomique serveur, story #126).
+   */
+  | { readonly kind: "results"; readonly stars: StarCount; readonly coins: number | null };
 
 /** Accumulateur des réponses au diagnostic (ENGINE §3) — vidé à chaque amorçage réussi. */
 function useDiagnosticResponses() {
@@ -202,7 +216,9 @@ export function PlayScreen() {
   }
 
   if (screen.kind === "results") {
-    return <ResultsScreen stars={screen.stars} onContinue={handleResultsContinue} />;
+    return (
+      <ResultsScreen stars={screen.stars} coins={screen.coins} onContinue={handleResultsContinue} />
+    );
   }
 
   return (
@@ -303,8 +319,23 @@ function PlayingGame({
       onDiagnosticFinished();
       return;
     }
+    // Étoiles **jugées localement** (ENGINE §5 : justesse de la 1ʳᵉ réponse déjà connue
+    // côté client) → affichage **immédiat** des résultats (no-fail, jamais bloquant).
     const accuracy = computeAccuracy(next.firstCorrectCount, next.questions.length);
-    onResults({ kind: "results", stars: computeStars(accuracy, starThresholds) });
+    const stars = computeStars(accuracy, starThresholds);
+    onResults({ kind: "results", stars, coins: null });
+    // Fin de niveau **persistée serveur** (source de vérité, story #126, ferme #136) :
+    // progression + crédit de pièces + ledger dans une transaction atomique. Le client
+    // n'envoie **que ses étoiles** (jamais un `world/level_index`, SYNC §1) ; le serveur
+    // résout la cible + tranche le barème (ECONOMY §4.1). On enrichit ensuite l'écran
+    // résultats avec les **pièces gagnées** (solde serveur). Une erreur réseau ne bloque
+    // jamais l'enfant (no-fail) : les résultats restent affichés sans les pièces.
+    void (async () => {
+      const result = await finishLevelAction(stars);
+      if (result.ok) {
+        onResults({ kind: "results", stars, coins: result.coins });
+      }
+    })();
   }, [game, isDiagnostic, onDiagnosticFinished, onResults, starThresholds]);
 
   return (

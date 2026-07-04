@@ -104,68 +104,106 @@ export function creditExists(
 }
 
 /**
+ * Valide le montant d'un crédit earn : entier **strictement positif** (un earn n'ajoute
+ * jamais ≤ 0). Extrait pour être appelé **avant** d'entrer dans une transaction (garde de
+ * forme au plus tôt, comme la validation lourde d'`submitAttempt` — #36) : un montant
+ * invalide throw sans jamais ouvrir de transaction ni écrire.
+ */
+export function assertPositiveAmount(amount: number): void {
+  if (!Number.isInteger(amount) || amount <= 0) {
+    throw new Error(
+      `creditWallet: montant invalide (${amount}) — un crédit earn exige un entier > 0.`,
+    );
+  }
+}
+
+/**
+ * **Crédite** le portefeuille + journalise le mouvement **dans une transaction déjà
+ * ouverte** (`tx`), sans en ouvrir une nouvelle — c'est le cœur de crédit réutilisable
+ * **à l'intérieur** d'une transaction multi-écritures (ex. la fin de niveau, 5.5 :
+ * `recordStars` + crédit + ledger doivent être **atomiques ensemble**). L'atomicité et
+ * l'anti-TOCTOU sont portés par la transaction **de l'appelant** (better-sqlite3 ne
+ * supporte pas les transactions imbriquées : nesting = erreur → on ne wrappe PAS ici).
+ *
+ * - **Idempotent** : rejeu même `(profileId, reason, refId)` détecté (`creditExists`) →
+ *   **aucune 2ᵉ mutation** (ni pièces ni ligne ledger dupliquée), solde inchangé,
+ *   `applied: false`.
+ * - **Ordre des écritures** : (1) upsert du solde (incrément côté SQL `+= amount`, pas de
+ *   read-modify-write), PUIS (2) insertion de la ligne `ledger`. Cet ordre est **ce qui
+ *   rend le rollback observable** dans la transaction de l'appelant : si l'INSERT `ledger`
+ *   (2ᵉ écriture) échoue APRÈS l'upsert du solde (1ʳᵉ), la transaction de l'appelant
+ *   **annule** le crédit déjà écrit (aucun solde partiel — cf. test de rollback
+ *   `finish-level.test.ts`, mutation-prouvé).
+ *
+ * ⚠️ **Ne valide pas le montant** (l'appelant l'a fait via `assertPositiveAmount` **avant**
+ * d'ouvrir la transaction) : throw ici, une fois la transaction ouverte, laisserait
+ * l'appelant gérer le rollback — on garde la garde de forme au plus tôt (hors transaction).
+ *
+ * `now` = instant serveur injecté (jamais un `Date.now()` interne, LEARNINGS #46).
+ */
+export function creditWalletInTx(tx: DbHandle, input: CreditInput, now: Date): CreditResult {
+  // Rejeu déjà journalisé (retry réseau) → aucune 2ᵉ mutation, solde inchangé.
+  if (creditExists(tx, input.profileId, input.reason, input.refId)) {
+    return { balance: loadWallet(tx, input.profileId), applied: false };
+  }
+
+  const column = input.currency === "coins" ? wallet.coins : wallet.shards;
+  // 1ʳᵉ ÉCRITURE : upsert du solde.
+  tx.insert(wallet)
+    .values({
+      profileId: input.profileId,
+      // 1ʳᵉ ligne : la monnaie créditée porte le montant, l'autre reste à 0 (défaut).
+      coins: input.currency === "coins" ? input.amount : 0,
+      shards: input.currency === "shards" ? input.amount : 0,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: wallet.profileId,
+      set: {
+        // Incrément côté SQL (pas de read-modify-write applicatif).
+        [input.currency]: sql`${column} + ${input.amount}`,
+        updatedAt: now,
+      },
+    })
+    .run();
+
+  // 2ᵉ ÉCRITURE : journal append-only — trace le mouvement + porte la clé de rejeu (`ref_id`).
+  // Son échec APRÈS la 1ʳᵉ écriture est ce qui déclenche le rollback (atomicité multi-write).
+  tx.insert(ledger)
+    .values({
+      profileId: input.profileId,
+      direction: "earn",
+      currency: input.currency satisfies LedgerCurrency,
+      amount: input.amount,
+      reason: input.reason,
+      refId: input.refId,
+      createdAt: now,
+    })
+    .run();
+
+  return { balance: loadWallet(tx, input.profileId), applied: true };
+}
+
+/**
  * **Crédite** le portefeuille (earn-side) + journalise le mouvement, de façon
  * **atomique et idempotente** (ECONOMY §4.1, progression idempotente CLAUDE.md).
  *
- * - **Atomique** : upsert du solde + insertion de la ligne `ledger` dans **une seule
- *   transaction SYNCHRONE** better-sqlite3 (callback sans `await` → sérialisation,
- *   anti-TOCTOU #36). Soit les deux écritures passent, soit aucune : si l'INSERT
- *   `ledger` échoue APRÈS l'upsert du solde, la transaction **rollback** le crédit
- *   (propriété prouvée par un test à effet observable — mutation-testée : retirer le
- *   wrapper `db.transaction` fait échouer le test d'atomicité, cf. `wallet.test.ts`).
- * - **Idempotent** : un rejeu portant le même `(profileId, reason, refId)` est détecté
- *   (`creditExists`) → **aucun 2ᵉ crédit, aucune 2ᵉ ligne de journal**. On renvoie le
- *   solde inchangé avec `applied: false`.
- * - **Solde monotone (earn)** : `coins`/`shards` ne font que croître ici (crédit).
- *   L'upsert incrémente la colonne côté SQL (`+= amount`) → pas de race read-modify-write.
+ * Ouvre **sa propre** transaction synchrone better-sqlite3 (crédit **autonome** — ex. un
+ * gain isolé) puis délègue à `creditWalletInTx`. Pour un crédit **couplé** à d'autres
+ * écritures (ex. fin de niveau : `recordStars` + crédit dans **une** transaction),
+ * appeler directement `creditWalletInTx` **dans** la transaction de l'appelant (ne pas
+ * imbriquer les transactions).
  *
- * `now` est l'instant serveur injecté (jamais un `Date.now()` interne, LEARNINGS #46).
- * `amount` doit être un entier > 0 (garde explicite : un earn ne crédite jamais ≤ 0).
+ * - **Atomique** : upsert du solde + insertion de la ligne `ledger` dans **une seule
+ *   transaction SYNCHRONE** (callback sans `await` → sérialisation, anti-TOCTOU #36).
+ * - **Idempotent** : rejeu même `(profileId, reason, refId)` → aucune 2ᵉ mutation,
+ *   `applied: false`.
+ * - **Solde monotone (earn)** : `coins`/`shards` ne font que croître ici (crédit).
+ *
+ * `now` = instant serveur injecté. `amount` doit être un entier > 0 (garde **avant** la
+ * transaction : un montant invalide throw sans jamais l'ouvrir ni écrire).
  */
 export function creditWallet(db: AppDatabase, input: CreditInput, now: Date): CreditResult {
-  if (!Number.isInteger(input.amount) || input.amount <= 0) {
-    throw new Error(
-      `creditWallet: montant invalide (${input.amount}) — un crédit earn exige un entier > 0.`,
-    );
-  }
-  return db.transaction((tx): CreditResult => {
-    // Rejeu déjà journalisé (retry réseau) → aucune 2ᵉ mutation, solde inchangé.
-    if (creditExists(tx, input.profileId, input.reason, input.refId)) {
-      return { balance: loadWallet(tx, input.profileId), applied: false };
-    }
-
-    const column = input.currency === "coins" ? wallet.coins : wallet.shards;
-    tx.insert(wallet)
-      .values({
-        profileId: input.profileId,
-        // 1ʳᵉ ligne : la monnaie créditée porte le montant, l'autre reste à 0 (défaut).
-        coins: input.currency === "coins" ? input.amount : 0,
-        shards: input.currency === "shards" ? input.amount : 0,
-        updatedAt: now,
-      })
-      .onConflictDoUpdate({
-        target: wallet.profileId,
-        set: {
-          // Incrément côté SQL (pas de read-modify-write applicatif).
-          [input.currency]: sql`${column} + ${input.amount}`,
-          updatedAt: now,
-        },
-      })
-      .run();
-
-    // Journal append-only : trace le mouvement + porte la clé de rejeu (`ref_id`).
-    tx.insert(ledger)
-      .values({
-        profileId: input.profileId,
-        direction: "earn",
-        currency: input.currency satisfies LedgerCurrency,
-        amount: input.amount,
-        reason: input.reason,
-        refId: input.refId,
-        createdAt: now,
-      })
-      .run();
-
-    return { balance: loadWallet(tx, input.profileId), applied: true };
-  });
+  assertPositiveAmount(input.amount);
+  return db.transaction((tx): CreditResult => creditWalletInTx(tx, input, now));
 }
