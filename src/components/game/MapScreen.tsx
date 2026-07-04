@@ -245,10 +245,71 @@ function horizontalOffsetPercent(x: number): number {
   return Math.round((x - 0.5) * 100 * 100) / 100;
 }
 
+/**
+ * **Connecteur décoratif** entre un nœud et son PRÉCÉDENT dans l'ordre du chemin
+ * (métaphore Candy Crush `◉ ── ● ── ⭐`, WIREFRAMES §2). Trait SVG dérivé UNIQUEMENT
+ * des positions existantes des deux nœuds (`node.position.x`) — il **ne modifie ni le
+ * nombre de nœuds ni leurs positions** (invariance de géométrie préservée, rétro #123 :
+ * c'est un ornement d'affichage superposé, pas un élément de la géométrie clé).
+ *
+ * Layout `column-reverse` : le connecteur est ancré en HAUT du `<li>` courant et
+ * descend dans la gouttière (`--map-node-gap`) vers le nœud précédent (rendu juste en
+ * dessous). Il relie le centre horizontal du nœud courant (`0`, le `<li>` est déjà
+ * translaté) à celui du précédent (delta de décalage serpentin entre les deux).
+ *
+ * **Décoratif pur** (`aria-hidden`, jamais navigable, jamais dans le nom accessible) —
+ * faible contraste assumé (cf. `--map-node-path-color`, tokens.css) : aucune info n'y
+ * est portée (états/types/étoiles sont sur le nœud). Tokens `--map-node-path-*`.
+ */
+function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: number }) {
+  // Décalages horizontaux (%) des deux nœuds (positions 5.2, pas recalculés). Le `<li>`
+  // courant est DÉJÀ translaté de `currentOffset` → dans le repère du SVG (qui suit le
+  // <li>), le centre du nœud courant est à x=50 ; celui du précédent est décalé du
+  // DELTA de serpentin entre les deux nœuds (`prevOffset - currentOffset`).
+  const currentOffset = horizontalOffsetPercent(fromX);
+  const prevOffset = horizontalOffsetPercent(toX);
+  const x1 = 50; // centre du nœud courant (haut du connecteur)
+  const x2 = 50 + (prevOffset - currentOffset); // centre du précédent (bas du connecteur)
+  return (
+    <svg
+      aria-hidden="true"
+      data-map-connector=""
+      preserveAspectRatio="none"
+      viewBox="0 0 100 100"
+      style={{
+        position: "absolute",
+        left: 0,
+        // Ancré en haut du <li>, descend dans la gouttière vers le nœud précédent.
+        top: "calc(var(--map-node-size) / 2)",
+        width: "100%",
+        height: "var(--map-node-gap)",
+        overflow: "visible",
+        pointerEvents: "none",
+        zIndex: 0,
+      }}
+    >
+      <line
+        x1={x1}
+        y1={0}
+        x2={x2}
+        y2={100}
+        stroke="var(--map-node-path-color)"
+        // `strokeWidth` posé via `style` (jamais l'attribut JSX présentation) : SEUL le
+        // CSS résout `var(--…)` — un attribut SVG brut ne le ferait pas (cf. NumberLine,
+        // issue #110). Trait décoratif : `--map-node-path-width`, jamais un nombre en dur.
+        style={{ strokeWidth: "var(--map-node-path-width)" }}
+        strokeLinecap="round"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+}
+
 /** Chemin complet des nœuds — projette les positions normalisées `[0,1]²` (5.2) dans un
  * viewport simple : `y` pilote l'ordre vertical du chemin, `x` un décalage horizontal
  * relatif (serpentin). Aucun recalcul de géométrie : les positions viennent telles
- * quelles de `WorldMap.nodes` (invariance géométrique, CLAUDE.md/rétro #123). */
+ * quelles de `WorldMap.nodes` (invariance géométrique, CLAUDE.md/rétro #123). Un
+ * connecteur décoratif relie chaque nœud à son précédent (métaphore Candy Crush). */
 function NodePath({ map }: { readonly map: WorldMap }) {
   const total = map.nodes.length;
   return (
@@ -265,20 +326,29 @@ function NodePath({ map }: { readonly map: WorldMap }) {
         maxWidth: "var(--max-width-play)",
       }}
     >
-      {map.nodes.map((node) => (
-        <li
-          key={node.index}
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            // Décalage horizontal serpentin depuis la position normalisée (5.2) —
-            // affichage seul, aucune influence sur la géométrie sous-jacente.
-            transform: `translateX(${horizontalOffsetPercent(node.position.x)}%)`,
-          }}
-        >
-          <NodeBadge node={node} total={total} />
-        </li>
-      ))}
+      {map.nodes.map((node, renderIndex) => {
+        // Nœud précédent DANS L'ORDRE DU CHEMIN (index - 1) — `undefined` pour le 1ᵉʳ
+        // nœud (départ, aucun connecteur). Dérivé de la liste fournie, pas recalculé.
+        const previous = renderIndex > 0 ? map.nodes[renderIndex - 1] : undefined;
+        return (
+          <li
+            key={node.index}
+            style={{
+              position: "relative",
+              display: "flex",
+              justifyContent: "center",
+              // Décalage horizontal serpentin depuis la position normalisée (5.2) —
+              // affichage seul, aucune influence sur la géométrie sous-jacente.
+              transform: `translateX(${horizontalOffsetPercent(node.position.x)}%)`,
+            }}
+          >
+            {previous !== undefined && (
+              <NodeConnector fromX={node.position.x} toX={previous.position.x} />
+            )}
+            <NodeBadge node={node} total={total} />
+          </li>
+        );
+      })}
     </ol>
   );
 }

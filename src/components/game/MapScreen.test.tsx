@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MapScreen } from "./MapScreen";
 import { currentMapAction } from "@/app/(app)/carte/actions";
@@ -66,7 +66,7 @@ describe("MapScreen — chargement / erreur", () => {
     await waitFor(() => screen.getByText(strings.map.loadError));
 
     currentMapActionMock.mockResolvedValue({ map: map([node({ status: "current" })]) });
-    screen.getByRole("button", { name: strings.map.loadErrorRetry }).click();
+    fireEvent.click(screen.getByRole("button", { name: strings.map.loadErrorRetry }));
 
     await waitFor(() =>
       expect(screen.getByText(strings.map.title.replace("{n}", "1"))).toBeInTheDocument(),
@@ -121,6 +121,62 @@ describe("MapScreen — fidélité de rendu à la géométrie fournie (rétro #1
     await renderReady(map([node({ status: "current", position: { x: 0.8, y: 0 } })]));
     const li = document.querySelector("li");
     expect(li!.style.transform).toBe("translateX(30%)");
+  });
+});
+
+describe("MapScreen — connecteur du chemin (métaphore Candy Crush, WIREFRAMES §2, décoratif)", () => {
+  it("N nœuds → N-1 connecteurs (un entre chaque paire consécutive, aucun avant le 1ᵉʳ)", async () => {
+    const nodes = Array.from({ length: 5 }, (_, i) =>
+      node({ index: i, position: { x: 0.5, y: i / 4 }, status: i === 0 ? "current" : "locked" }),
+    );
+    await renderReady(map(nodes));
+    // Effet observable : le nombre de connecteurs suit exactement (nœuds − 1) — casse si
+    // un connecteur est ajouté au 1ᵉʳ nœud (départ) ou omis entre deux nœuds.
+    expect(document.querySelectorAll("[data-map-connector]")).toHaveLength(4);
+  });
+
+  it("un seul nœud → AUCUN connecteur (rien à relier)", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    expect(document.querySelectorAll("[data-map-connector]")).toHaveLength(0);
+  });
+
+  it("le connecteur est DÉCORATIF : aria-hidden, jamais navigable, jamais dans le nom accessible", async () => {
+    await renderReady(
+      map([node({ index: 0, status: "current" }), node({ index: 1, status: "locked" })]),
+    );
+    const connector = document.querySelector("[data-map-connector]");
+    expect(connector).not.toBeNull();
+    expect(connector).toHaveAttribute("aria-hidden", "true");
+    // Aucun connecteur n'est un lien / focusable (jamais navigable).
+    expect(connector!.closest("a")).toBeNull();
+    expect(connector!.querySelector("a, button, [tabindex]")).toBeNull();
+  });
+
+  it("le connecteur utilise les tokens --map-node-path-* (trait), jamais une valeur en dur", async () => {
+    await renderReady(
+      map([node({ index: 0, status: "current" }), node({ index: 1, status: "locked" })]),
+    );
+    const line = document.querySelector("[data-map-connector] line");
+    expect(line).not.toBeNull();
+    expect(line!.getAttribute("stroke")).toBe("var(--map-node-path-color)");
+    // strokeWidth via style (SEUL le CSS résout var(), cf. NumberLine/#110).
+    expect((line as SVGLineElement).style.strokeWidth).toBe("var(--map-node-path-width)");
+  });
+
+  it("l'ajout des connecteurs ne change NI le nombre de nœuds NI leurs positions (invariance géométrie, rétro #123)", async () => {
+    // Effet observable : la géométrie (compte + translateX de chaque <li>) est identique
+    // que le connecteur soit rendu ou non — le connecteur est un ornement superposé.
+    const nodes = [
+      node({ index: 0, status: "current", position: { x: 0.5, y: 0 } }),
+      node({ index: 1, status: "locked", position: { x: 0.8, y: 0.5 } }),
+      node({ index: 2, status: "locked", position: { x: 0.2, y: 1 } }),
+    ];
+    await renderReady(map(nodes));
+    // Toujours 3 nœuds (les connecteurs ne s'ajoutent pas au décompte de nœuds).
+    expect(document.querySelectorAll("[data-map-node]")).toHaveLength(3);
+    // Positions dérivées des positions 5.2, inchangées par la présence du connecteur.
+    const transforms = [...document.querySelectorAll("li")].map((li) => li.style.transform);
+    expect(transforms).toEqual(["translateX(0%)", "translateX(30%)", "translateX(-30%)"]);
   });
 });
 
@@ -248,11 +304,27 @@ describe("MapScreen — contraste WCAG résolu (piège #94/#104, feed-forward br
     },
   );
 
+  // Les étoiles (★ pleine / ☆ vide) sont rendues SOUS la pastille, sur le fond de PAGE
+  // (--color-bg-primary), pas sur le médaillon coloré → on résout le contraste contre CE
+  // fond réel (le fond effectif du glyphe, cf. StarsRow). Une garde PAR glyphe rendu
+  // (pleine ET vide), pas une fois par famille (CLAUDE.md : « tout glyphe visible »).
   it.each(["light", "dark"] as const)(
-    "%s : étoile pleine (--map-node-star-filled) ≥ 4.5:1 sur le fond du médaillon terminé",
+    "%s : étoile PLEINE (--map-node-star-filled) ≥ 4.5:1 sur le fond de page (fond réel du glyphe)",
     (theme) => {
       const star = resolveTokenColor(theme, "--map-node-star-filled");
-      const bg = resolveTokenColor(theme, "--map-node-completed-bg");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "%s : étoile VIDE (--map-node-star-empty) ≥ 4.5:1 sur le fond de page (fond réel du glyphe)",
+    (theme) => {
+      // Effet observable : ☆ vide est un glyphe rendu à part entière (pas juste une
+      // absence) — casse si le token est remappé sur une couleur à faible contraste
+      // (ex. --color-star/-star-empty décoratifs, qui échouent ~1.2:1 en light).
+      const star = resolveTokenColor(theme, "--map-node-star-empty");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
       expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
