@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { CONFIG_DEFAULTS, type EngineConfig } from "../../config/server-config";
 import { makeFact, type Fact } from "./facts";
 import type { MasteryState } from "./mastery";
-import { buildLevel, DUE_TARGET_RATIO, LEVEL_SIZE, type LevelItem, type ScopeEntry } from "./level";
+import {
+  buildLevel,
+  computeRevisionDebt,
+  DUE_TARGET_RATIO,
+  isDue,
+  LEVEL_SIZE,
+  type LevelItem,
+  type ScopeEntry,
+} from "./level";
 
 /**
  * Config moteur réelle (⚙️ défauts de 3.2) → on teste la logique contre le contrat
@@ -713,5 +721,62 @@ describe("buildLevel — options par défaut + horloge injectée", () => {
     const deadlockNow = dueAt - 100;
     const level = buildLevel(scope, CONFIG, deadlockNow);
     expect(level.length).toBeGreaterThan(0); // no-fail : jamais vide (#108)
+  });
+});
+
+describe("computeRevisionDebt — dette de révision (MAP §5)", () => {
+  const f1 = makeFact("add", 1, 2);
+  const f2 = makeFact("add", 1, 3);
+  const f3 = makeFact("add", 1, 4);
+
+  it("compte les faits DUE (déjà vus, box<max, échéance atteinte)", () => {
+    // 2 DUE (échéance passée) + 1 non dû (échéance future) → dette = 2.
+    const scope = [
+      entry(f1, state({ box: 1, nextDue: NOW - MS_PER_DAY })),
+      entry(f2, state({ box: 2, nextDue: NOW - 1 })),
+      entry(f3, state({ box: 1, nextDue: NOW + MS_PER_DAY })), // pas encore dû
+    ];
+    expect(computeRevisionDebt(scope, CONFIG, NOW)).toBe(2);
+  });
+
+  it("un fait NEW (jamais vu, state null) n'est PAS en dette", () => {
+    // Effet observable : si le filtre `state !== null` sautait (mutant `=== null ||`),
+    // le NEW compterait → dette 2 au lieu de 1. Ce test casse alors.
+    const scope = [
+      entry(f1, state({ box: 1, nextDue: NOW - 1 })), // DUE
+      entry(f2, null), // NEW → jamais en dette
+    ];
+    expect(computeRevisionDebt(scope, CONFIG, NOW)).toBe(1);
+  });
+
+  it("plusieurs NEW seuls ⇒ dette 0 (aucun fait jamais vu n'est en retard)", () => {
+    // Renforce la garde du filtre NEW : un scope 100 % NEW a une dette de 0, pas de N.
+    const scope = [entry(f1, null), entry(f2, null), entry(f3, null)];
+    expect(computeRevisionDebt(scope, CONFIG, NOW)).toBe(0);
+  });
+
+  it("un fait en entretien (box = max) n'est PAS en dette (box < max requis)", () => {
+    const scope = [
+      entry(f1, state({ box: CONFIG.maxBox, nextDue: NOW - MS_PER_DAY })), // MAINT, pas DUE
+      entry(f2, state({ box: 1, nextDue: NOW - 1 })), // DUE
+    ];
+    expect(computeRevisionDebt(scope, CONFIG, NOW)).toBe(1);
+  });
+
+  it("horloge injectée : la dette dépend de `now`, jamais de Date.now()", () => {
+    const scope = [entry(f1, state({ box: 1, nextDue: NOW }))];
+    // Effet observable de `now` : échéance == now → dû (≤) ; now avant → pas dû.
+    expect(computeRevisionDebt(scope, CONFIG, NOW)).toBe(1);
+    expect(computeRevisionDebt(scope, CONFIG, NOW - 1)).toBe(0);
+  });
+
+  it("scope vide → dette 0 (aucune division, no-fail)", () => {
+    expect(computeRevisionDebt([], CONFIG, NOW)).toBe(0);
+  });
+
+  it("isDue (exporté) : box<max ET échéance atteinte", () => {
+    expect(isDue(state({ box: 1, nextDue: NOW - 1 }), CONFIG, NOW)).toBe(true);
+    expect(isDue(state({ box: 1, nextDue: NOW + 1 }), CONFIG, NOW)).toBe(false);
+    expect(isDue(state({ box: CONFIG.maxBox, nextDue: NOW - 1 }), CONFIG, NOW)).toBe(false);
   });
 });

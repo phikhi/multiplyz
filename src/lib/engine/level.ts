@@ -101,9 +101,35 @@ const DUE_TARGET = Math.round(LEVEL_SIZE * DUE_TARGET_RATIO);
  * donc pas en entretien), et **échéance atteinte** (`next_due ≤ now`). Un `next_due`
  * `null` (échéance jamais fixée sur une ligne existante — cas défensif) est traité
  * comme **dû** (à revoir). (ENGINE §4.)
+ *
+ * **Exporté** : la carte procédurale (5.2, `game/map.ts`) mesure la **dette de
+ * révision** = nombre de faits DUE (MAP §5 « facts en retard »). Réutilise **ce
+ * prédicat exact** — la sémantique DUE/dus reste au moteur (CLAUDE.md : la logique de
+ * maîtrise/sélection vit côté serveur, non réinventée dans la couche jeu).
  */
-function isDue(state: MasteryState, config: EngineConfig, now: number): boolean {
+export function isDue(state: MasteryState, config: EngineConfig, now: number): boolean {
   return state.box < config.maxBox && (state.nextDue === null || state.nextDue <= now);
+}
+
+/**
+ * **Dette de révision** d'un profil (MAP §5) = **nombre de faits DUE** dans le
+ * périmètre (« facts en retard » : déjà rencontrés, `box < maxBox`, échéance atteinte).
+ * C'est la quantité comparée au seuil `revisionDebtThreshold` (⚙️) par la carte (5.2)
+ * pour décider d'insérer un nœud **révision**.
+ *
+ * Réutilise le prédicat DUE **exact** du moteur (`isDue`) — aucune nouvelle notion de
+ * dette, aucun second barème : la carte lit une dette calculée ici, elle ne réinvente
+ * pas la maîtrise (CLAUDE.md). Fonction **pure**, horloge injectée (`now`, epoch ms).
+ * Un fait **NEW** (`state === null`, jamais tenté) n'est **pas** en dette (rien à
+ * réviser tant qu'il n'a jamais été vu — cohérent avec le bugfix #64 : les neufs ne
+ * gonflent pas les compteurs de maîtrise).
+ */
+export function computeRevisionDebt(
+  scope: readonly ScopeEntry[],
+  config: EngineConfig,
+  now: number,
+): number {
+  return scope.filter((entry) => entry.state !== null && isDue(entry.state, config, now)).length;
 }
 
 /**

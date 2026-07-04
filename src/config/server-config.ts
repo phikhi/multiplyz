@@ -137,6 +137,43 @@ export interface EngineConfig {
   antiMashMs: number;
   /** Taille du diagnostic de départ (~nb de calculs, ENGINE §3/§11). */
   diagnosticSize: number;
+  /**
+   * **Seuil de dette de révision** (MAP §5) : au-delà de ce **nombre de faits DUE**
+   * (« facts en retard », cf. `computeRevisionDebt`), la carte (5.2) insère un nœud
+   * **révision** à la place du nœud normal suivant. Défaut `12` (MAP §5 pseudo-code
+   * `> 12 facts en retard`). Vit dans `EngineConfig` car c'est un seuil **pédagogique**
+   * comparé à une quantité calculée par le moteur (dus/dette), même famille que
+   * `consolidationThreshold` — pas de la géométrie de carte (cf. `MapConfig`).
+   */
+  revisionDebtThreshold: number;
+}
+
+/**
+ * ⚙️ **Structure de la carte** (MAP §3/§5/§6) — géométrie et cadence des nœuds d'un
+ * monde, distinctes des seuils **pédagogiques** (`EngineConfig`). Consommé par la carte
+ * procédurale (5.2, `game/map.ts`), fonction pure : ces valeurs cadrent la forme du
+ * chemin (nb de niveaux, cadence des trésors, longueur du boss), pas la maîtrise.
+ */
+export interface MapConfig {
+  /**
+   * Nombre de **niveaux normaux** par monde, **avant** le boss (MAP §1/§6). Le monde
+   * compte donc `levelsPerWorld + 1` nœuds (~11). Défaut `10` (MAP §1 « ~10 niveaux + 1
+   * boss »).
+   */
+  levelsPerWorld: number;
+  /**
+   * **Cadence des trésors** (MAP §3) : un nœud **trésor** ~tous les N nœuds normaux.
+   * Défaut `4` (MAP §3 « ~tous les 4 nœuds »). Le boss (dernier nœud) n'est jamais un
+   * trésor (sa position prime).
+   */
+  treasureEvery: number;
+  /**
+   * Nombre de questions du **boss** de fin de monde (MAP §6 : « ~12-15 questions »).
+   * Défaut `13` (milieu de fourchette). Exposé ici pour rester calibrable au playtest ;
+   * la composition du contenu boss reste au moteur (hors 5.2 — la carte n'expose que la
+   * **structure**).
+   */
+  bossQuestionCount: number;
 }
 
 export interface AppConfig {
@@ -145,6 +182,7 @@ export interface AppConfig {
   imageModel: ImageModelConfig;
   auth: AuthConfig;
   engine: EngineConfig;
+  map: MapConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -209,6 +247,16 @@ export const CONFIG_DEFAULTS = {
     antiMashMs: 600,
     // Diagnostic : ~18 calculs (ENGINE §3/§11).
     diagnosticSize: 18,
+    // Seuil dette de révision : > 12 facts en retard → nœud révision (MAP §5).
+    revisionDebtThreshold: 12,
+  },
+  map: {
+    // Monde = ~10 niveaux + 1 boss (MAP §1/§6).
+    levelsPerWorld: 10,
+    // Trésor ~tous les 4 nœuds (MAP §3).
+    treasureEvery: 4,
+    // Boss : ~12-15 questions → 13 par défaut (MAP §6).
+    bossQuestionCount: 13,
   },
 } as const;
 
@@ -406,6 +454,29 @@ export function loadEngineConfig(env: Env): EngineConfig {
     starThresholds: parseStarThresholds(env.ENGINE_STAR_THRESHOLDS, d.starThresholds),
     antiMashMs: parsePositiveInt(env.ENGINE_ANTI_MASH_MS, d.antiMashMs),
     diagnosticSize: parsePositiveInt(env.ENGINE_DIAGNOSTIC_SIZE, d.diagnosticSize),
+    // `parseNonNegativeInt` : un seuil `0` est légitime (chaque nœud normal serait
+    // révision — extrême de calibration), et évite une insertion révision permanente
+    // par accident si l'env fournit une valeur négative (retombe sur le défaut).
+    revisionDebtThreshold: parseNonNegativeInt(
+      env.ENGINE_REVISION_DEBT_THRESHOLD,
+      d.revisionDebtThreshold,
+    ),
+  };
+}
+
+/**
+ * Bloc **carte** de la config (MAP §3/§5/§6), isolé en fonction pure. Source unique des
+ * ⚙️ de **structure** de carte (nb de niveaux/monde, cadence des trésors, longueur du
+ * boss). `parsePositiveInt` : ces trois valeurs doivent être `≥ 1` (un monde a au moins
+ * un niveau ; une cadence de trésor `0`/négative n'a pas de sens — division/modulo ;
+ * un boss a au moins une question) → une valeur invalide retombe sur le défaut.
+ */
+export function loadMapConfig(env: Env): MapConfig {
+  const d = CONFIG_DEFAULTS.map;
+  return {
+    levelsPerWorld: parsePositiveInt(env.MAP_LEVELS_PER_WORLD, d.levelsPerWorld),
+    treasureEvery: parsePositiveInt(env.MAP_TREASURE_EVERY, d.treasureEvery),
+    bossQuestionCount: parsePositiveInt(env.MAP_BOSS_QUESTION_COUNT, d.bossQuestionCount),
   };
 }
 
@@ -439,6 +510,7 @@ export function loadConfig(env: Env): AppConfig {
     },
     auth: loadAuthConfig(env),
     engine: loadEngineConfig(env),
+    map: loadMapConfig(env),
   };
 }
 
@@ -465,6 +537,14 @@ export function getAuthConfig(): AuthConfig {
  */
 export function getEngineConfig(): EngineConfig {
   return getConfig().engine;
+}
+
+/**
+ * Bloc **carte** de la config applicative (mémoïsé). Consommé par la carte procédurale
+ * (5.2) qui compose la structure d'un monde (géométrie + types de nœuds).
+ */
+export function getMapConfig(): MapConfig {
+  return getConfig().map;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */
