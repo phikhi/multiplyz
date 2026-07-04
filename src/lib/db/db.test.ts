@@ -182,7 +182,7 @@ describe("runMigrations", () => {
   // applicative (attemptExists/creditExists) ayant tenu jusqu'ici, aucun doublon
   // (profil, id client) / (profil, raison, ref) ne préexiste → la création doit réussir.
   // On ramène une base fraîche à l'état PRÉ-0008 (index retirés, 0008 dé-journalisée),
-  // on peuple attempts + ledger avec des lignes valides (dont des NULL, hors index partiel),
+  // on peuple attempts + ledger avec des lignes valides (dont des NULL, distincts en SQLite),
   // puis on rejoue les migrations : ne doit PAS lever, et les index doivent réapparaître.
   it("applique 0008 sur attempts/ledger peuplés sans crash + recrée les index UNIQUE (#82)", () => {
     const path = freshDbPath();
@@ -200,7 +200,7 @@ describe("runMigrations", () => {
     );
     // Un profil + des lignes valides : deux tentatives avec le MÊME id client seraient
     // interdites, mais ici les ids diffèrent ; on ajoute aussi des lignes NULL (diagnostic /
-    // mouvement sans clé) qui doivent coexister (l'index est partiel `IS NOT NULL`).
+    // mouvement sans clé) qui doivent coexister (NULL distincts dans l'index UNIQUE SQLite).
     seed.run(sql`INSERT INTO profiles (id, name, name_key, pin_hash, avatar)
       VALUES (1, 'Lina', 'lina', 'h', 'fox')`);
     seed.run(sql`INSERT INTO attempts (profile_id, fact_id, skill, correct, response_ms, client_attempt_id)
@@ -227,7 +227,7 @@ describe("runMigrations", () => {
       .map((r) => r.name);
     expect(idx).toContain("attempts_profile_client_attempt_unique");
     expect(idx).toContain("ledger_profile_reason_ref_unique");
-    // Les lignes NULL préexistantes ont survécu (index partiel — pas de dédoublonnage).
+    // Les lignes NULL préexistantes ont survécu (NULL distincts en SQLite — pas de dédoublonnage).
     expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM attempts`)?.n).toBe(4);
     expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ledger`)?.n).toBe(4);
   });

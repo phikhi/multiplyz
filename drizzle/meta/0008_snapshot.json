@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "354ff83c-dc94-46e1-886b-21fd94b7ed24",
+  "id": "25f53380-7170-4787-8124-aa13a6d1abc2",
   "prevId": "a792a39a-da61-4b5b-8067-1cc839fd3987",
   "tables": {
     "attempts": {
@@ -80,8 +80,7 @@
             "profile_id",
             "client_attempt_id"
           ],
-          "isUnique": true,
-          "where": "\"attempts\".\"client_attempt_id\" IS NOT NULL"
+          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -343,8 +342,7 @@
             "reason",
             "ref_id"
           ],
-          "isUnique": true,
-          "where": "\"ledger\".\"ref_id\" IS NOT NULL"
+          "isUnique": true
         }
       },
       "foreignKeys": {

@@ -1,2 +1,0 @@
-CREATE UNIQUE INDEX `attempts_profile_client_attempt_unique` ON `attempts` (`profile_id`,`client_attempt_id`) WHERE "attempts"."client_attempt_id" IS NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX `ledger_profile_reason_ref_unique` ON `ledger` (`profile_id`,`reason`,`ref_id`) WHERE "ledger"."ref_id" IS NOT NULL;

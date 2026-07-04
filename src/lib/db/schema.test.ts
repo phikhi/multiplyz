@@ -388,18 +388,18 @@ describe("schéma attempts (journal append-only — ENGINE §10)", () => {
       clientAttemptId: "attempt-abc",
     };
     db.insert(attempts).values(row).run();
-    // Même (profil, id client) → l'index UNIQUE partiel doit lever (le moteur DB, pas
+    // Même (profil, id client) → l'index UNIQUE composite doit lever (le moteur DB, pas
     // seulement la garde applicative, sérialise le dédoublonnage).
     expect(() => db.insert(attempts).values(row).run()).toThrow();
   });
 
-  // Index PARTIEL (`WHERE client_attempt_id IS NOT NULL`) : plusieurs lignes SANS id
-  // client (diagnostic, rejeux nus) doivent coexister — jamais dédoublonnées. Effet
-  // observable : rendre l'index NON partiel → SQLite verrait toujours les NULL distincts,
-  // MAIS un même (profil) + NULL resterait permis, donc ce test seul ne mute pas dessus ;
-  // il verrouille l'INTENTION (append-only libre sans clé) + garde contre un index qui
-  // deviendrait `NOT NULL`-only faux. Deux tentatives sans id client → 2 lignes.
-  it("laisse coexister plusieurs tentatives sans client_attempt_id (index partiel, #82)", () => {
+  // NULL-distinctness SQLite : plusieurs lignes SANS id client (diagnostic, rejeux nus)
+  // coexistent — jamais dédoublonnées, car SQLite traite chaque `NULL` comme distinct dans
+  // un index UNIQUE composite ordinaire. C'est cette propriété (et non un prédicat partiel
+  // `WHERE ... IS NOT NULL`, redondant + non-testable ici, cf. rétro #124) qui laisse les
+  // rejeux nus libres. Ce test verrouille l'invariant append-only-sans-clé. Deux tentatives
+  // sans id client → 2 lignes.
+  it("laisse coexister plusieurs tentatives sans client_attempt_id (NULL-distinctness, #82)", () => {
     const db = freshDb();
     db.insert(profiles)
       .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
@@ -691,15 +691,17 @@ describe("schéma ledger (journal append-only — ECONOMY §3.7)", () => {
       refId: "level:0:2",
     };
     db.insert(ledger).values(mv).run();
-    // Même (profil, raison, clé de rejeu) → l'index UNIQUE partiel doit lever.
+    // Même (profil, raison, clé de rejeu) → l'index UNIQUE composite doit lever.
     expect(() => db.insert(ledger).values(mv).run()).toThrow();
   });
 
-  // Index PARTIEL (`WHERE ref_id IS NOT NULL`) : le journal reste append-only pour les
-  // mouvements SANS clé de rejeu (`ref_id` NULL) — jamais contraints. Effet observable :
-  // un index NON partiel n'attraperait toujours pas les NULL (distincts en SQLite), mais
-  // ce test verrouille l'invariant append-only (deux mouvements NULL identiques coexistent).
-  it("laisse coexister deux mouvements sans ref_id (append-only, index partiel #82)", () => {
+  // NULL-distinctness SQLite : le journal reste append-only pour les mouvements SANS clé de
+  // rejeu (`ref_id` NULL) — jamais contraints, car SQLite traite chaque `NULL` comme distinct
+  // dans un index UNIQUE composite ordinaire. C'est cette propriété (et non un prédicat partiel
+  // `WHERE ref_id IS NOT NULL`, redondant + non-testable ici, cf. rétro #124) qui laisse ces
+  // mouvements libres. Ce test verrouille l'invariant append-only-sans-clé (deux mouvements
+  // NULL identiques coexistent).
+  it("laisse coexister deux mouvements sans ref_id (append-only, NULL-distinctness #82)", () => {
     const db = freshDb();
     seed(db);
     const mv = {

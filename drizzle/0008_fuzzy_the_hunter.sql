@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX `attempts_profile_client_attempt_unique` ON `attempts` (`profile_id`,`client_attempt_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `ledger_profile_reason_ref_unique` ON `ledger` (`profile_id`,`reason`,`ref_id`);

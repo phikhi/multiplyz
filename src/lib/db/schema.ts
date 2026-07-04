@@ -215,14 +215,16 @@ export const mastery = sqliteTable("mastery", {
  * actuel, STACK.md). (2) L'**index UNIQUE composite** `(profile_id, client_attempt_id)`
  * (déclaré via le callback table 3ᵉ-arg `(t) => [...]`) garantit le dédoublonnage **au
  * niveau moteur DB** — filet forward-looking pour un futur multi-process/cluster où le
- * check applicatif seul ne sérialiserait plus. **Index PARTIEL** (`WHERE client_attempt_id
- * IS NOT NULL`) : SQLite traite chaque `NULL` comme distinct, mais on borne l'index aux
- * lignes **porteuses d'un id** (le diagnostic + les rejeux sans id fournissent `NULL` et
- * doivent coexister librement — jamais dédoublonnés). **Pas de piège coverage** (#34/#46) :
- * le callback 3ᵉ-arg **retournant un tableau** est invoqué par drizzle **à la définition
- * de la table** (chargement de module) → v8 le compte comme couvert (vérifié empiriquement,
- * `schema.ts` 100 % fonctions). `db:generate` reste **no-op** (schema.ts ↔ snapshot ↔ SQL
- * cohérents ; index sérialisé par drizzle-kit, jamais de SQL à la main).
+ * check applicatif seul ne sérialiserait plus. **Index composite SIMPLE (pas partiel)** :
+ * SQLite traite déjà chaque `NULL` comme **distinct** dans un index UNIQUE ordinaire → les
+ * lignes **sans id client** (diagnostic, rejeux nus, `client_attempt_id NULL`) coexistent
+ * librement, sans clause `WHERE ... IS NOT NULL`. Un prédicat partiel serait **behaviorally
+ * redundant** ici (même dédoublonnage, même coexistence des NULL) et **non-testable** (aucun
+ * test ne distinguerait partiel de simple, cf. rétro #124) → on ne le pose pas. **Pas de
+ * piège coverage** (#34/#46) : le callback 3ᵉ-arg **retournant un tableau** est invoqué par
+ * drizzle **à la définition de la table** (chargement de module) → v8 le compte comme couvert
+ * (vérifié empiriquement, `schema.ts` 100 % fonctions). `db:generate` reste **no-op**
+ * (schema.ts ↔ snapshot ↔ SQL cohérents ; index sérialisé par drizzle-kit, jamais de SQL à la main).
  */
 export const attempts = sqliteTable(
   "attempts",
@@ -246,7 +248,8 @@ export const attempts = sqliteTable(
      * Id opaque **fourni par le client** pour l'idempotence (SYNC §2). Un rejeu portant
      * le même `(profile_id, client_attempt_id)` est ignoré (aucune 2ᵉ mutation). Unicité
      * portée par la garde applicative `attemptExists` (dans la transaction sync) **et** par
-     * l'index UNIQUE composite partiel du callback table (#82, défense en profondeur DB).
+     * l'index UNIQUE composite du callback table (#82, défense en profondeur DB). Les lignes
+     * `client_attempt_id NULL` coexistent librement (NULL distincts en SQLite).
      */
     clientAttemptId: text("client_attempt_id"),
     /** Instant de la réponse (régularité / tendances). */
@@ -255,12 +258,11 @@ export const attempts = sqliteTable(
       .default(sql`(unixepoch())`),
   },
   (t) => [
-    // Index UNIQUE composite PARTIEL (#82) : dédoublonnage `(profil, id client)` garanti par
-    // le moteur DB (défense en profondeur, cf. doc de la table). `WHERE ... IS NOT NULL` →
-    // les lignes sans id client (diagnostic, rejeux nus) coexistent sans être contraintes.
-    uniqueIndex("attempts_profile_client_attempt_unique")
-      .on(t.profileId, t.clientAttemptId)
-      .where(sql`${t.clientAttemptId} IS NOT NULL`),
+    // Index UNIQUE composite SIMPLE (#82) : dédoublonnage `(profil, id client)` garanti par
+    // le moteur DB (défense en profondeur, cf. doc de la table). Pas de prédicat partiel :
+    // SQLite traite déjà chaque `NULL` comme distinct → les lignes sans id client (diagnostic,
+    // rejeux nus) coexistent librement. Un `WHERE ... IS NOT NULL` serait redondant + non-testable.
+    uniqueIndex("attempts_profile_client_attempt_unique").on(t.profileId, t.clientAttemptId),
   ],
 );
 
@@ -385,11 +387,14 @@ export type LedgerCurrency = "coins" | "shards" | "item";
  * transforme un rejeu de `finishLevel` en no-op (`applied: false`, aucune 2ᵉ ligne ledger,
  * aucun 2ᵉ crédit) — correcte en **mono-process**. (2) L'**index UNIQUE composite**
  * `(profile_id, reason, ref_id)` (callback table 3ᵉ-arg) garantit le dédoublonnage **au
- * niveau moteur DB** — filet forward-looking multi-process. **Index PARTIEL** (`WHERE ref_id
- * IS NOT NULL`) : un mouvement **sans clé de rejeu** (`ref_id NULL` — ex. un mouvement
- * non-idempotent futur) reste **append-only libre** (jamais contraint) ; seuls les
- * mouvements **porteurs d'une clé de rejeu** sont dédoublonnés. Pas de piège coverage
- * (#34/#46, callback retournant un tableau = couvert), `db:generate` no-op.
+ * niveau moteur DB** — filet forward-looking multi-process. **Index composite SIMPLE (pas
+ * partiel)** : SQLite traite déjà chaque `NULL` comme **distinct** dans un index UNIQUE
+ * ordinaire → un mouvement **sans clé de rejeu** (`ref_id NULL` — ex. un mouvement
+ * non-idempotent futur) reste **append-only libre** (jamais contraint), sans clause `WHERE
+ * ... IS NOT NULL` ; seuls les mouvements **porteurs d'une clé de rejeu** sont dédoublonnés.
+ * Un prédicat partiel serait **behaviorally redundant** ici (même dédoublonnage, même
+ * coexistence des NULL) et **non-testable** (cf. rétro #124) → on ne le pose pas. Pas de piège
+ * coverage (#34/#46, callback retournant un tableau = couvert), `db:generate` no-op.
  */
 export const ledger = sqliteTable(
   "ledger",
@@ -418,12 +423,12 @@ export const ledger = sqliteTable(
       .default(sql`(unixepoch())`),
   },
   (t) => [
-    // Index UNIQUE composite PARTIEL (#82) : dédoublonnage du crédit `(profil, raison, clé de
-    // rejeu)` garanti par le moteur DB (défense en profondeur, cf. doc de la table). `WHERE
-    // ref_id IS NOT NULL` → un mouvement sans clé de rejeu reste append-only libre.
-    uniqueIndex("ledger_profile_reason_ref_unique")
-      .on(t.profileId, t.reason, t.refId)
-      .where(sql`${t.refId} IS NOT NULL`),
+    // Index UNIQUE composite SIMPLE (#82) : dédoublonnage du crédit `(profil, raison, clé de
+    // rejeu)` garanti par le moteur DB (défense en profondeur, cf. doc de la table). Pas de
+    // prédicat partiel : SQLite traite déjà chaque `NULL` comme distinct → un mouvement sans
+    // clé de rejeu (`ref_id NULL`) reste append-only libre. Un `WHERE ref_id IS NOT NULL`
+    // serait redondant + non-testable.
+    uniqueIndex("ledger_profile_reason_ref_unique").on(t.profileId, t.reason, t.refId),
   ],
 );
 
