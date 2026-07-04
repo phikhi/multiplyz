@@ -18,7 +18,9 @@ import {
   type SubmitAttemptInput,
 } from "@/lib/engine/service";
 import { selectDiagnostic, type DiagnosticItem } from "@/lib/engine/diagnostic";
+import { LEVEL_SIZE } from "@/lib/engine/level";
 import { finishLevel, type FinishLevelError, type GrantedLegendary } from "@/lib/game/finish-level";
+import { baseNodeTypeAt } from "@/lib/game/map";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
 
@@ -57,6 +59,15 @@ export interface StartLevelActionResult {
  * Démarre un niveau pour la session enfant courante. Lecture seule (aucune écriture au
  * démarrage). `level: null` si pas de session enfant valide (`starThresholds` renvoyé
  * quand même — valeur ⚙️ publique, pas liée à l'auth — pour un contrat de retour stable).
+ *
+ * **Boss = niveau plus long (MAP §6)** : le serveur résout — **sans faire confiance au
+ * client** (SYNC §1) — le nœud courant (`resolveCurrentLevelTarget`) et **dérive son type**
+ * de la géométrie de carte (`baseNodeTypeAt`, même source de vérité serveur que le barème de
+ * fin de niveau). Si c'est le **boss**, le niveau compose `bossQuestionCount` (~12-15 ⚙️)
+ * questions au lieu de `LEVEL_SIZE` (10) — via `options.size`. Le **modèle de sélection est
+ * inchangé** (mêmes pools/mix/ordre), seule la taille varie (« un peu plus long, mix des
+ * compétences du moment », MAP §6). Un profil vierge (avant diagnostic) n'atteint pas ce
+ * chemin : `diagnosticPlanAction` intercepte la 1ʳᵉ session en amont.
  */
 export async function startLevelAction(): Promise<StartLevelActionResult> {
   const config = getEngineConfig();
@@ -64,7 +75,15 @@ export async function startLevelAction(): Promise<StartLevelActionResult> {
   if (profileId === null) {
     return { level: null, starThresholds: config.starThresholds };
   }
-  const level = startLevel(getDb(), profileId, config, Date.now(), Math.random);
+  const db = getDb();
+  const mapConfig = getMapConfig();
+  // Cible **résolue serveur** (jamais transmise par le client, SYNC §1) : dernier monde
+  // débloqué + nœud courant → type de nœud dérivé de la géométrie (source de vérité serveur,
+  // même dérivation que `finishLevelAction`). Boss ⇒ taille `bossQuestionCount`.
+  const target = resolveCurrentLevelTarget(db, profileId, mapConfig.levelsPerWorld);
+  const isBoss = baseNodeTypeAt(target.levelIndex, mapConfig) === "boss";
+  const size = isBoss ? mapConfig.bossQuestionCount : LEVEL_SIZE;
+  const level = startLevel(db, profileId, config, Date.now(), Math.random, { size });
   return { level, starThresholds: config.starThresholds };
 }
 

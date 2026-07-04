@@ -118,7 +118,12 @@ export interface LevelQuestion {
   readonly isReask: boolean;
 }
 
-/** Un niveau prêt à jouer : ses ~10 questions ordonnées (ENGINE §4). */
+/**
+ * Un niveau prêt à jouer : ses questions ordonnées (ENGINE §4). ~10 pour un niveau normal,
+ * `bossQuestionCount` (~12-15, MAP §6) pour un **boss** — la taille est portée par
+ * `BuildLevelOptions.size` (résolu serveur depuis le type de nœud), le modèle de sélection
+ * est identique.
+ */
 export interface Level {
   readonly questions: readonly LevelQuestion[];
 }
@@ -151,15 +156,17 @@ function toQuestion(item: LevelItem, state: MasteryState | null, rng: Rng): Leve
 /**
  * **Démarre un niveau** pour le profil de la session (ENGINE §4/§6, SYNC §1) : lit l'état
  * `mastery` persisté → `buildLevel` (3.4) → attache format + distracteurs (3.5). Renvoie
- * ~10 questions **cohérentes avec l'état persisté**. Lecture seule (aucune écriture au
- * démarrage : la maîtrise ne bouge qu'à la soumission d'une réponse).
+ * les questions **cohérentes avec l'état persisté** (~10 pour un niveau normal, la taille
+ * `options.size` — `bossQuestionCount` — pour un **boss**, MAP §6). Lecture seule (aucune
+ * écriture au démarrage : la maîtrise ne bouge qu'à la soumission d'une réponse).
  *
  * @param db connexion applicative (source de vérité serveur).
  * @param profileId profil **de la session** (jamais un profil client).
  * @param config config moteur ⚙️ (3.2).
  * @param now instant serveur injecté (epoch ms) — base des échéances DUE/MAINT.
  * @param rng RNG injecté pour le mélange des choix QCM (déterministe en test).
- * @param options `rotation` (rotation douce) + `reaskKeys` (re-ask), injectés (3.4).
+ * @param options `rotation` (rotation douce) + `reaskKeys` (re-ask) + `size` (boss ⇒
+ *   `bossQuestionCount`, résolu **serveur** depuis le type de nœud), injectés (3.4).
  */
 export function startLevel(
   db: AppDatabase,

@@ -64,12 +64,14 @@ function CreaturePlaceholder() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: "var(--space-8)",
-        height: "var(--space-8)",
+        // Taille tokenisée dimensionnée pour la grille 3-colonnes à 320px (WIREFRAMES §8).
+        width: "var(--collection-placeholder-size)",
+        height: "var(--collection-placeholder-size)",
+        flexShrink: 0,
         borderRadius: "var(--border-radius-full)",
         backgroundColor: "var(--collection-placeholder-bg)",
         color: "var(--collection-placeholder-glyph)",
-        fontSize: "var(--font-size-2xl)",
+        fontSize: "var(--font-size-xl)",
       }}
     >
       {PLACEHOLDER_EMOJI}
@@ -242,7 +244,11 @@ function CreatureCard({
         flexDirection: "column",
         alignItems: "center",
         gap: "var(--space-2)",
-        padding: "var(--space-4)",
+        // Padding resserré (token ⚙️) pour tenir 3 colonnes à 320px sans débordement.
+        padding: "var(--collection-card-padding)",
+        // minWidth 0 : autorise la carte à se compresser sous sa largeur de contenu dans la
+        // grille (évite qu'un mot long force un scroll horizontal à 320px, WIREFRAMES §8).
+        minWidth: 0,
         backgroundColor: "var(--collection-card-bg)",
         border: "1px solid var(--collection-card-border)",
         borderRadius: "var(--border-radius-lg)",
@@ -368,7 +374,9 @@ export function CollectionScreen() {
         flexDirection: "column",
         alignItems: "center",
         gap: "var(--space-5)",
-        padding: "var(--space-6)",
+        // Padding tokenisé resserré → maximise la largeur de la grille 3-colonnes sur
+        // téléphone (WIREFRAMES §8), jamais de scroll horizontal à 320px.
+        padding: "var(--collection-page-padding)",
       }}
     >
       {screen.kind === "loading" && (
@@ -414,10 +422,15 @@ export function CollectionScreen() {
             </p>
           ) : (
             <ul
+              data-collection-grid=""
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(9rem, 1fr))",
-                gap: "var(--space-4)",
+                // **3 colonnes** (WIREFRAMES §8) — token ⚙️ centralisé, jamais un nombre en
+                // dur. `minmax(0, 1fr)` empêche tout débordement à 320px (les cartes se
+                // compressent au lieu de forcer un scroll horizontal). Vaut sur téléphone ET
+                // desktop (grille centrée dans --max-width-play).
+                gridTemplateColumns: "repeat(var(--collection-grid-columns), minmax(0, 1fr))",
+                gap: "var(--collection-grid-gap)",
                 width: "100%",
                 maxWidth: "var(--max-width-play)",
                 margin: 0,

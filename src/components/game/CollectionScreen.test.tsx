@@ -7,7 +7,9 @@ import type { CollectionEntry } from "@/lib/game/collection";
 import type { Rarity } from "@/lib/db/schema";
 import {
   contrastRatio,
+  rawTokenValue,
   resolveTokenColor,
+  themeBlock,
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
 
@@ -129,6 +131,34 @@ describe("CollectionScreen — affichage (WIREFRAMES §5)", () => {
     await renderReady([entry()]);
     const link = screen.getByRole("link", { name: strings.collection.back });
     expect(link).toHaveAttribute("href", "/carte");
+  });
+});
+
+/**
+ * Grille **3 colonnes** sur téléphone (WIREFRAMES §8, blocker frontend). jsdom ne calcule
+ * pas la mise en page grid, mais la garde à effet observable combine deux faits :
+ * 1. le **token de configuration** `--collection-grid-columns` (source de vérité `tokens.css`)
+ *    vaut **exactement 3** — rougit si un futur agent revient à `auto-fill`/1-2 colonnes ;
+ * 2. la grille rendue **consomme ce token** via `repeat(var(--collection-grid-columns), …)` —
+ *    prouve que le nombre de colonnes vient bien du token (pas d'un `auto-fill` qui reflowerait
+ *    à 1-2 colonnes à 320px). Retirer le token OU repasser à `auto-fill` casse l'un des deux.
+ * La preuve de rendu réel (3 colonnes calculées à 320px) est faite en capture Playwright.
+ */
+describe("CollectionScreen — grille 3 colonnes sur téléphone (WIREFRAMES §8)", () => {
+  it("le token --collection-grid-columns vaut 3 (source de vérité tokens.css)", () => {
+    const value = rawTokenValue(themeBlock("light"), "--collection-grid-columns");
+    expect(value).toBe("3");
+  });
+
+  it("la grille rendue consomme le token de colonnes (repeat(var(--collection-grid-columns), …))", async () => {
+    await renderReady([entry({ characterId: "a" }), entry({ characterId: "b" })]);
+    const grid = document.querySelector<HTMLElement>("[data-collection-grid]");
+    expect(grid).not.toBeNull();
+    // Le nombre de colonnes est piloté par le token (jamais un auto-fill qui reflowerait) —
+    // la fonction `repeat()` fixe explicitement 3 pistes, pas un remplissage adaptatif.
+    expect(grid?.style.gridTemplateColumns).toContain("repeat(var(--collection-grid-columns)");
+    expect(grid?.style.gridTemplateColumns).not.toContain("auto-fill");
+    expect(grid?.style.gridTemplateColumns).not.toContain("auto-fit");
   });
 });
 

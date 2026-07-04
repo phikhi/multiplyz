@@ -110,6 +110,8 @@ describe("startLevelAction", () => {
 
   it("authentifié → compose le niveau du profil de session (horloge + RNG injectés) + starThresholds", async () => {
     profileMock.mockResolvedValue(7);
+    // Cible résolue serveur = nœud NON-boss (levelIndex 3, treasure d'après la géométrie).
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
     const level = { questions: [] };
     startLevelMock.mockReturnValue(level);
     await expect(startLevelAction()).resolves.toEqual({
@@ -124,6 +126,34 @@ describe("startLevelAction", () => {
     expect(configArg).toBe(FAKE_CONFIG);
     expect(typeof nowArg).toBe("number");
     expect(typeof rngArg).toBe("function");
+  });
+
+  // GARDE « nœud NON-boss ⇒ taille normale (LEVEL_SIZE) » (effet observable) : la cible
+  // résolue serveur est un nœud non-boss (levelIndex 3 < boss 10 d'après la géométrie
+  // FAKE_MAP_CONFIG) → `startLevel` reçoit `{ size: 10 }`. Le type de nœud est dérivé
+  // SERVEUR (baseNodeTypeAt réel, jamais mocké), jamais transmis par le client.
+  it("nœud NON-boss ⇒ startLevel appelé avec size = LEVEL_SIZE (10), pas la taille boss", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 3 }); // treasure, non-boss
+    startLevelMock.mockReturnValue({ questions: [] });
+    await startLevelAction();
+    const options = startLevelMock.mock.calls[0][5];
+    expect(options).toEqual({ size: 10 }); // LEVEL_SIZE, jamais bossQuestionCount (13)
+    // Cible résolue SERVEUR depuis le profil de session (jamais du client).
+    expect(resolveTargetMock).toHaveBeenCalledWith("DB", 7, FAKE_MAP_CONFIG.levelsPerWorld);
+  });
+
+  // GARDE « nœud BOSS ⇒ taille plus longue (bossQuestionCount) » (effet observable,
+  // mutation-prouvé) : la cible résolue serveur est le boss (levelIndex === levelsPerWorld =
+  // 10, dernier nœud d'après la géométrie) → `startLevel` reçoit `{ size: 13 }` (⚙️
+  // bossQuestionCount). ROUGE si le boss retombait sur LEVEL_SIZE (le wiring `isBoss` sauté).
+  it("nœud BOSS ⇒ startLevel appelé avec size = bossQuestionCount (13), pas LEVEL_SIZE", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 10 }); // boss = dernier nœud
+    startLevelMock.mockReturnValue({ questions: [] });
+    await startLevelAction();
+    const options = startLevelMock.mock.calls[0][5];
+    expect(options).toEqual({ size: FAKE_MAP_CONFIG.bossQuestionCount }); // 13, PAS 10
   });
 });
 
