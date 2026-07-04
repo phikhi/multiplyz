@@ -238,3 +238,147 @@ export const attempts = sqliteTable("attempts", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+// ============================================================================
+// Boucle jouer → récompense (epic #5) — progression + portefeuille + journal
+// (MAP.md §4, ECONOMY.md §3, PLAN.md §Modèle de données). Source de vérité
+// SERVEUR (online-first) : gains/dépenses tranchés côté serveur (CLAUDE.md).
+//
+// Note contrat : ECONOMY §3 note `profile_id` en `text (FK)` (« types
+// indicatifs »), mais la clé réelle `profiles.id` est un **integer autoincrement**.
+// On suit la clé réelle + la convention des tables existantes (`mastery`,
+// `attempts`, `sessions` référencent toutes `profiles.id` en `integer`) — c'est
+// le HOW dans le WHAT, pas un écart de contrat. Données **enfant** →
+// FK `ON DELETE CASCADE` partout (purge à la suppression du profil, RGPD).
+// ============================================================================
+
+/**
+ * Nombre d'étoiles d'un niveau (0..3, MAP §4 / ENGINE §5). Miroir local du type
+ * `StarCount` de `engine/stars.ts`, **redéclaré ici** pour ne pas faire dépendre
+ * `schema.ts` (chargé hors résolveur Next par drizzle-kit/tsx) d'un module qui
+ * référence l'alias `@` (`stars.ts` importe `@/config/server-config`). Même
+ * discipline « relatif only » que l'import de `Skill` depuis `../engine/domain`.
+ */
+export type Stars = 0 | 1 | 2 | 3;
+
+/**
+ * Assemble la **PK texte** d'une ligne `progress` : une seule ligne par
+ * `(profil, monde, niveau)`. L'unicité composite est **encodée dans la PK** — pas
+ * de callback `sqliteTable` d'extras (uniqueIndex / PK composite) qui, n'étant
+ * jamais invoqué au runtime, casserait le gate 100 % fonctions (LEARNINGS #34/#46,
+ * même pattern que `pin_attempts` / `mastery`). Fonction pure → couvrable, et
+ * l'upsert `onConflictDoUpdate` (progression monotone) cible ce PK simple.
+ *
+ * Séparateur `:` (comme `pin_attempts` / `mastery`) : `profileId`, `worldIndex` et
+ * `levelIndex` sont tous des entiers → aucun `:` possible dans les composantes,
+ * clé sans ambiguïté.
+ */
+export function progressKey(profileId: number, worldIndex: number, levelIndex: number): string {
+  return `${profileId}:${worldIndex}:${levelIndex}`;
+}
+
+/**
+ * Progression par niveau **(profil, monde, niveau)** — étoiles obtenues (MAP §4).
+ * Une ligne par niveau atteint. La somme des étoiles sert à l'**affichage /
+ * collection**, **jamais** au déblocage (MAP §4). Données **enfant** → FK cascade.
+ *
+ * Unicité `(profil, monde, niveau)` portée par la **PK texte encodée**
+ * (`progressKey`). `profileId` / `worldIndex` / `levelIndex` restent des colonnes
+ * normales pour les requêtes (total d'étoiles d'un profil, progression d'un monde).
+ *
+ * Invariants (honorés par la couche `game/progress.ts` + stories consommatrices) :
+ * - `stars` = **0..3** (MAP §4 / ENGINE §5). Défaut 0.
+ * - Progression **MONOTONE** : une reprise ne baisse jamais les étoiles (SYNC —
+ *   `stars = MAX(existant, nouveau)`). L'upsert applique ce max côté SQL.
+ * - `world_index` croît à l'infini (jeu sans fin, MAP §1).
+ */
+export const progress = sqliteTable("progress", {
+  /** `"<profileId>:<worldIndex>:<levelIndex>"` — une ligne par niveau (cf. `progressKey`). */
+  id: text("id").primaryKey(),
+  /** Profil propriétaire — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Index du monde (croît à l'infini, MAP §1). */
+  worldIndex: integer("world_index").notNull(),
+  /** Index du niveau dans le monde. */
+  levelIndex: integer("level_index").notNull(),
+  /** Étoiles obtenues 0..3 (MAP §4 / ENGINE §5). Défaut 0, monotone à la reprise. */
+  stars: integer("stars").$type<Stars>().notNull().default(0),
+  /** Dernière mise à jour de la progression (dernière rejoue du niveau). */
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+/**
+ * Portefeuille **par profil** — pièces + éclats (ECONOMY §3.1). **Une seule ligne
+ * par profil** → la PK est directement le `profile_id` (FK cascade), pas de colonne
+ * clé encodée. Données **enfant** → purge en cascade (RGPD).
+ *
+ * Invariants (honorés par `game/wallet.ts`) :
+ * - `coins ≥ 0`, `shards ≥ 0` (ECONOMY §1/§3.1) — garantis côté application
+ *   (crédit borné, pas de dépense qui descende sous 0). Les dépenses arriveront en
+ *   5.6+ (boutique/gacha) ; 5.1 ne pose que le **earn-side** (crédit).
+ * - `updated_at` = instant serveur du dernier mouvement.
+ */
+export const wallet = sqliteTable("wallet", {
+  /** Profil propriétaire = PK (1 ligne / profil). FK cascade (données enfant, RGPD). */
+  profileId: integer("profile_id")
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Pièces 🪙 (≥ 0). Défaut 0. */
+  coins: integer("coins").notNull().default(0),
+  /** Éclats ✨ (≥ 0). Défaut 0. */
+  shards: integer("shards").notNull().default(0),
+  /** Instant serveur du dernier mouvement. */
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+/** Sens d'un mouvement du journal (ECONOMY §3.7). */
+export type LedgerDirection = "earn" | "spend";
+/** Monnaie / nature d'un mouvement du journal (ECONOMY §3.7). */
+export type LedgerCurrency = "coins" | "shards" | "item";
+
+/**
+ * Journal **append-only** des mouvements d'économie (ECONOMY §3.7) — traçabilité,
+ * transparence parent, anti-triche. Une ligne par earn/spend. Données **enfant** →
+ * FK cascade (RGPD).
+ *
+ * PK `id` autoincrement simple : append-only → pas de callback extras (même pattern
+ * que `attempts`). Pas d'index secondaire pour l'instant (single-tenant ; l'espace
+ * parent #7 en ajoutera un via migration si le volume le justifie).
+ *
+ * **Idempotence du crédit** (progression idempotente, CLAUDE.md) : un gain porte une
+ * **clé de rejeu** stockée dans `ref_id` (ex. `level:<world>:<level>`). Un rejeu
+ * réseau portant le même `(profile_id, reason, ref_id)` **ne recrédite pas** : la
+ * garde (dans la transaction synchrone) détecte la ligne déjà journalisée. Unicité
+ * vérifiée **au niveau requête** (pas de callback `sqliteTable` d'extras qui
+ * casserait le gate 100 % fonctions ; table single-tenant → scan filtré suffit).
+ */
+export const ledger = sqliteTable("ledger", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Profil concerné — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** `earn` | `spend` (ECONOMY §3.7). */
+  direction: text("direction").$type<LedgerDirection>().notNull(),
+  /** `coins` | `shards` | `item` (ECONOMY §3.7). */
+  currency: text("currency").$type<LedgerCurrency>().notNull(),
+  /** Montant du mouvement (entier, ≥ 0 côté application). */
+  amount: integer("amount").notNull(),
+  /** Raison (`level`, `star_bonus`, `boss`, `daily_chest`, … — ECONOMY §3.7). */
+  reason: text("reason").notNull(),
+  /**
+   * Id de l'objet lié / **clé de rejeu** pour l'idempotence (nullable, ECONOMY §3.7).
+   * Un crédit rejoué portant le même `(profile_id, reason, ref_id)` est ignoré.
+   */
+  refId: text("ref_id"),
+  /** Instant serveur du mouvement (régularité / transparence parent). */
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
