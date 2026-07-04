@@ -49,7 +49,7 @@ Ajouter un profil enfant depuis l'accueil (modèle DB déjà compatible). Chaque
   - **Niveau révision** : 100 % calculs faibles/dus (apparaît quand il y a de la dette).
   - **Trésor/bonus** : mini-défi court → pièces bonus.
   - **Boss de monde** : défi un peu plus long → débloque la **créature légendaire** du monde + gros lot de pièces.
-- **Déblocage des mondes** : par **total d'étoiles** (pas par compétence). Toujours un monde de plus → infini.
+- **Déblocage des mondes** : **linéaire** — battre le **boss** d'un monde ouvre le monde suivant (cf. [MAP.md](./MAP.md) §1/§8). **Les étoiles = récompense/collection, PAS une barrière** de déblocage. Toujours un monde de plus → infini.
 
 ### 2.2 Déroulement d'une partie (un niveau)
 1. **Carte d'intro** : thème + compagnon (« Aide Teddy à traverser la forêt ! »).

@@ -130,7 +130,9 @@ describe("runMigrations", () => {
     // dernier appliqué : pour re-jouer 0005 il faut dé-journaliser 0005 ET toutes
     // les migrations postérieures, et retirer leurs artefacts (tables game-loop 0006 :
     // ledger/wallet/progress ; collection 0007 : collection/characters — `collection`
-    // référence `characters` par FK, donc drop dans cet ordre).
+    // référence `characters` par FK, donc drop dans cet ordre ; index UNIQUE 0008 sur
+    // `attempts` — celui du `ledger` part avec son DROP TABLE).
+    seed.run(sql`DROP INDEX attempts_profile_client_attempt_unique`);
     seed.run(sql`DROP TABLE collection`);
     seed.run(sql`DROP TABLE characters`);
     seed.run(sql`DROP TABLE ledger`);
@@ -172,6 +174,62 @@ describe("runMigrations", () => {
       .all<{ name: string; notnull: number }>(sql`PRAGMA table_info(profiles)`)
       .find((c) => c.name === "name_key");
     expect(col?.notnull).toBe(0);
+  });
+
+  // Régression #82 : la migration 0008 (index UNIQUE composites sur `attempts` +
+  // `ledger`) doit s'appliquer sur des tables DÉJÀ PEUPLÉES sans planter. Un
+  // `CREATE UNIQUE INDEX` échoue si des lignes existantes violent l'unicité ; l'idempotence
+  // applicative (attemptExists/creditExists) ayant tenu jusqu'ici, aucun doublon
+  // (profil, id client) / (profil, raison, ref) ne préexiste → la création doit réussir.
+  // On ramène une base fraîche à l'état PRÉ-0008 (index retirés, 0008 dé-journalisée),
+  // on peuple attempts + ledger avec des lignes valides (dont des NULL, distincts en SQLite),
+  // puis on rejoue les migrations : ne doit PAS lever, et les index doivent réapparaître.
+  it("applique 0008 sur attempts/ledger peuplés sans crash + recrée les index UNIQUE (#82)", () => {
+    const path = freshDbPath();
+    runMigrations(createDatabase(path));
+    const seed = createDatabase(path);
+    // Retour à l'état pré-0008 : retirer les deux index + dé-journaliser 0008 (9ᵉ
+    // migration, ordinal 8 dans l'ordre chronologique — robuste à l'ajout ultérieur de
+    // migrations, comme la régression #105).
+    seed.run(sql`DROP INDEX attempts_profile_client_attempt_unique`);
+    seed.run(sql`DROP INDEX ledger_profile_reason_ref_unique`);
+    seed.run(
+      sql`DELETE FROM __drizzle_migrations WHERE created_at >= (
+        SELECT created_at FROM __drizzle_migrations ORDER BY created_at LIMIT 1 OFFSET 8
+      )`,
+    );
+    // Un profil + des lignes valides : deux tentatives avec le MÊME id client seraient
+    // interdites, mais ici les ids diffèrent ; on ajoute aussi des lignes NULL (diagnostic /
+    // mouvement sans clé) qui doivent coexister (NULL distincts dans l'index UNIQUE SQLite).
+    seed.run(sql`INSERT INTO profiles (id, name, name_key, pin_hash, avatar)
+      VALUES (1, 'Lina', 'lina', 'h', 'fox')`);
+    seed.run(sql`INSERT INTO attempts (profile_id, fact_id, skill, correct, response_ms, client_attempt_id)
+      VALUES (1, 'mult_6x8', 'mult', 1, 1800, 'a-1'),
+             (1, 'mult_6x8', 'mult', 1, 1700, 'a-2'),
+             (1, 'mult_6x8', 'mult', 0, 6000, NULL),
+             (1, 'mult_6x8', 'mult', 0, 6100, NULL)`);
+    seed.run(sql`INSERT INTO ledger (profile_id, direction, currency, amount, reason, ref_id)
+      VALUES (1, 'earn', 'coins', 10, 'level', 'level:0:1'),
+             (1, 'earn', 'coins', 12, 'level', 'level:0:2'),
+             (1, 'earn', 'coins', 5, 'daily_chest', NULL),
+             (1, 'earn', 'coins', 5, 'daily_chest', NULL)`);
+
+    // Rejeu des migrations sur cette base peuplée : la création des index UNIQUE ne doit
+    // PAS lever (aucune violation d'unicité préexistante).
+    const db = createDatabase(path);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // Les deux index sont bien (re)présents en base.
+    const idx = db
+      .all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_autoindex_%'`,
+      )
+      .map((r) => r.name);
+    expect(idx).toContain("attempts_profile_client_attempt_unique");
+    expect(idx).toContain("ledger_profile_reason_ref_unique");
+    // Les lignes NULL préexistantes ont survécu (NULL distincts en SQLite — pas de dédoublonnage).
+    expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM attempts`)?.n).toBe(4);
+    expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ledger`)?.n).toBe(4);
   });
 });
 
