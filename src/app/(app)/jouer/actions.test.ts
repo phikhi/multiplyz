@@ -8,11 +8,15 @@ import {
   type SubmitAttemptInput,
 } from "@/lib/engine/service";
 import { selectDiagnostic } from "@/lib/engine/diagnostic";
+import { finishLevel, type FinishLevelInput } from "@/lib/game/finish-level";
+import { getUnlockedWorldCount } from "@/lib/game/unlock";
 import {
   diagnosticPlanAction,
+  finishLevelAction,
   seedDiagnosticAction,
   startLevelAction,
   submitAttemptAction,
+  unlockedWorldCountAction,
 } from "./actions";
 
 /** Payload de soumission complet (l'action ne fait que le transmettre au service mocké). */
@@ -31,10 +35,15 @@ const SUBMIT_INPUT: SubmitAttemptInput = {
 
 /** Config de test : seul `starThresholds` est lu directement par l'action (contrat #64). */
 const FAKE_CONFIG = { starThresholds: [0.6, 0.85, 1] as const };
+/** Config carte de test : `levelsPerWorld` transmis à `finishLevel`/`getUnlockedWorldCount`. */
+const FAKE_MAP_CONFIG = { levelsPerWorld: 10, treasureEvery: 4, bossQuestionCount: 13 };
 
 vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => "DB") }));
-vi.mock("@/config/server-config", () => ({ getEngineConfig: vi.fn(() => FAKE_CONFIG) }));
+vi.mock("@/config/server-config", () => ({
+  getEngineConfig: vi.fn(() => FAKE_CONFIG),
+  getMapConfig: vi.fn(() => FAKE_MAP_CONFIG),
+}));
 vi.mock("@/lib/engine/service", () => ({
   startLevel: vi.fn(),
   submitAttempt: vi.fn(),
@@ -42,6 +51,8 @@ vi.mock("@/lib/engine/service", () => ({
   needsDiagnostic: vi.fn(),
 }));
 vi.mock("@/lib/engine/diagnostic", () => ({ selectDiagnostic: vi.fn() }));
+vi.mock("@/lib/game/finish-level", () => ({ finishLevel: vi.fn() }));
+vi.mock("@/lib/game/unlock", () => ({ getUnlockedWorldCount: vi.fn() }));
 
 const profileMock = vi.mocked(getCurrentChildProfileId);
 const startLevelMock = vi.mocked(startLevel);
@@ -49,6 +60,11 @@ const submitAttemptMock = vi.mocked(submitAttempt);
 const seedDiagnosticMock = vi.mocked(seedDiagnostic);
 const needsDiagnosticMock = vi.mocked(needsDiagnostic);
 const selectDiagnosticMock = vi.mocked(selectDiagnostic);
+const finishLevelMock = vi.mocked(finishLevel);
+const getUnlockedWorldCountMock = vi.mocked(getUnlockedWorldCount);
+
+/** Payload de fin de niveau (l'action ne fait que le transmettre au service mocké). */
+const FINISH_INPUT: FinishLevelInput = { worldIndex: 0, levelIndex: 3, stars: 2 };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -172,5 +188,77 @@ describe("seedDiagnosticAction", () => {
     ]);
     await expect(seedDiagnosticAction([])).resolves.toEqual({ ok: true, seededCount: 2 });
     expect(seedDiagnosticMock.mock.calls[0][1]).toBe(7); // profil de session
+  });
+});
+
+describe("finishLevelAction", () => {
+  it("non authentifié → { ok: false, error: UNAUTHENTICATED }, aucune écriture", async () => {
+    profileMock.mockResolvedValue(null);
+    await expect(finishLevelAction(FINISH_INPUT)).resolves.toEqual({
+      ok: false,
+      stars: null,
+      unlockedNextWorld: false,
+      error: "UNAUTHENTICATED",
+    });
+    expect(finishLevelMock).not.toHaveBeenCalled();
+  });
+
+  it("niveau verrouillé → { ok: false, error } (mappe le refus service, pas de 500)", async () => {
+    profileMock.mockResolvedValue(7);
+    finishLevelMock.mockReturnValue({ ok: false, error: "LEVEL_LOCKED" });
+    await expect(finishLevelAction(FINISH_INPUT)).resolves.toEqual({
+      ok: false,
+      stars: null,
+      unlockedNextWorld: false,
+      error: "LEVEL_LOCKED",
+    });
+  });
+
+  it("succès non-boss → { ok: true, stars, unlockedNextWorld: false }, profil de session + config carte + Date injectée", async () => {
+    profileMock.mockResolvedValue(7);
+    finishLevelMock.mockReturnValue({ ok: true, stars: 2, unlockedNextWorld: false });
+    await expect(finishLevelAction(FINISH_INPUT)).resolves.toEqual({
+      ok: true,
+      stars: 2,
+      unlockedNextWorld: false,
+      error: null,
+    });
+    expect(finishLevelMock).toHaveBeenCalledTimes(1);
+    const [dbArg, profileArg, inputArg, configArg, nowArg] = finishLevelMock.mock.calls[0];
+    expect(dbArg).toBe("DB");
+    expect(profileArg).toBe(7); // profil de session, jamais du client
+    expect(inputArg).toBe(FINISH_INPUT);
+    expect(configArg).toBe(FAKE_MAP_CONFIG);
+    expect(nowArg).toBeInstanceOf(Date);
+  });
+
+  it("succès boss → { ok: true, unlockedNextWorld: true } (monde suivant débloqué)", async () => {
+    profileMock.mockResolvedValue(7);
+    finishLevelMock.mockReturnValue({ ok: true, stars: 1, unlockedNextWorld: true });
+    await expect(finishLevelAction({ worldIndex: 0, levelIndex: 10, stars: 1 })).resolves.toEqual({
+      ok: true,
+      stars: 1,
+      unlockedNextWorld: true,
+      error: null,
+    });
+  });
+});
+
+describe("unlockedWorldCountAction", () => {
+  it("non authentifié → { count: null }, aucune lecture", async () => {
+    profileMock.mockResolvedValue(null);
+    await expect(unlockedWorldCountAction()).resolves.toEqual({ count: null });
+    expect(getUnlockedWorldCountMock).not.toHaveBeenCalled();
+  });
+
+  it("authentifié → nombre de mondes débloqués (profil de session + levelsPerWorld de la config)", async () => {
+    profileMock.mockResolvedValue(7);
+    getUnlockedWorldCountMock.mockReturnValue(3);
+    await expect(unlockedWorldCountAction()).resolves.toEqual({ count: 3 });
+    expect(getUnlockedWorldCountMock).toHaveBeenCalledTimes(1);
+    const [dbArg, profileArg, levelsArg] = getUnlockedWorldCountMock.mock.calls[0];
+    expect(dbArg).toBe("DB");
+    expect(profileArg).toBe(7);
+    expect(levelsArg).toBe(FAKE_MAP_CONFIG.levelsPerWorld);
   });
 });
