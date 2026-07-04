@@ -240,6 +240,68 @@
   --scaffold-matrix-dot-gap:     var(--space-1); /* espace entre points d'un même paquet */
   --scaffold-matrix-dot-color:   var(--color-accent-primary-active); /* point, ≥3:1 sur fond de paquet (2 thèmes) */
 
+  /* carte du monde (story #125, WIREFRAMES §2, MAP §2/§4/§5) — chemin de nœuds
+     Candy Crush. Même famille sémantique que --scaffold-* (référence des tokens
+     existants uniquement, aucune valeur en dur). Piège #94→#104 (récidivant) :
+     --color-text-inverse est réservé à un fond ACCENT PLEIN — jamais posé sur un
+     fond neutre. Les couleurs "vives" de récompense (--color-reward-gold/-coral,
+     --color-star, --color-status-info) sont des ACCENTS DÉCORATIFS, PAS des
+     couleurs de glyphe/texte fiables sur fond neutre (vérifié : ratio <2:1 sur
+     --color-bg-tertiary/-primary en light — piège identique #94/#104, à ne PAS
+     reproduire ici). Tout glyphe/icône de nœud utilise donc un token TEXTE
+     (--color-text-primary/-secondary/-tertiary/-inverse) résolu ≥4.5:1 sur SON
+     fond réel dans les 2 thèmes ; le TYPE de nœud est distingué par la FORME du
+     glyphe (cadenas/étoile/coffre/couronne), jamais par une couleur seule
+     (a11y daltonisme) — cohérent avec le contrat scaffold (rétro #94). */
+  --map-node-size:            var(--space-8); /* 64px — pastille de nœud, ≥ tap-target-min */
+  --map-node-gap:             var(--space-6); /* espacement vertical du chemin */
+  /* Connecteur du chemin (trait reliant deux nœuds consécutifs, métaphore Candy
+     Crush, WIREFRAMES §2). GUIDE VISUEL DÉCORATIF À FAIBLE CONTRASTE ASSUMÉ
+     (~1.2–1.5:1 sur --color-bg-primary les 2 thèmes) : il ne porte AUCUNE info
+     (états/types/étoiles sont tous convoyés par le glyphe + le texte accessible
+     du nœud). Il est `aria-hidden`, jamais navigable, jamais dans le nom
+     accessible. Ce n'est donc PAS un scaffold porteur d'info au sens rétro
+     #94/#104 : aucun test de contraste ≥4.5:1 n'est revendiqué (le sur-revendiquer
+     serait malhonnête — cf. CLAUDE.md). Si un jour ce trait devait porter du sens,
+     il faudrait le remapper sur un token qui passe ≥3:1 (WCAG 1.4.11) + ajouter la
+     garde résolue correspondante. */
+  --map-node-path-color:      var(--color-border-primary);
+  --map-node-path-width:      2px;
+  /* verrouillé : fond neutre en retrait, glyphe cadenas = texte fort sur cette
+     surface neutre (--color-text-primary, ≥10.8:1 les 2 thèmes — jamais
+     --color-text-inverse, fond non accent). */
+  --map-node-locked-bg:       var(--color-bg-tertiary);
+  --map-node-locked-border:   var(--color-border-primary);
+  --map-node-locked-glyph:    var(--color-text-primary);
+  /* courant : pastille sur fond ACCENT PLEIN → --color-text-inverse valide ici
+     (glyphe blanc sur violet plein, ≥4.5:1 les 2 thèmes — exception fond accent). */
+  --map-node-current-bg:      var(--color-accent-primary);
+  --map-node-current-border:  var(--color-accent-primary-active);
+  --map-node-current-glyph:   var(--color-text-inverse);
+  /* terminé : fond succès doux (PAS un accent plein) → glyphe = texte fort sur
+     surface claire (--color-text-primary, ≥10:1 les 2 thèmes), jamais
+     --color-text-inverse ici (piège #94/#104 — fond pastel, pas accent plein). */
+  --map-node-completed-bg:      var(--color-feedback-correct-bg);
+  --map-node-completed-border:  var(--color-feedback-correct);
+  --map-node-completed-glyph:   var(--color-text-primary);
+  /* badge de TYPE (normal/trésor/boss/révision) : petit médaillon superposé au
+     nœud, fond clair constant + glyphe texte fort — ≥12:1 les 2 thèmes (surface
+     neutre choisie précisément parce qu'elle ne varie pas avec le statut du
+     nœud). Le type est porté par la FORME du glyphe (coffre/couronne/flèche),
+     jamais par une couleur d'accent seule. */
+  --map-node-type-badge-bg:     var(--color-bg-secondary);
+  --map-node-type-badge-border: var(--color-border-primary);
+  --map-node-type-badge-glyph:  var(--color-text-primary);
+  /* étoiles (0..3, MAP §4 — récompense d'affichage, jamais une barrière).
+     --color-star échoue le contraste sur fond neutre en light (~1.5:1, réservé
+     aux surfaces sombres) — mêmes tokens texte fiables que le reste de la
+     carte, remplie vs vide distinguées par FORME (★ plein / ☆ contour) ET
+     couleur (rétro #94 : jamais la forme seule). --color-text-tertiary
+     n'atteint PAS 4.5:1 sur --color-bg-secondary (2.61:1 light) — utiliser
+     --color-text-secondary (≥5.4:1 les 2 thèmes) pour l'étoile vide. */
+  --map-node-star-filled:  var(--color-text-primary);
+  --map-node-star-empty:   var(--color-text-secondary);
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou
      style inline). Défaut = neutre. Le reste du système ne change pas. */

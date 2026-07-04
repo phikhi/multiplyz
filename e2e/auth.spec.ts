@@ -4,16 +4,19 @@ import { strings } from "../src/strings";
 
 /**
  * E2E du parcours auth complet — onboarding 1er usage (#2.2), connexion (#2.3),
- * **écran de jeu nu** (#64 : diagnostic → niveau → résultats), récupération (#2.5).
+ * **écran de jeu nu** (#64 : diagnostic → niveau → résultats), **écran carte** (#125 :
+ * chemin de nœuds du monde courant), récupération (#2.5).
  * **Un seul foyer single-tenant** (base E2E dédiée, wipée à froid — cf.
  * global-setup) : toutes ces stories forment une même séquence (créer → se
- * connecter → jouer → garde → déconnexion → récupérer), donc **sérialisées dans le
- * même fichier** pour un état déterministe (pas de course inter-fichiers sur le
- * foyer partagé). Cf. LEARNINGS 2026-07-01 (rétro story #31, PR #42) : « Deux specs
- * à état single-tenant OPPOSÉ ne partagent pas une base wipée-à-froid en parallèle »
- * → fusionner dans un seul `describe.serial`, ils ne peuvent PAS tourner dans des
- * fichiers séparés sous `fullyParallel`. `next-dev-loop` (vérif runtime) indispo
- * < Next 16.3 (#24) → supplée par E2E live.
+ * connecter → jouer → voir la carte → garde → déconnexion → récupérer), donc
+ * **sérialisées dans le même fichier** pour un état déterministe (pas de course
+ * inter-fichiers sur le foyer partagé). Cf. LEARNINGS 2026-07-01 (rétro story #31,
+ * PR #42) : « Deux specs à état single-tenant OPPOSÉ ne partagent pas une base
+ * wipée-à-froid en parallèle » → fusionner dans un seul `describe.serial`, ils ne
+ * peuvent PAS tourner dans des fichiers séparés sous `fullyParallel`. La carte (#125)
+ * dépend du MÊME profil déjà amorcé par les tests précédents — même contrainte de
+ * séquence single-tenant, donc insérée ICI plutôt que dans un fichier à part.
+ * `next-dev-loop` (vérif runtime) indispo < Next 16.3 (#24) → supplée par E2E live.
  */
 const nav = strings.onboarding.nav;
 // Libellé a11y du 1er portrait (AVATARS[0] = fox → « Portrait renard »).
@@ -595,6 +598,73 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(page.getByRole("img", { name: /étoile/u })).toBeVisible();
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
     await page.screenshot({ path: "docs/captures/64-resultats.png", fullPage: true });
+  });
+
+  test("carte du monde → nœud courant navigable, nœuds suivants verrouillés (capture)", async ({
+    page,
+  }) => {
+    // Reconnexion (nouveau contexte de test, cookie absent — même profil, déjà amorcé).
+    // NB (discovered, hors scope #125) : `/jouer` (#64) ne câble pas encore
+    // `finishLevelAction` (5.3/#124) — jouer un niveau via l'écran de jeu nu n'écrit
+    // donc pas encore de ligne `progress` (ce câblage arrive avec l'écran de résultats
+    // économique, story #5.5, ECONOMY §4.1). La carte affiche donc fidèlement l'état
+    // SERVEUR réel du profil à ce stade : nœud 0 encore COURANT (aucun niveau
+    // persisté), tous les suivants VERROUILLÉS (déblocage linéaire, MAP §1) — la
+    // composition serveur (`currentMapAction` → `loadCurrentWorldMap`, 5.2+5.3+moteur)
+    // est vérifiée sur base réelle par `current-map.test.ts` (y compris le cas
+    // "nœud complété" scénarisé en intégration) ; cet E2E vérifie le rendu + la
+    // navigation en conditions réelles (next-dev-loop indispo < Next 16.3, #24).
+    await page.goto("/");
+    await page.getByRole("button", { name: profileLabel }).click();
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+
+    await page.goto("/carte");
+    await page.waitForLoadState("networkidle");
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.map.title.replace("{n}", "1") }),
+    ).toBeVisible();
+
+    // Géométrie 5.2 par défaut (⚙️ non surchargé en E2E) : levelsPerWorld=10 → 11
+    // nœuds (le dernier = boss, MAP §6). Le nom accessible complet suffixe le
+    // libellé de TYPE (« — Niveau », doublage a11y, `nodeAccessibleName`).
+    const total = "11";
+
+    // Nœud 0 (position 1) : COURANT — point de reprise, lien navigable vers /jouer.
+    const currentName = `${strings.map.nodeCurrent
+      .replace("{n}", "1")
+      .replace("{total}", total)} — ${strings.map.type.normal}`;
+    const currentNode = page.getByRole("link", { name: currentName });
+    await expect(currentNode).toBeVisible();
+    await expect(currentNode).toHaveAttribute("href", "/jouer");
+
+    // Nœud 1 (position 2) : VERROUILLÉ — jamais un lien (déblocage linéaire, MAP §1).
+    const lockedName = `${strings.map.nodeLocked
+      .replace("{n}", "2")
+      .replace("{total}", total)} — ${strings.map.type.normal}`;
+    const lockedNode = page.getByRole("img", { name: lockedName });
+    await expect(lockedNode).toBeVisible();
+
+    // Nœud trésor (position 4, cadence ⚙️ tous les 4 nœuds, MAP §3) : type doublé du
+    // libellé « Trésor » dans le nom accessible (a11y daltonisme, jamais couleur seule).
+    const treasureName = `${strings.map.nodeLocked
+      .replace("{n}", "4")
+      .replace("{total}", total)} — ${strings.map.type.treasure}`;
+    await expect(page.getByRole("img", { name: treasureName })).toBeVisible();
+
+    // Boss (dernier nœud, position 11, MAP §6) : type doublé du libellé « Boss ».
+    const bossName = `${strings.map.nodeLocked
+      .replace("{n}", total)
+      .replace("{total}", total)} — ${strings.map.type.boss}`;
+    await expect(page.getByRole("img", { name: bossName })).toBeVisible();
+
+    await page.screenshot({ path: "docs/captures/125-carte.png", fullPage: true });
+
+    // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
+    // cliquer le nœud courant ramène bien à l'écran de jeu.
+    await currentNode.click();
+    await expect(page).toHaveURL(/\/jouer$/);
   });
 
   test("route jeu sans session valide → redirection vers le sélecteur (capture)", async ({

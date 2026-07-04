@@ -1,0 +1,359 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { MapScreen } from "./MapScreen";
+import { currentMapAction } from "@/app/(app)/carte/actions";
+import { strings } from "@/strings";
+import type { MapNode, WorldMap } from "@/lib/game/map";
+import {
+  contrastRatio,
+  resolveTokenColor,
+} from "@/components/game/scaffolds/test-support/tokens-css";
+
+/**
+ * Tests de l'écran carte (story #125, WIREFRAMES §2, PRODUCT §2.1, MAP §1/§2/§4/§5).
+ *
+ * **Piège #1 (rétro #104, feed-forward brief)** : tout glyphe/trait de nœud visible
+ * exige un test de contraste WCAG **résolu** (`tokens.css` → valeur hex → ratio réel),
+ * pas seulement le nom du token — cf. blocs "contraste WCAG résolu" ci-dessous.
+ *
+ * **Piège #2 (rétro #123, feed-forward brief)** : la carte affichée ne doit RIEN
+ * recalculer de la géométrie — le rendu doit être un miroir FIDÈLE de `WorldMap.nodes`
+ * (même compte, mêmes positions, quel que soit l'état runtime) — cf. bloc "fidélité de
+ * rendu à la géométrie fournie".
+ */
+
+vi.mock("@/app/(app)/carte/actions", () => ({ currentMapAction: vi.fn() }));
+vi.mock("@/components/LogoutButton", () => ({
+  LogoutButton: () => null,
+}));
+
+const currentMapActionMock = vi.mocked(currentMapAction);
+
+function node(overrides: Partial<MapNode> = {}): MapNode {
+  return {
+    index: 0,
+    position: { x: 0.5, y: 0 },
+    type: "normal",
+    status: "locked",
+    stars: 0,
+    ...overrides,
+  };
+}
+
+function map(nodes: readonly MapNode[], worldIndex = 0): WorldMap {
+  return { worldIndex, nodes };
+}
+
+async function renderReady(worldMap: WorldMap) {
+  currentMapActionMock.mockResolvedValue({ map: worldMap });
+  const result = render(<MapScreen />);
+  await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  return result;
+}
+
+describe("MapScreen — chargement / erreur", () => {
+  it("affiche un statut de chargement puis la carte (non authentifié → erreur)", async () => {
+    currentMapActionMock.mockResolvedValue({ map: null });
+    render(<MapScreen />);
+    expect(screen.getByRole("status")).toHaveTextContent(strings.map.loading);
+    await waitFor(() => expect(screen.getByText(strings.map.loadError)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: strings.map.loadErrorRetry })).toBeInTheDocument();
+  });
+
+  it("retry recharge la carte après une erreur", async () => {
+    currentMapActionMock.mockResolvedValue({ map: null });
+    render(<MapScreen />);
+    await waitFor(() => screen.getByText(strings.map.loadError));
+
+    currentMapActionMock.mockResolvedValue({ map: map([node({ status: "current" })]) });
+    fireEvent.click(screen.getByRole("button", { name: strings.map.loadErrorRetry }));
+
+    await waitFor(() =>
+      expect(screen.getByText(strings.map.title.replace("{n}", "1"))).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("MapScreen — fidélité de rendu à la géométrie fournie (rétro #123)", () => {
+  it("rend EXACTEMENT le nombre de nœuds fournis par WorldMap, quel que soit le compte", async () => {
+    // Effet observable : si le composant recalculait/tronquait la géométrie, ce
+    // compte ne suivrait pas un WorldMap à N nœuds arbitraire.
+    const nodes = Array.from({ length: 7 }, (_, i) =>
+      node({ index: i, position: { x: 0.5, y: i / 6 }, status: i === 0 ? "current" : "locked" }),
+    );
+    await renderReady(map(nodes));
+    expect(screen.getAllByText((_, el) => el?.hasAttribute("data-map-node") ?? false)).toHaveLength(
+      7,
+    );
+  });
+
+  it("le même WorldMap (positions/types/statuts) produit le MÊME rendu structurel, peu importe l'ordre d'appel (déterminisme d'affichage)", async () => {
+    const nodes = [
+      node({ index: 0, status: "completed", stars: 2, type: "normal" }),
+      node({ index: 1, status: "current", type: "revision" }),
+      node({ index: 2, status: "locked", type: "boss" }),
+    ];
+    const { unmount } = await renderReady(map(nodes));
+    const first = [...document.querySelectorAll("[data-map-node]")].map((el) => ({
+      index: el.getAttribute("data-map-node"),
+      status: el.getAttribute("data-map-node-status"),
+      type: el.getAttribute("data-map-node-type"),
+    }));
+    unmount();
+
+    await renderReady(map(nodes));
+    const second = [...document.querySelectorAll("[data-map-node]")].map((el) => ({
+      index: el.getAttribute("data-map-node"),
+      status: el.getAttribute("data-map-node-status"),
+      type: el.getAttribute("data-map-node-type"),
+    }));
+    expect(second).toEqual(first);
+  });
+
+  it("la position horizontale rendue dérive de node.position.x (pas recalculée) — translateX nul au centre (x=0.5)", async () => {
+    await renderReady(map([node({ status: "current", position: { x: 0.5, y: 0 } })]));
+    const li = document.querySelector("li");
+    expect(li).not.toBeNull();
+    expect(li!.style.transform).toBe("translateX(0%)");
+  });
+
+  it("un décalage x≠0.5 produit un translateX non nul dérivé de CETTE position (pas une constante)", async () => {
+    await renderReady(map([node({ status: "current", position: { x: 0.8, y: 0 } })]));
+    const li = document.querySelector("li");
+    expect(li!.style.transform).toBe("translateX(30%)");
+  });
+});
+
+describe("MapScreen — connecteur du chemin (métaphore Candy Crush, WIREFRAMES §2, décoratif)", () => {
+  it("N nœuds → N-1 connecteurs (un entre chaque paire consécutive, aucun avant le 1ᵉʳ)", async () => {
+    const nodes = Array.from({ length: 5 }, (_, i) =>
+      node({ index: i, position: { x: 0.5, y: i / 4 }, status: i === 0 ? "current" : "locked" }),
+    );
+    await renderReady(map(nodes));
+    // Effet observable : le nombre de connecteurs suit exactement (nœuds − 1) — casse si
+    // un connecteur est ajouté au 1ᵉʳ nœud (départ) ou omis entre deux nœuds.
+    expect(document.querySelectorAll("[data-map-connector]")).toHaveLength(4);
+  });
+
+  it("un seul nœud → AUCUN connecteur (rien à relier)", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    expect(document.querySelectorAll("[data-map-connector]")).toHaveLength(0);
+  });
+
+  it("le connecteur est DÉCORATIF : aria-hidden, jamais navigable, jamais dans le nom accessible", async () => {
+    await renderReady(
+      map([node({ index: 0, status: "current" }), node({ index: 1, status: "locked" })]),
+    );
+    const connector = document.querySelector("[data-map-connector]");
+    expect(connector).not.toBeNull();
+    expect(connector).toHaveAttribute("aria-hidden", "true");
+    // Aucun connecteur n'est un lien / focusable (jamais navigable).
+    expect(connector!.closest("a")).toBeNull();
+    expect(connector!.querySelector("a, button, [tabindex]")).toBeNull();
+  });
+
+  it("le connecteur utilise les tokens --map-node-path-* (trait), jamais une valeur en dur", async () => {
+    await renderReady(
+      map([node({ index: 0, status: "current" }), node({ index: 1, status: "locked" })]),
+    );
+    const line = document.querySelector("[data-map-connector] line");
+    expect(line).not.toBeNull();
+    expect(line!.getAttribute("stroke")).toBe("var(--map-node-path-color)");
+    // strokeWidth via style (SEUL le CSS résout var(), cf. NumberLine/#110).
+    expect((line as SVGLineElement).style.strokeWidth).toBe("var(--map-node-path-width)");
+  });
+
+  it("l'ajout des connecteurs ne change NI le nombre de nœuds NI leurs positions (invariance géométrie, rétro #123)", async () => {
+    // Effet observable : la géométrie (compte + translateX de chaque <li>) est identique
+    // que le connecteur soit rendu ou non — le connecteur est un ornement superposé.
+    const nodes = [
+      node({ index: 0, status: "current", position: { x: 0.5, y: 0 } }),
+      node({ index: 1, status: "locked", position: { x: 0.8, y: 0.5 } }),
+      node({ index: 2, status: "locked", position: { x: 0.2, y: 1 } }),
+    ];
+    await renderReady(map(nodes));
+    // Toujours 3 nœuds (les connecteurs ne s'ajoutent pas au décompte de nœuds).
+    expect(document.querySelectorAll("[data-map-node]")).toHaveLength(3);
+    // Positions dérivées des positions 5.2, inchangées par la présence du connecteur.
+    const transforms = [...document.querySelectorAll("li")].map((li) => li.style.transform);
+    expect(transforms).toEqual(["translateX(0%)", "translateX(30%)", "translateX(-30%)"]);
+  });
+});
+
+describe("MapScreen — états de nœud visibles (verrouillé / courant / terminé)", () => {
+  it("nœud verrouillé : pas un lien, nom accessible dédié, jamais navigable", async () => {
+    await renderReady(map([node({ status: "locked" })]));
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("img", {
+        name:
+          strings.map.nodeLocked.replace("{n}", "1").replace("{total}", "1") +
+          " — " +
+          strings.map.type.normal,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("nœud courant : lien vers /jouer (point de reprise), nom accessible dédié", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    const link = screen.getByRole("link");
+    expect(link).toHaveAttribute("href", "/jouer");
+    expect(link).toHaveAccessibleName(
+      strings.map.nodeCurrent.replace("{n}", "1").replace("{total}", "1") +
+        " — " +
+        strings.map.type.normal,
+    );
+  });
+
+  it("nœud terminé : lien vers /jouer (rejoue monotone), nom accessible porte les étoiles", async () => {
+    await renderReady(map([node({ status: "completed", stars: 2 })]));
+    const link = screen.getByRole("link");
+    expect(link).toHaveAttribute("href", "/jouer");
+    expect(link.getAttribute("aria-label")).toContain(
+      strings.map.starsLabelPlural.replace("{n}", "2"),
+    );
+  });
+
+  it("étoiles à 1 → libellé singulier, pas pluriel", async () => {
+    await renderReady(map([node({ status: "completed", stars: 1 })]));
+    const link = screen.getByRole("link");
+    expect(link.getAttribute("aria-label")).toContain(strings.map.starsLabel.replace("{n}", "1"));
+  });
+});
+
+describe("MapScreen — icône de type (normal / révision / trésor / boss), doublage a11y", () => {
+  it.each([
+    ["normal", strings.map.type.normal],
+    ["revision", strings.map.type.revision],
+    ["treasure", strings.map.type.treasure],
+    ["boss", strings.map.type.boss],
+  ] as const)(
+    "type=%s → le nom accessible du nœud porte le libellé de type '%s'",
+    async (type, label) => {
+      await renderReady(map([node({ status: "current", type })]));
+      expect(screen.getByRole("link").getAttribute("aria-label")).toContain(label);
+    },
+  );
+
+  it("le médaillon de type n'est jamais rendu pour un nœud 'normal' (pas de doublon visuel inutile)", async () => {
+    await renderReady(map([node({ status: "current", type: "normal" })]));
+    expect(document.querySelector("[data-map-type-badge]")).toBeNull();
+  });
+
+  it.each(["revision", "treasure", "boss"] as const)(
+    "un médaillon décoratif est rendu pour le type '%s' (doublage forme, aria-hidden)",
+    async (type) => {
+      await renderReady(map([node({ status: "current", type })]));
+      const badge = document.querySelector(`[data-map-type-badge="${type}"]`);
+      expect(badge).not.toBeNull();
+      expect(badge).toHaveAttribute("aria-hidden", "true");
+    },
+  );
+});
+
+describe("MapScreen — cibles tactiles ≥ 44px (a11y)", () => {
+  it("chaque nœud navigable expose une cible ≥ --tap-target-min", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    const link = screen.getByRole("link");
+    expect(link.style.minWidth).toBe("var(--tap-target-min)");
+    expect(link.style.minHeight).toBe("var(--tap-target-min)");
+  });
+
+  it("un nœud verrouillé (non navigable) réserve aussi la même cible minimale (cohérence visuelle)", async () => {
+    await renderReady(map([node({ status: "locked" })]));
+    const img = screen.getByRole("img");
+    expect(img.style.minWidth).toBe("var(--tap-target-min)");
+    expect(img.style.minHeight).toBe("var(--tap-target-min)");
+  });
+});
+
+describe("MapScreen — contraste WCAG résolu (piège #94/#104, feed-forward brief)", () => {
+  it.each(["light", "dark"] as const)(
+    "%s : glyphe verrouillé (--map-node-locked-glyph) ≥ 4.5:1 sur son fond (--map-node-locked-bg)",
+    (theme) => {
+      const glyph = resolveTokenColor(theme, "--map-node-locked-glyph");
+      const bg = resolveTokenColor(theme, "--map-node-locked-bg");
+      expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "%s : glyphe courant (--map-node-current-glyph) ≥ 4.5:1 sur son fond ACCENT (--map-node-current-bg)",
+    (theme) => {
+      const glyph = resolveTokenColor(theme, "--map-node-current-glyph");
+      const bg = resolveTokenColor(theme, "--map-node-current-bg");
+      expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "%s : glyphe terminé (--map-node-completed-glyph) ≥ 4.5:1 sur son fond (--map-node-completed-bg)",
+    (theme) => {
+      const glyph = resolveTokenColor(theme, "--map-node-completed-glyph");
+      const bg = resolveTokenColor(theme, "--map-node-completed-bg");
+      expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "%s : médaillon de type (--map-node-type-badge-glyph) ≥ 4.5:1 sur son fond (--map-node-type-badge-bg)",
+    (theme) => {
+      const glyph = resolveTokenColor(theme, "--map-node-type-badge-glyph");
+      const bg = resolveTokenColor(theme, "--map-node-type-badge-bg");
+      expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  // Les étoiles (★ pleine / ☆ vide) sont rendues SOUS la pastille, sur le fond de PAGE
+  // (--color-bg-primary), pas sur le médaillon coloré → on résout le contraste contre CE
+  // fond réel (le fond effectif du glyphe, cf. StarsRow). Une garde PAR glyphe rendu
+  // (pleine ET vide), pas une fois par famille (CLAUDE.md : « tout glyphe visible »).
+  it.each(["light", "dark"] as const)(
+    "%s : étoile PLEINE (--map-node-star-filled) ≥ 4.5:1 sur le fond de page (fond réel du glyphe)",
+    (theme) => {
+      const star = resolveTokenColor(theme, "--map-node-star-filled");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as const)(
+    "%s : étoile VIDE (--map-node-star-empty) ≥ 4.5:1 sur le fond de page (fond réel du glyphe)",
+    (theme) => {
+      // Effet observable : ☆ vide est un glyphe rendu à part entière (pas juste une
+      // absence) — casse si le token est remappé sur une couleur à faible contraste
+      // (ex. --color-star/-star-empty décoratifs, qui échouent ~1.2:1 en light).
+      const star = resolveTokenColor(theme, "--map-node-star-empty");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("nœud RENDU verrouillé/terminé (fond neutre/pastel) : la couleur EFFECTIVE du glyphe n'est jamais --color-text-inverse (piège #94/#104 récurrent)", async () => {
+    // Garde anti-régression sur le DOM RÉEL (pas une comparaison de littéraux) :
+    // inspecte `style.color` du badge tel qu'effectivement rendu par le composant.
+    // Rougit si un futur changement pose --color-text-inverse sur un fond non-accent.
+    await renderReady(map([node({ status: "locked" })]));
+    const lockedBadge = document.querySelector('[data-map-node-status="locked"] span[aria-hidden]');
+    expect((lockedBadge as HTMLElement).style.color).not.toBe("var(--color-text-inverse)");
+    expect((lockedBadge as HTMLElement).style.color).toBe("var(--map-node-locked-glyph)");
+  });
+
+  it("nœud RENDU terminé : couleur effective = --map-node-completed-glyph, jamais --color-text-inverse", async () => {
+    await renderReady(map([node({ status: "completed", stars: 1 })]));
+    const badge = document.querySelector('[data-map-node-status="completed"] span[aria-hidden]');
+    expect((badge as HTMLElement).style.color).toBe("var(--map-node-completed-glyph)");
+    expect((badge as HTMLElement).style.color).not.toBe("var(--color-text-inverse)");
+  });
+
+  it("nœud RENDU courant (fond accent plein) : couleur effective = --map-node-current-glyph — SEULE exception légitime à --color-text-inverse", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    const badge = document.querySelector('[data-map-node-status="current"] span[aria-hidden]');
+    expect((badge as HTMLElement).style.color).toBe("var(--map-node-current-glyph)");
+    // Résolu : --map-node-current-glyph EST --color-text-inverse (fond accent plein,
+    // exception documentée) — vérifié via le token réel, pas un littéral isolé.
+    expect(resolveTokenColor("light", "--map-node-current-glyph")).toBe(
+      resolveTokenColor("light", "--color-text-inverse"),
+    );
+  });
+});
