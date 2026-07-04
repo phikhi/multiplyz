@@ -2,9 +2,27 @@
  * Orchestration serveur de la **fin de niveau** (MAP §1/§4/§6, PRODUCT §1.3, SYNC).
  *
  * Câble la lecture de déblocage (`unlock.ts`) à l'écriture monotone (`recordStars`, 5.1)
- * dans **UNE** transaction synchrone better-sqlite3 → check-then-write **sérialisé**
- * (anti-TOCTOU, LEARNINGS #36) : la garde de déblocage (monde ouvert + niveau jouable) et
- * l'écriture des étoiles ne peuvent pas être entrelacées par une soumission concurrente.
+ * dans **UNE** transaction synchrone better-sqlite3 (`db.transaction`, callback **sans
+ * `await`**).
+ *
+ * **Nature exacte de la transaction ici (pas d'overclaim)** :
+ * - `finishLevel` est **entièrement synchrone** (better-sqlite3, binding synchrone, aucun
+ *   `await` dans le callback) → dans le daemon Node **mono-process** (STACK.md), l'event-loop
+ *   sérialise déjà les requêtes ; il n'y a **aucun entrelacement intra-process** à empêcher
+ *   entre le check de déblocage et l'écriture (le check-then-write s'exécute d'un bloc).
+ * - L'écriture protégée est **UNIQUE** (`recordStars`, un seul upsert) → elle est atomique
+ *   **par elle-même** ; il n'y a **rien à rollback** (pas d'état partiel possible d'une seule
+ *   écriture). Il n'existe donc **aujourd'hui aucun test d'atomicité à effet observable** pour
+ *   cette fonction : en écrire un serait **vacuous** (« aucune ligne écrite » passe **avec ou
+ *   sans** la transaction, puisqu'une écriture unique qui throw ne laisse jamais d'état
+ *   partiel — cf. règle durcie CLAUDE.md §Tests/CI / rétro #122). On n'en ajoute donc pas.
+ * - Rôle réel du `db.transaction` : (a) **cohérence de snapshot lecture↔écriture** pour le
+ *   check-then-write (le BEGIN…COMMIT garantit que la garde et l'écriture voient la même vue
+ *   sous WAL, y compris inter-connexions) ; (b) surtout, c'est **la structure correcte pour le
+ *   couplage multi-écritures à venir en 5.5** (crédit de pièces au boss : `recordStars` +
+ *   `creditWallet` + ligne `ledger` devront être **atomiques ensemble**). **C'est à ce
+ *   moment-là** — quand une 2ᵉ écriture protégée existera — que la règle #122 (test de rollback
+ *   frappant l'écriture protégée) deviendra **requise et non-vacuous**.
  *
  * **SERVER-ONLY** (importe la couche DB). Le `profileId` vient **toujours** de la session
  * (jamais du client, SYNC §1) ; l'appelant (server action) le résout via
@@ -79,14 +97,14 @@ function isStars(value: unknown): value is Stars {
 }
 
 /**
- * **Persiste la fin d'un niveau** (MAP §1/§4/§6, SYNC) de façon **atomique**, avec garde de
- * déblocage linéaire côté serveur. Étapes :
+ * **Persiste la fin d'un niveau** (MAP §1/§4/§6, SYNC), avec garde de déblocage linéaire côté
+ * serveur. Étapes :
  * 1. **gardes de forme** (payload public non fiable, #36) : `worldIndex`/`levelIndex` entiers
  *    ≥ 0, `stars` entier 0..3 → refus propre sinon ;
- * 2. **transaction SYNCHRONE** (callback sans `await`, anti-TOCTOU #36) : garde de déblocage
- *    (monde débloqué `isWorldUnlocked` + niveau jouable `isLevelPlayable` d'après le progress
- *    **lu dans la même transaction**) → refus si verrouillé ; sinon `recordStars` (monotone,
- *    idempotent) ;
+ * 2. **transaction SYNCHRONE** (callback sans `await`) : garde de déblocage (monde débloqué
+ *    `isWorldUnlocked` + niveau jouable `isLevelPlayable` d'après le progress **lu dans la même
+ *    transaction** → cohérence de snapshot) → refus si verrouillé ; sinon `recordStars`
+ *    (**écriture unique**, monotone, idempotente — rien à rollback ici, cf. docstring module) ;
  * 3. `unlockedNextWorld` = le niveau complété **était le boss** (dernier nœud, index
  *    `levelsPerWorld`) → le monde suivant est désormais débloqué (dérivé, MAP §6), **jamais**
  *    conditionné aux étoiles (MAP §1/§8).
@@ -119,9 +137,10 @@ export function finishLevel(
   const nodeCount = levelsPerWorld + 1;
   const bossIndex = levelsPerWorld;
 
-  // 2. Écriture atomique : garde de déblocage + persistance dans une transaction SYNCHRONE
-  //    (callback sans await → sérialisation, anti-TOCTOU #36). La lecture de garde et
-  //    l'écriture partagent le même snapshot transactionnel.
+  // 2. Garde de déblocage + persistance dans une transaction SYNCHRONE (callback sans await).
+  //    Ici l'écriture est unique (`recordStars`) → rien à rollback ; la transaction fournit la
+  //    cohérence de snapshot lecture↔écriture (WAL) pour le check-then-write, et est la
+  //    structure prête pour le couplage multi-écritures de 5.5 (crédit boss) — cf. docstring.
   return db.transaction((tx): FinishLevelResult => {
     // Déblocage linéaire inter-mondes : le monde doit être ouvert (boss des mondes
     // précédents complété). Jamais fondé sur les étoiles (MAP §1/§8).

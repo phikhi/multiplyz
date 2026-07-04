@@ -141,18 +141,26 @@ export async function seedDiagnosticAction(
 // ============================================================================
 
 /**
- * Réponse de fin de niveau. `ok: false` (avec `error` neutre) si non authentifié, payload
- * invalide, ou niveau/monde **verrouillé** (déblocage linéaire côté serveur — un client ne
- * persiste pas la complétion d'un niveau sauté). `stars` = étoiles **effectivement stockées**
- * (le max monotone). `unlockedNextWorld` = ce niveau était le **boss** ⇒ monde suivant ouvert.
+ * Réponse de fin de niveau — **discriminée par `ok`** (contrat de forme fixe côté client) :
+ * - **succès** (`ok: true`) ⇒ `error: null`, `stars` = étoiles **effectivement stockées**
+ *   (le max monotone, `number`), `unlockedNextWorld` = ce niveau était le **boss** ⇒ monde
+ *   suivant ouvert ;
+ * - **refus** (`ok: false`) ⇒ `stars: null` et `unlockedNextWorld: false`, `error` = motif
+ *   **neutre** (non authentifié, payload invalide, ou niveau/monde **verrouillé** — déblocage
+ *   linéaire côté serveur : un client ne persiste pas la complétion d'un niveau sauté).
+ *
+ * Le contrat est volontairement « plat » (mêmes champs dans les deux cas, `null` en refus)
+ * plutôt qu'une union TS stricte, pour rester trivial à consommer côté client sans narrowing —
+ * les corrélations `ok`↔`error`/`stars` sont **garanties par les sites de retour** (ci-dessous).
  */
 export interface FinishLevelActionResult {
+  /** `true` = fin persistée ; `false` = refus (voir `error`). Discriminant du contrat. */
   readonly ok: boolean;
-  /** Étoiles stockées après l'écriture monotone (`null` si refus). */
+  /** Étoiles stockées après l'écriture monotone (`number` si `ok`, `null` en refus). */
   readonly stars: number | null;
-  /** Monde suivant débloqué (boss complété) ? `false` si refus ou niveau non-boss. */
+  /** Monde suivant débloqué (boss complété) ? `false` en refus ou sur un niveau non-boss. */
   readonly unlockedNextWorld: boolean;
-  /** Motif de refus (neutre) ou `null` si succès. */
+  /** Motif de refus **neutre** si `!ok`, `null` si `ok`. */
   readonly error: FinishLevelError | "UNAUTHENTICATED" | null;
 }
 
