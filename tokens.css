@@ -311,6 +311,26 @@
   --results-star-filled:  var(--color-text-primary);
   --results-star-empty:   var(--color-text-secondary);
 
+  /* ---------- COLLECTION (Pokédex, story 5.6, WIREFRAMES §5) ----------
+     Écran collection : cartes de créatures possédées + fiche + renommage.
+     Chaque glyphe/texte rendu utilise un token TEXTE fiable (≥4.5:1 sur son fond
+     réel), jamais un accent décoratif (--color-star/--color-coin) qui échoue le
+     contraste sur fond neutre (rétro #104/#125/#126). */
+  --collection-card-bg:      var(--color-bg-secondary); /* fond de carte de créature */
+  --collection-card-border:  var(--color-border-primary);
+  /* texte de carte (nom, compteur) sur le fond de carte clair — ≥4.5:1 les 2 thèmes */
+  --collection-text:         var(--color-text-primary);
+  --collection-text-muted:   var(--color-text-secondary); /* histoire, méta (≥4.5:1) */
+  /* Badge de rareté : le LABEL texte (« légendaire ») porte l'info (a11y daltonisme),
+     doublé d'un glyphe distinct par rareté. La couleur du glyphe/label = token TEXTE
+     fiable sur le fond de carte (jamais --color-star sur fond neutre — piège #126).
+     La légendaire est mise en avant par un glyphe étoile ET le mot « légendaire »,
+     pas par une couleur d'accent seule. */
+  --collection-rarity-glyph: var(--color-text-primary); /* glyphe de rareté (★/◆/●) — ≥4.5:1 */
+  /* silhouette placeholder (art réel épic #6) : fond neutre + glyphe texte fort */
+  --collection-placeholder-bg:    var(--color-bg-tertiary);
+  --collection-placeholder-glyph: var(--color-text-primary);
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose ces 3 variables (via [data-world] ou
      style inline). Défaut = neutre. Le reste du système ne change pas. */

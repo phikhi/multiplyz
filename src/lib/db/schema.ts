@@ -382,3 +382,114 @@ export const ledger = sqliteTable("ledger", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+// ============================================================================
+// Collection (epic #5, story 5.6) — catalogue de créatures + possession
+// (ECONOMY §3.2/§3.3, PLAN §Modèle de données, MAP §6, PRODUCT §2.3).
+// Source de vérité SERVEUR : la légendaire du boss est ajoutée côté serveur
+// (déterministe, hors œufs) ; le renommage enfant est persisté serveur.
+// ============================================================================
+
+/** Rareté d'une créature (ECONOMY §3.2 / §2). Les légendaires ne sont pas dans le pool d'œufs. */
+export type Rarity = "common" | "rare" | "legendary";
+
+/**
+ * **Catalogue** des créatures collectionnables (ECONOMY §3.2). Une ligne par espèce
+ * (partagée entre profils, comme `worlds`). Généré/amorcé côté serveur : la **légendaire
+ * d'un monde** est amorcée de façon **déterministe** (une par `world_index`, `in_egg_pool =
+ * false`, boss only — MAP §6) ; l'art réel est branché par l'épic #6 (ici un **placeholder**).
+ *
+ * PK `id` **texte** (clé stable, ex. `legendary:0`) : pas d'autoincrement (l'id est
+ * déterministe pour permettre l'amorçage idempotent + le seed reproductible). Aucun callback
+ * `sqliteTable` d'extras (index/PK composite) qui casserait le gate 100 % fonctions (LEARNINGS
+ * #34/#46). Pas de FK vers `worlds` (les mondes IA arrivent épic #6) : `world_index` est un
+ * entier (même seed que la carte procédurale, MAP §3) → couplage par valeur, pas par FK.
+ *
+ * Table **neuve** (jamais peuplée avant cette migration) → colonnes `NOT NULL` + `default`
+ * sans le piège « ADD NOT NULL sur table peuplée » (issue #105). `art_ref_stages` / `story`
+ * sont **nullable** (art réel + histoire enrichis par l'épic #6 ; le placeholder n'en pose pas).
+ */
+export const characters = sqliteTable("characters", {
+  /** Clé stable (ex. `legendary:0`) — déterministe, permet l'amorçage idempotent. */
+  id: text("id").primaryKey(),
+  /** Index du monde d'appartenance (même seed que la carte, MAP §3). */
+  worldIndex: integer("world_index").notNull(),
+  /** Clé stable d'espèce (ex. `legendary_world_0`) — contrat de génération épic #6. */
+  speciesKey: text("species_key").notNull(),
+  /** Nom mignon par défaut (avant renommage enfant) — FR, voix douce (COPY §5). */
+  nameDefault: text("name_default").notNull(),
+  /** Rareté (`common` | `rare` | `legendary`). La légendaire = boss only (hors œufs). */
+  rarity: text("rarity").$type<Rarity>().notNull(),
+  /** Nombre de stades d'évolution (1..3, ECONOMY §2). Défaut 1 (placeholder). */
+  maxStage: integer("max_stage").notNull().default(1),
+  /**
+   * Dans le **pool d'œufs** ? (ECONOMY §4.2). Les **légendaires = `false`** (boss only,
+   * jamais tirées d'un œuf — garde d'exclusion testée à effet observable). Défaut `true`
+   * (communes/rares). Mode boolean drizzle → stocké 0/1.
+   */
+  inEggPool: integer("in_egg_pool", { mode: "boolean" }).notNull().default(true),
+  /** URL de l'asset (stade de base) — **placeholder** ici, art réel branché par l'épic #6. */
+  artRef: text("art_ref").notNull(),
+  /** URLs par stade (json) — nullable (branché par l'épic #6 avec l'évolution). */
+  artRefStages: text("art_ref_stages"),
+  /** Ligne d'histoire (COPY §4) — nullable (enrichie par l'épic #6, placeholder court sinon). */
+  story: text("story"),
+});
+
+/**
+ * Assemble la **PK texte** d'une ligne `collection` : une seule ligne par
+ * `(profil, créature)`. L'unicité composite est **encodée dans la PK** — pas de callback
+ * `sqliteTable` d'extras (uniqueIndex / PK composite) qui, n'étant jamais invoqué au runtime,
+ * casserait le gate 100 % fonctions (LEARNINGS #34/#46, même pattern que `masteryKey` /
+ * `progressKey`). Fonction pure → couvrable ; l'upsert `onConflictDoUpdate` (idempotence de
+ * l'ajout légendaire) cible ce PK simple.
+ *
+ * Séparateur `:` : le `characterId` (clé de catalogue) utilise `:`/`_` en interne — mais on
+ * borne la 1ʳᵉ composante au `profileId` (entier, aucun `:`) et on ne **découpe jamais** la
+ * clé (aucun décodage : `profile_id`/`character_id` restent des colonnes normales). La clé est
+ * donc sans ambiguïté même si `characterId` contient un `:` (on la concatène telle quelle,
+ * jamais on ne la re-splitte).
+ */
+export function collectionKey(profileId: number, characterId: string): string {
+  return `${profileId}:${characterId}`;
+}
+
+/**
+ * **Possession** d'une créature par un profil (ECONOMY §3.3, « Pokédex » PRODUCT §2.3).
+ * Une ligne par `(profil, créature)` possédée. La **légendaire du boss** y est ajoutée
+ * directement (déterministe, hors œufs, MAP §6). Données **enfant** → FK cascade (RGPD).
+ *
+ * Unicité `(profil, créature)` portée par la **PK texte encodée** (`collectionKey`).
+ * `profileId` / `characterId` restent des colonnes normales pour les requêtes (collection
+ * d'un profil, possession d'une créature). Table **neuve** → `NOT NULL` + default sans piège.
+ *
+ * Invariants (honorés par `game/collection.ts` + stories consommatrices) :
+ * - `count` = nb d'exemplaires obtenus (doublons inclus, ECONOMY §3.3). Défaut 1 (1ʳᵉ obtention).
+ * - `stage` = stade d'évolution courant (≤ `characters.max_stage`, ECONOMY §3.3). Défaut 1 (bébé).
+ * - `nickname` = **renommage enfant** (nullable = nom par défaut du catalogue, PRODUCT §2.3).
+ * - **Idempotence de l'ajout** : re-gagner le boss n'ajoute **jamais** une 2ᵉ ligne (upsert par
+ *   PK encodée). La légendaire étant garantie **hors œufs**, elle n'incrémente pas `count` au
+ *   rejeu (pas de doublon parasite — garde testée à effet observable).
+ */
+export const collection = sqliteTable("collection", {
+  /** `"<profileId>:<characterId>"` — une ligne par (profil, créature) (cf. `collectionKey`). */
+  id: text("id").primaryKey(),
+  /** Profil propriétaire — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Créature possédée (clé de catalogue `characters.id`). FK cascade au catalogue. */
+  characterId: text("character_id")
+    .notNull()
+    .references(() => characters.id, { onDelete: "cascade" }),
+  /** Nb d'exemplaires obtenus (doublons inclus, ECONOMY §3.3). Défaut 1. */
+  count: integer("count").notNull().default(1),
+  /** Stade d'évolution courant (≤ `max_stage`, ECONOMY §3.3). Défaut 1 (bébé). */
+  stage: integer("stage").notNull().default(1),
+  /** Renommage par l'enfant (nullable = nom par défaut, PRODUCT §2.3). */
+  nickname: text("nickname"),
+  /** Instant de la 1ʳᵉ obtention (affichage / tri collection). */
+  unlockedAt: integer("unlocked_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});

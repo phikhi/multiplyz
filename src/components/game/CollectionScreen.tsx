@@ -1,0 +1,478 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { strings } from "@/strings";
+import { collectionAction, renameCharacterAction } from "@/app/(app)/collection/actions";
+import type { CollectionEntry } from "@/lib/game/collection";
+import type { Rarity } from "@/lib/db/schema";
+
+/**
+ * **Écran Collection (Pokédex)** — créatures possédées (nom + histoire + rareté) +
+ * **renommage** enfant (story 5.6, WIREFRAMES §5, PRODUCT §2.3, ECONOMY §3.2/§3.3).
+ * Consomme la collection **déjà composée côté serveur** (`collectionAction` →
+ * `loadCollection`) — aucun recalcul ici (ce composant ne fait qu'AFFICHER).
+ *
+ * **A11y (CLAUDE.md)** : chaque rareté est **doublée d'un texte** (« légendaire »/« rare »/
+ * « commune ») ET d'un **glyphe distinct** (jamais couleur/forme seule, daltonisme). Les
+ * glyphes/textes utilisent des **tokens texte fiables** (`--collection-*` → `--color-text-*`,
+ * ≥4.5:1 sur le fond de carte réel), jamais `--color-star`/`--color-coin` (accents décoratifs
+ * qui échouent le contraste sur fond neutre — rétro #104/#125/#126). Cibles ≥ 44 px.
+ * `prefers-reduced-motion` respecté nativement (aucune animation ajoutée). **Tokens only**.
+ */
+
+/** Glyphe distinct par rareté (doublé du LABEL texte) — distingue par FORME, pas couleur. */
+const RARITY_GLYPH: Record<Rarity, string> = {
+  common: "●",
+  rare: "◆",
+  legendary: "★",
+};
+
+/** Emoji décoratif de la silhouette placeholder (art réel branché par l'épic #6). */
+const PLACEHOLDER_EMOJI = "🐾";
+/** Emoji décoratif du bouton renommer (doublé du libellé texte « Renommer »). */
+const RENAME_EMOJI = "✏️";
+
+function fill(template: string, replacements: Record<string, string>): string {
+  return Object.entries(replacements).reduce(
+    (acc, [token, value]) => acc.replace(`{${token}}`, value),
+    template,
+  );
+}
+
+/** Libellé du compteur « N créature(s) » (singulier/pluriel). */
+function countLabel(n: number): string {
+  const template = n === 1 ? strings.collection.count : strings.collection.countPlural;
+  return fill(template, { n: String(n) });
+}
+
+/** Nom accessible d'une carte de créature : nom affiché + rareté (doublage a11y). */
+function cardAccessibleName(entry: CollectionEntry): string {
+  return fill(strings.collection.cardLabel, {
+    nom: entry.displayName,
+    rareté: strings.collection.rarity[entry.rarity],
+  });
+}
+
+/** Silhouette placeholder d'une créature (art réel branché par l'épic #6). */
+function CreaturePlaceholder() {
+  return (
+    <span
+      aria-hidden="true"
+      data-collection-placeholder=""
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "var(--space-8)",
+        height: "var(--space-8)",
+        borderRadius: "var(--border-radius-full)",
+        backgroundColor: "var(--collection-placeholder-bg)",
+        color: "var(--collection-placeholder-glyph)",
+        fontSize: "var(--font-size-2xl)",
+      }}
+    >
+      {PLACEHOLDER_EMOJI}
+    </span>
+  );
+}
+
+/** Badge de rareté : glyphe distinct + LABEL texte (doublage a11y, jamais couleur seule). */
+function RarityBadge({ rarity }: { readonly rarity: Rarity }) {
+  return (
+    <span
+      data-collection-rarity={rarity}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "var(--space-1)",
+        fontFamily: "var(--font-family-body)",
+        fontSize: "var(--font-size-sm)",
+        fontWeight: "var(--font-weight-semibold)",
+        color: "var(--collection-rarity-glyph)",
+      }}
+    >
+      <span aria-hidden="true">{RARITY_GLYPH[rarity]}</span>
+      {strings.collection.rarity[rarity]}
+    </span>
+  );
+}
+
+/** Formulaire inline de renommage (WIREFRAMES §5b). */
+function RenameForm({
+  entry,
+  onSaved,
+  onCancel,
+}: {
+  readonly entry: CollectionEntry;
+  readonly onSaved: (characterId: string, nickname: string) => void;
+  readonly onCancel: () => void;
+}) {
+  const [value, setValue] = useState(entry.displayName);
+  const [state, setState] = useState<"idle" | "saving" | "error">("idle");
+
+  const submit = useCallback(
+    (event: React.FormEvent) => {
+      event.preventDefault();
+      setState("saving");
+      void (async () => {
+        const result = await renameCharacterAction(entry.characterId, value);
+        if (result.ok && result.nickname !== null) {
+          onSaved(entry.characterId, result.nickname);
+          return;
+        }
+        setState("error");
+      })();
+    },
+    [entry.characterId, value, onSaved],
+  );
+
+  return (
+    <form
+      onSubmit={submit}
+      style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", width: "100%" }}
+    >
+      <label
+        style={{
+          fontFamily: "var(--font-family-body)",
+          fontSize: "var(--font-size-sm)",
+          color: "var(--collection-text-muted)",
+        }}
+      >
+        {strings.collection.renameLabel}
+        <input
+          type="text"
+          value={value}
+          maxLength={20}
+          autoFocus
+          onChange={(e) => setValue(e.target.value)}
+          className="mz-focusable"
+          style={{
+            width: "100%",
+            marginTop: "var(--space-1)",
+            minHeight: "var(--tap-target-min)",
+            padding: "var(--space-2) var(--space-3)",
+            fontFamily: "var(--font-family-body)",
+            fontSize: "var(--font-size-md)",
+            color: "var(--collection-text)",
+            backgroundColor: "var(--color-bg-tertiary)",
+            border: "1px solid var(--collection-card-border)",
+            borderRadius: "var(--border-radius-md)",
+          }}
+        />
+      </label>
+      {state === "error" && (
+        <p
+          role="alert"
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-family-body)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--collection-text-muted)",
+          }}
+        >
+          {strings.collection.renameError}
+        </p>
+      )}
+      <div style={{ display: "flex", gap: "var(--space-2)" }}>
+        <button
+          type="submit"
+          className="mz-focusable"
+          disabled={state === "saving"}
+          style={{
+            minHeight: "var(--tap-target-min)",
+            padding: "var(--space-2) var(--space-4)",
+            fontFamily: "var(--font-family-display)",
+            fontSize: "var(--font-size-sm)",
+            fontWeight: "var(--font-weight-bold)",
+            color: "var(--color-text-inverse)",
+            backgroundColor: "var(--color-accent-primary)",
+            border: "none",
+            borderRadius: "var(--border-radius-full)",
+            cursor: "pointer",
+          }}
+        >
+          {state === "saving" ? strings.collection.renaming : strings.collection.renameSubmit}
+        </button>
+        <button
+          type="button"
+          className="mz-focusable"
+          onClick={onCancel}
+          style={{
+            minHeight: "var(--tap-target-min)",
+            padding: "var(--space-2) var(--space-4)",
+            fontFamily: "var(--font-family-display)",
+            fontSize: "var(--font-size-sm)",
+            fontWeight: "var(--font-weight-bold)",
+            color: "var(--collection-text)",
+            backgroundColor: "var(--color-bg-tertiary)",
+            border: "1px solid var(--collection-card-border)",
+            borderRadius: "var(--border-radius-full)",
+            cursor: "pointer",
+          }}
+        >
+          {strings.collection.renameCancel}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Une carte de créature possédée (avatar + nom + rareté + histoire + renommer). */
+function CreatureCard({
+  entry,
+  isRenaming,
+  onStartRename,
+  onSaved,
+  onCancel,
+}: {
+  readonly entry: CollectionEntry;
+  readonly isRenaming: boolean;
+  readonly onStartRename: (characterId: string) => void;
+  readonly onSaved: (characterId: string, nickname: string) => void;
+  readonly onCancel: () => void;
+}) {
+  return (
+    <li
+      data-collection-card={entry.characterId}
+      aria-label={cardAccessibleName(entry)}
+      style={{
+        listStyle: "none",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "var(--space-2)",
+        padding: "var(--space-4)",
+        backgroundColor: "var(--collection-card-bg)",
+        border: "1px solid var(--collection-card-border)",
+        borderRadius: "var(--border-radius-lg)",
+        textAlign: "center",
+      }}
+    >
+      <CreaturePlaceholder />
+      <span
+        data-collection-name=""
+        style={{
+          fontFamily: "var(--font-family-display)",
+          fontSize: "var(--font-size-md)",
+          fontWeight: "var(--font-weight-bold)",
+          color: "var(--collection-text)",
+        }}
+      >
+        {entry.displayName}
+      </span>
+      <RarityBadge rarity={entry.rarity} />
+      {entry.story !== "" && (
+        <p
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-family-body)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--collection-text-muted)",
+          }}
+        >
+          {entry.story}
+        </p>
+      )}
+      {isRenaming ? (
+        <RenameForm entry={entry} onSaved={onSaved} onCancel={onCancel} />
+      ) : (
+        <button
+          type="button"
+          className="mz-focusable"
+          onClick={() => onStartRename(entry.characterId)}
+          style={{
+            minHeight: "var(--tap-target-min)",
+            padding: "var(--space-2) var(--space-4)",
+            fontFamily: "var(--font-family-display)",
+            fontSize: "var(--font-size-sm)",
+            fontWeight: "var(--font-weight-bold)",
+            color: "var(--collection-text)",
+            backgroundColor: "var(--color-bg-tertiary)",
+            border: "1px solid var(--collection-card-border)",
+            borderRadius: "var(--border-radius-full)",
+            cursor: "pointer",
+          }}
+        >
+          {`${RENAME_EMOJI} ${strings.collection.rename}`}
+        </button>
+      )}
+    </li>
+  );
+}
+
+type ScreenState =
+  | { readonly kind: "loading" }
+  | { readonly kind: "error" }
+  | { readonly kind: "ready"; readonly entries: readonly CollectionEntry[] };
+
+/** Orchestrateur client de l'écran collection — charge la collection composée serveur au montage. */
+export function CollectionScreen() {
+  const [screen, setScreen] = useState<ScreenState>({ kind: "loading" });
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+
+  const fetchCollection = useCallback(async () => {
+    const result = await collectionAction();
+    if (result.entries === null) {
+      setScreen({ kind: "error" });
+      return;
+    }
+    setScreen({ kind: "ready", entries: result.entries });
+  }, []);
+
+  const retry = useCallback(() => {
+    setScreen({ kind: "loading" });
+    void fetchCollection();
+  }, [fetchCollection]);
+
+  useEffect(() => {
+    // Différé en microtâche (react-hooks/set-state-in-effect, même pattern que MapScreen).
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) {
+        void fetchCollection();
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchCollection]);
+
+  const startRename = useCallback((characterId: string) => setRenamingId(characterId), []);
+  const cancelRename = useCallback(() => setRenamingId(null), []);
+
+  const onSaved = useCallback((characterId: string, nickname: string) => {
+    setRenamingId(null);
+    // Met à jour l'affichage localement (le serveur est déjà la source de vérité persistée).
+    setScreen((prev) => {
+      // Garde de forme du reducer : `onSaved` n'est déclenché QUE depuis une carte rendue
+      // (état "ready" — le bouton renommer n'existe pas ailleurs). Inatteignable par l'UI,
+      // mais exigé par le typage de `ScreenState`.
+      /* v8 ignore next — état "ready" garanti quand une carte déclenche onSaved */
+      if (prev.kind !== "ready") return prev;
+      return {
+        kind: "ready",
+        entries: prev.entries.map((entry) =>
+          entry.characterId === characterId ? { ...entry, nickname, displayName: nickname } : entry,
+        ),
+      };
+    });
+  }, []);
+
+  return (
+    <main
+      className="bg-bg text-text"
+      style={{
+        minHeight: "100dvh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "var(--space-5)",
+        padding: "var(--space-6)",
+      }}
+    >
+      {screen.kind === "loading" && (
+        <h1 role="status" style={headingStyle}>
+          {strings.collection.loading}
+        </h1>
+      )}
+
+      {screen.kind === "error" && (
+        <>
+          <h1 style={headingStyle}>{strings.collection.loadError}</h1>
+          <button type="button" className="mz-focusable" onClick={retry} style={ctaStyle}>
+            {strings.collection.loadErrorRetry}
+          </button>
+        </>
+      )}
+
+      {screen.kind === "ready" && (
+        <>
+          <h1 style={headingStyle}>{strings.collection.title}</h1>
+          <p
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-family-body)",
+              fontSize: "var(--font-size-md)",
+              color: "var(--collection-text-muted)",
+            }}
+          >
+            {countLabel(screen.entries.length)}
+          </p>
+
+          {screen.entries.length === 0 ? (
+            <p
+              style={{
+                fontFamily: "var(--font-family-body)",
+                fontSize: "var(--font-size-md)",
+                color: "var(--collection-text-muted)",
+                textAlign: "center",
+                maxWidth: "var(--max-width-play)",
+              }}
+            >
+              {strings.collection.empty}
+            </p>
+          ) : (
+            <ul
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(9rem, 1fr))",
+                gap: "var(--space-4)",
+                width: "100%",
+                maxWidth: "var(--max-width-play)",
+                margin: 0,
+                padding: 0,
+              }}
+            >
+              {screen.entries.map((entry) => (
+                <CreatureCard
+                  key={entry.characterId}
+                  entry={entry}
+                  isRenaming={renamingId === entry.characterId}
+                  onStartRename={startRename}
+                  onSaved={onSaved}
+                  onCancel={cancelRename}
+                />
+              ))}
+            </ul>
+          )}
+
+          <Link
+            href="/carte"
+            className="mz-focusable"
+            style={{
+              ...ctaStyle,
+              display: "inline-flex",
+              alignItems: "center",
+              textDecoration: "none",
+            }}
+          >
+            {strings.collection.back}
+          </Link>
+        </>
+      )}
+    </main>
+  );
+}
+
+const headingStyle = {
+  fontFamily: "var(--font-family-display)",
+  fontSize: "var(--font-size-xl)",
+  fontWeight: "var(--font-weight-bold)",
+  color: "var(--color-text-primary)",
+  margin: 0,
+  textAlign: "center",
+} as const;
+
+const ctaStyle = {
+  minHeight: "var(--tap-target-min)",
+  padding: "var(--space-3) var(--space-6)",
+  fontFamily: "var(--font-family-display)",
+  fontSize: "var(--font-size-md)",
+  fontWeight: "var(--font-weight-bold)",
+  color: "var(--color-text-inverse)",
+  backgroundColor: "var(--color-accent-primary)",
+  border: "none",
+  borderRadius: "var(--border-radius-full)",
+  cursor: "pointer",
+} as const;

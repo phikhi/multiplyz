@@ -128,7 +128,11 @@ describe("runMigrations", () => {
     const seed = createDatabase(path);
     // Le migrateur drizzle rejoue toute migration dont le `created_at` est > au
     // dernier appliqué : pour re-jouer 0005 il faut dé-journaliser 0005 ET toutes
-    // les migrations postérieures, et retirer leurs artefacts (tables game-loop 0006).
+    // les migrations postérieures, et retirer leurs artefacts (tables game-loop 0006 :
+    // ledger/wallet/progress ; collection 0007 : collection/characters — `collection`
+    // référence `characters` par FK, donc drop dans cet ordre).
+    seed.run(sql`DROP TABLE collection`);
+    seed.run(sql`DROP TABLE characters`);
     seed.run(sql`DROP TABLE ledger`);
     seed.run(sql`DROP TABLE wallet`);
     seed.run(sql`DROP TABLE progress`);

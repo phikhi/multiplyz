@@ -187,10 +187,10 @@ export interface MapConfig {
  * donne, ECONOMY §4.1 : « aucune logique de barème dans le portefeuille »).
  *
  * **Périmètre 5.5** : gain de **fin de niveau** (base + bonus par étoile) + **bonus
- * trésor** (nœud trésor = « mini-défi court → pièces bonus », PRODUCT §2.1). Le **gros
- * lot de pièces du boss** (`+50`, ECONOMY §5) et la **créature légendaire** sont **hors
- * scope 5.5** (story 5.6, boss/collection) — un nœud boss ne rapporte ici que le gain de
- * niveau standard (base + étoiles), le bonus boss sera additionné en 5.6.
+ * trésor** (nœud trésor = « mini-défi court → pièces bonus », PRODUCT §2.1). **Périmètre
+ * 5.6** : le **gros lot de pièces du boss** (`+50`, ECONOMY §5) s'ajoute au gain de niveau
+ * standard sur un nœud **boss** (la **créature légendaire garantie** est gérée par la
+ * couche collection, pas par le barème pièces).
  */
 export interface EconomyConfig {
   /** Pièces de **base** par niveau terminé (ECONOMY §5, défaut `10`). Entier ≥ 0. */
@@ -204,6 +204,14 @@ export interface EconomyConfig {
    * ⚙️ prudente `15`, à calibrer au playtest. Entier ≥ 0.
    */
   treasureBonusCoins: number;
+  /**
+   * Pièces **bonus** additionnelles pour un nœud **boss** (« gros lot de pièces »,
+   * MAP §6 / ECONOMY §4.1). S'ajoute au gain de niveau standard **uniquement** sur le
+   * boss (dernier nœud). Valeur de départ ⚙️ `50` (ECONOMY §5 « Bonus boss +50 »). Entier
+   * ≥ 0. Distinct du bonus trésor (un boss n'est jamais un trésor, MAP §6). La légendaire
+   * garantie n'est **pas** un gain de pièces (couche collection, hors barème).
+   */
+  bossBonusCoins: number;
 }
 
 export interface AppConfig {
@@ -295,6 +303,8 @@ export const CONFIG_DEFAULTS = {
     starBonusCoins: 5,
     // Bonus trésor (mini-défi court, PRODUCT §2.1) — départ prudent, à calibrer.
     treasureBonusCoins: 15,
+    // Gros lot du boss (ECONOMY §5 « Bonus boss +50 », MAP §6).
+    bossBonusCoins: 50,
   },
 } as const;
 
@@ -536,6 +546,7 @@ export function loadEconomyConfig(env: Env): EconomyConfig {
     levelBaseCoins: parseNonNegativeInt(env.ECONOMY_LEVEL_BASE_COINS, d.levelBaseCoins),
     starBonusCoins: parseNonNegativeInt(env.ECONOMY_STAR_BONUS_COINS, d.starBonusCoins),
     treasureBonusCoins: parseNonNegativeInt(env.ECONOMY_TREASURE_BONUS_COINS, d.treasureBonusCoins),
+    bossBonusCoins: parseNonNegativeInt(env.ECONOMY_BOSS_BONUS_COINS, d.bossBonusCoins),
   };
 }
 

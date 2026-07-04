@@ -18,7 +18,7 @@ import {
   type SubmitAttemptInput,
 } from "@/lib/engine/service";
 import { selectDiagnostic, type DiagnosticItem } from "@/lib/engine/diagnostic";
-import { finishLevel, type FinishLevelError } from "@/lib/game/finish-level";
+import { finishLevel, type FinishLevelError, type GrantedLegendary } from "@/lib/game/finish-level";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
 
@@ -174,6 +174,16 @@ export interface FinishLevelActionResult {
   readonly coins: number | null;
   /** `false` si le crédit était un **rejeu** déjà journalisé (aucun 2ᵉ crédit). */
   readonly coinsApplied: boolean;
+  /**
+   * **Légendaire garantie** du boss (MAP §6, story 5.6), ou `null` (niveau non-boss / refus).
+   * Toujours présente sur un boss (même au rejeu — décrit ce que le monde donne).
+   */
+  readonly legendary: GrantedLegendary | null;
+  /**
+   * `true` si la légendaire vient d'être **ajoutée** (1ʳᵉ victoire du boss) ; `false` sinon
+   * (niveau non-boss, rejeu d'un boss déjà battu — aucun doublon parasite).
+   */
+  readonly legendaryAdded: boolean;
   /** Motif de refus **neutre** si `!ok`, `null` si `ok`. */
   readonly error: FinishLevelError | "UNAUTHENTICATED" | null;
 }
@@ -187,6 +197,8 @@ function finishLevelRefusal(error: FinishLevelError | "UNAUTHENTICATED"): Finish
     reward: null,
     coins: null,
     coinsApplied: false,
+    legendary: null,
+    legendaryAdded: false,
     error,
   };
 }
@@ -236,6 +248,8 @@ export async function finishLevelAction(stars: unknown): Promise<FinishLevelActi
     reward: result.reward,
     coins: result.balance.coins,
     coinsApplied: result.coinsApplied,
+    legendary: result.legendary,
+    legendaryAdded: result.legendaryAdded,
     error: null,
   };
 }

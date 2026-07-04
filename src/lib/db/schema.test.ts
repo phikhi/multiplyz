@@ -8,6 +8,9 @@ import { createDatabase } from "./index";
 import { runMigrations } from "./migrate";
 import {
   attempts,
+  characters,
+  collection,
+  collectionKey,
   ledger,
   mastery,
   masteryKey,
@@ -566,5 +569,223 @@ describe("schéma ledger (journal append-only — ECONOMY §3.7)", () => {
     expect(ref.foreignTable).toBe(profiles);
     expect(ref.foreignColumns[0].name).toBe("id");
     expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+// ============================================================================
+// Collection (story 5.6) — catalogue characters + possession collection
+// (ECONOMY §3.2/§3.3, MAP §6, PRODUCT §2.3)
+// ============================================================================
+
+describe("collectionKey (PK composite (profil, créature) encodée en texte)", () => {
+  it("encode (profil, créature) en une clé stable séparée par `:`", () => {
+    expect(collectionKey(1, "legendary:0")).toBe("1:legendary:0");
+    expect(collectionKey(42, "common_fox")).toBe("42:common_fox");
+  });
+
+  it("distingue des profils voisins pour une même créature (pas de collision)", () => {
+    const keys = new Set([collectionKey(1, "legendary:0"), collectionKey(2, "legendary:0")]);
+    expect(keys.size).toBe(2);
+  });
+});
+
+describe("schéma characters (catalogue — ECONOMY §3.2)", () => {
+  function seedCharacter(db: ReturnType<typeof freshDb>, overrides: Record<string, unknown> = {}) {
+    db.insert(characters)
+      .values({
+        id: "legendary:0",
+        worldIndex: 0,
+        speciesKey: "legendary_world_0",
+        nameDefault: "Braisille",
+        rarity: "legendary",
+        inEggPool: false,
+        artRef: "placeholder://legendary/0",
+        ...overrides,
+      })
+      .run();
+  }
+
+  it("insère et relit une créature (défauts max_stage=1 / in_egg_pool + nullable art/story)", () => {
+    const db = freshDb();
+    // Sans `maxStage` → défaut 1 ; `artRefStages`/`story` omis → nullable.
+    seedCharacter(db);
+    const row = db.select().from(characters).get();
+    expect(row).toMatchObject({
+      id: "legendary:0",
+      worldIndex: 0,
+      speciesKey: "legendary_world_0",
+      nameDefault: "Braisille",
+      rarity: "legendary",
+      maxStage: 1,
+      inEggPool: false,
+      artRef: "placeholder://legendary/0",
+      artRefStages: null,
+      story: null,
+    });
+  });
+
+  it("in_egg_pool round-trip (bool drizzle → 0/1) : commune true, légendaire false", () => {
+    const db = freshDb();
+    seedCharacter(db); // légendaire → false
+    db.insert(characters)
+      .values({
+        id: "common:0",
+        worldIndex: 0,
+        speciesKey: "common_world_0",
+        nameDefault: "Goupil",
+        rarity: "common",
+        // inEggPool omis → défaut true (communes dans le pool).
+        artRef: "placeholder://common/0",
+      })
+      .run();
+    const legendary = db.select().from(characters).where(eq(characters.id, "legendary:0")).get();
+    const common = db.select().from(characters).where(eq(characters.id, "common:0")).get();
+    expect(legendary?.inEggPool).toBe(false);
+    expect(common?.inEggPool).toBe(true);
+  });
+
+  it("contraint l'unicité de l'id (PK texte) — même id rejeté", () => {
+    const db = freshDb();
+    seedCharacter(db);
+    expect(() => seedCharacter(db)).toThrow();
+  });
+
+  it("laisse art_ref_stages et story physiquement NULLABLES (garde de nullabilité, PRAGMA)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(characters)`);
+    expect(info.find((c) => c.name === "art_ref_stages")?.notnull).toBe(0);
+    expect(info.find((c) => c.name === "story")?.notnull).toBe(0);
+    // Contraste : name_default reste NOT NULL (colonne obligatoire du catalogue).
+    expect(info.find((c) => c.name === "name_default")?.notnull).toBe(1);
+  });
+});
+
+describe("schéma collection (possession — ECONOMY §3.3)", () => {
+  function seed(db: ReturnType<typeof freshDb>) {
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+    db.insert(characters)
+      .values({
+        id: "legendary:0",
+        worldIndex: 0,
+        speciesKey: "legendary_world_0",
+        nameDefault: "Braisille",
+        rarity: "legendary",
+        inEggPool: false,
+        artRef: "placeholder://legendary/0",
+      })
+      .run();
+  }
+
+  it("insère et relit une possession (défauts count=1 / stage=1 / nickname nullable / unlocked_at)", () => {
+    const db = freshDb();
+    seed(db);
+    // Sans `count`/`stage`/`nickname`/`unlockedAt` → exerce les défauts + le nullable nickname.
+    db.insert(collection)
+      .values({ id: collectionKey(1, "legendary:0"), profileId: 1, characterId: "legendary:0" })
+      .run();
+    const row = db.select().from(collection).get();
+    expect(row).toMatchObject({
+      profileId: 1,
+      characterId: "legendary:0",
+      count: 1,
+      stage: 1,
+      nickname: null,
+    });
+    expect(row?.unlockedAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste un renommage enfant (nickname)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(collection)
+      .values({
+        id: collectionKey(1, "legendary:0"),
+        profileId: 1,
+        characterId: "legendary:0",
+        nickname: "Flamme",
+      })
+      .run();
+    expect(db.select().from(collection).get()?.nickname).toBe("Flamme");
+  });
+
+  it("contraint l'unicité (profil, créature) via la PK texte encodée", () => {
+    const db = freshDb();
+    seed(db);
+    const row = {
+      id: collectionKey(1, "legendary:0"),
+      profileId: 1,
+      characterId: "legendary:0",
+    };
+    db.insert(collection).values(row).run();
+    // Même (profil, créature) → même PK → doublon rejeté.
+    expect(() => db.insert(collection).values(row).run()).toThrow();
+  });
+
+  it("purge la collection à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(collection)
+      .values({ id: collectionKey(1, "legendary:0"), profileId: 1, characterId: "legendary:0" })
+      .run();
+    expect(db.select().from(collection).all()).toHaveLength(1);
+
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(collection).all()).toHaveLength(0);
+  });
+
+  it("purge la possession à la suppression de la créature (FK cascade au catalogue)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(collection)
+      .values({ id: collectionKey(1, "legendary:0"), profileId: 1, characterId: "legendary:0" })
+      .run();
+    db.delete(characters).where(eq(characters.id, "legendary:0")).run();
+    expect(db.select().from(collection).all()).toHaveLength(0);
+  });
+
+  it("refuse une possession orpheline de profil (contrainte FK active)", () => {
+    const db = freshDb();
+    seed(db);
+    expect(() =>
+      db
+        .insert(collection)
+        .values({
+          id: collectionKey(999, "legendary:0"),
+          profileId: 999,
+          characterId: "legendary:0",
+        })
+        .run(),
+    ).toThrow();
+  });
+
+  it("refuse une possession orpheline de créature (FK au catalogue active)", () => {
+    const db = freshDb();
+    seed(db);
+    expect(() =>
+      db
+        .insert(collection)
+        .values({ id: collectionKey(1, "ghost:0"), profileId: 1, characterId: "ghost:0" })
+        .run(),
+    ).toThrow();
+  });
+
+  it("référence collection.profile_id → profiles.id en cascade", () => {
+    const fk = getTableConfig(collection).foreignKeys.find(
+      (f) => f.reference().foreignTable === profiles,
+    );
+    expect(fk).toBeDefined();
+    expect(fk?.reference().foreignColumns[0].name).toBe("id");
+    expect(fk?.onDelete).toBe("cascade");
+  });
+
+  it("référence collection.character_id → characters.id en cascade", () => {
+    const fk = getTableConfig(collection).foreignKeys.find(
+      (f) => f.reference().foreignTable === characters,
+    );
+    expect(fk).toBeDefined();
+    expect(fk?.reference().foreignColumns[0].name).toBe("id");
+    expect(fk?.onDelete).toBe("cascade");
   });
 });

@@ -457,32 +457,39 @@ describe("loadEconomyConfig — défauts ⚙️ (ECONOMY §4.1/§5)", () => {
     expect(loadEconomyConfig({})).toEqual(CONFIG_DEFAULTS.economy);
   });
 
-  it("barème = base 10 + 5/étoile + 15 trésor (ECONOMY §5)", () => {
+  it("barème = base 10 + 5/étoile + 15 trésor + 50 boss (ECONOMY §5)", () => {
     const eco = loadEconomyConfig({});
     expect(eco.levelBaseCoins).toBe(10);
     expect(eco.starBonusCoins).toBe(5);
     expect(eco.treasureBonusCoins).toBe(15);
+    expect(eco.bossBonusCoins).toBe(50);
   });
 });
 
 describe("loadEconomyConfig — surcharges ⚙️ par env", () => {
-  it("surcharge les trois paramètres du barème", () => {
+  it("surcharge les quatre paramètres du barème", () => {
     const eco = loadEconomyConfig({
       ECONOMY_LEVEL_BASE_COINS: "20",
       ECONOMY_STAR_BONUS_COINS: "8",
       ECONOMY_TREASURE_BONUS_COINS: "40",
+      ECONOMY_BOSS_BONUS_COINS: "120",
     });
     expect(eco.levelBaseCoins).toBe(20);
     expect(eco.starBonusCoins).toBe(8);
     expect(eco.treasureBonusCoins).toBe(40);
+    expect(eco.bossBonusCoins).toBe(120);
   });
 
   it("accepte 0 (barème désactivable) mais retombe sur le défaut si négatif / non numérique", () => {
     // parseNonNegativeInt : 0 est légitime (désactive une source de gain).
     expect(loadEconomyConfig({ ECONOMY_TREASURE_BONUS_COINS: "0" }).treasureBonusCoins).toBe(0);
+    expect(loadEconomyConfig({ ECONOMY_BOSS_BONUS_COINS: "0" }).bossBonusCoins).toBe(0);
     // Négatif (aberrant pour un gain) → défaut.
     expect(loadEconomyConfig({ ECONOMY_LEVEL_BASE_COINS: "-5" }).levelBaseCoins).toBe(
       CONFIG_DEFAULTS.economy.levelBaseCoins,
+    );
+    expect(loadEconomyConfig({ ECONOMY_BOSS_BONUS_COINS: "-9" }).bossBonusCoins).toBe(
+      CONFIG_DEFAULTS.economy.bossBonusCoins,
     );
     // Non numérique → défaut.
     expect(loadEconomyConfig({ ECONOMY_STAR_BONUS_COINS: "x" }).starBonusCoins).toBe(

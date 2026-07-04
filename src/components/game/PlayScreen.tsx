@@ -15,6 +15,7 @@ import {
 } from "@/app/(app)/jouer/actions";
 import type { DiagnosticItem } from "@/lib/engine/diagnostic";
 import type { RawDiagnosticResponse } from "@/lib/engine/service";
+import type { GrantedLegendary } from "@/lib/game/finish-level";
 import type { EngineConfig } from "@/config/server-config";
 import { diagnosticToQuestions } from "@/lib/game/diagnostic-questions";
 import { resolveAnswer } from "@/lib/game/answer";
@@ -72,7 +73,13 @@ type ScreenState =
    * s'affichent même sans les pièces). La progression + le crédit sont persistés par
    * `finishLevelAction` (transaction atomique serveur, story #126).
    */
-  | { readonly kind: "results"; readonly stars: StarCount; readonly coins: number | null };
+  | {
+      readonly kind: "results";
+      readonly stars: StarCount;
+      readonly coins: number | null;
+      /** Légendaire garantie du boss (story 5.6), `null` tant que non reçu / niveau non-boss. */
+      readonly legendary: GrantedLegendary | null;
+    };
 
 /** Accumulateur des réponses au diagnostic (ENGINE §3) — vidé à chaque amorçage réussi. */
 function useDiagnosticResponses() {
@@ -217,7 +224,12 @@ export function PlayScreen() {
 
   if (screen.kind === "results") {
     return (
-      <ResultsScreen stars={screen.stars} coins={screen.coins} onContinue={handleResultsContinue} />
+      <ResultsScreen
+        stars={screen.stars}
+        coins={screen.coins}
+        legendary={screen.legendary}
+        onContinue={handleResultsContinue}
+      />
     );
   }
 
@@ -323,17 +335,18 @@ function PlayingGame({
     // côté client) → affichage **immédiat** des résultats (no-fail, jamais bloquant).
     const accuracy = computeAccuracy(next.firstCorrectCount, next.questions.length);
     const stars = computeStars(accuracy, starThresholds);
-    onResults({ kind: "results", stars, coins: null });
+    onResults({ kind: "results", stars, coins: null, legendary: null });
     // Fin de niveau **persistée serveur** (source de vérité, story #126, ferme #136) :
-    // progression + crédit de pièces + ledger dans une transaction atomique. Le client
-    // n'envoie **que ses étoiles** (jamais un `world/level_index`, SYNC §1) ; le serveur
-    // résout la cible + tranche le barème (ECONOMY §4.1). On enrichit ensuite l'écran
-    // résultats avec les **pièces gagnées** (solde serveur). Une erreur réseau ne bloque
-    // jamais l'enfant (no-fail) : les résultats restent affichés sans les pièces.
+    // progression + crédit de pièces + ledger (+ légendaire du boss, story 5.6) dans une
+    // transaction atomique. Le client n'envoie **que ses étoiles** (jamais un `world/level_index`,
+    // SYNC §1) ; le serveur résout la cible + tranche le barème (ECONOMY §4.1) + ajoute la
+    // légendaire garantie si c'était le boss (MAP §6). On enrichit ensuite l'écran résultats avec
+    // les **pièces gagnées** (solde serveur) et la **légendaire** éventuelle. Une erreur réseau ne
+    // bloque jamais l'enfant (no-fail) : les résultats restent affichés sans les pièces.
     void (async () => {
       const result = await finishLevelAction(stars);
       if (result.ok) {
-        onResults({ kind: "results", stars, coins: result.coins });
+        onResults({ kind: "results", stars, coins: result.coins, legendary: result.legendary });
       }
     })();
   }, [game, isDiagnostic, onDiagnosticFinished, onResults, starThresholds]);
