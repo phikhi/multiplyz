@@ -34,8 +34,9 @@ export type RewardReason = "level" | "star_bonus" | "treasure";
 /**
  * **Décomposition** d'un gain de fin de niveau (transparence parent, ECONOMY §7 : le
  * `ledger` explique gains/dépenses). Chaque terme est un montant **≥ 0** en pièces. La
- * somme = `total`. Sert à l'affichage (écran résultats) **et** à un éventuel journal
- * détaillé (une ligne par terme non nul — cf. `finish-level.ts`).
+ * somme = `total`. Sert à l'affichage (écran résultats). Un journal détaillé (une ligne
+ * par terme non nul) est une piste prospective — `finish-level.ts` (5.5) écrit
+ * aujourd'hui une seule ligne ledger agrégée (`reason: "level"`, montant = `total`).
  */
 export interface RewardBreakdown {
   /** Pièces de **base** du niveau (toujours créditées, ECONOMY §5). */

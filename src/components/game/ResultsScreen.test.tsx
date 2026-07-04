@@ -103,10 +103,7 @@ describe("ResultsScreen — pièces gagnées (ECONOMY §4.1, story #126)", () =>
  * un **glyphe/chiffre rendu distinct** sur le fond de page neutre (`--color-bg-primary`) — la
  * règle « ≥1 test de contraste par glyphe rendu » l'exige. On résout `tokens.css` (var() → hex)
  * et on vérifie ≥ 4.5:1 dans les 2 thèmes. Effet observable : remapper `--color-text-primary`
- * vers une couleur faible-contraste rougirait ce test. (On ne teste PAS les étoiles ici : elles
- * étaient déjà rendues en #64 avec `--color-star`/`-empty`, doublées par `aria-label` + forme
- * ★/☆ — hors scope du changement 5.5 ; le nouveau glyphe introduit par 5.5 est le nombre de
- * pièces, qui utilise un token texte fiable, ce que ce test verrouille.)
+ * vers une couleur faible-contraste rougirait ce test.
  */
 describe("ResultsScreen — contraste WCAG résolu du nombre de pièces (rétro #104/#125)", () => {
   it.each(["light", "dark"] as Theme[])(
@@ -115,6 +112,37 @@ describe("ResultsScreen — contraste WCAG résolu du nombre de pièces (rétro 
       const text = resolveTokenColor(theme, "--color-text-primary");
       const bg = resolveTokenColor(theme, "--color-bg-primary");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
+/**
+ * Contraste WCAG **résolu** des étoiles (rétro #104/#125) : les étoiles rendues en #64 avec
+ * `--color-star`/`--color-star-empty` échouaient le contraste sur le fond de page neutre
+ * `--color-bg-primary` (~1.45:1 plein / ~1.21:1 vide — accents décoratifs, pas des couleurs
+ * de glyphe fiables). Fix 5.5 : `--results-star-filled`/`--results-star-empty` (tokens texte
+ * fiables, mêmes valeurs que `--map-node-star-*`). Chaque glyphe distinct (plein ★ / vide ☆)
+ * a son propre test (rétro #125 : deux glyphes différents = deux tests), sur le fond
+ * réellement empilé derrière les `<span>` étoiles (`--color-bg-primary`, aucun wrapper
+ * intermédiaire ne pose un autre fond dans ResultsScreen). Effet observable : remapper l'un
+ * ou l'autre token vers `--color-star`/`--color-star-empty` rougirait le test correspondant.
+ */
+describe("ResultsScreen — contraste WCAG résolu des étoiles (rétro #104/#125)", () => {
+  it.each(["light", "dark"] as Theme[])(
+    "%s : l'étoile pleine (--results-star-filled) ≥ 4.5:1 sur le fond de page (--color-bg-primary)",
+    (theme) => {
+      const star = resolveTokenColor(theme, "--results-star-filled");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as Theme[])(
+    "%s : l'étoile vide (--results-star-empty) ≥ 4.5:1 sur le fond de page (--color-bg-primary)",
+    (theme) => {
+      const star = resolveTokenColor(theme, "--results-star-empty");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
 });

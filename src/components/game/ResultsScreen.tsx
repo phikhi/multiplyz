@@ -15,7 +15,9 @@ import type { StarCount } from "@/lib/engine/stars";
  * pièces **doublées d'un libellé texte** (jamais la seule forme/icône, daltonisme). Les pièces
  * sont un `role="img"` au nom accessible explicite ; le nombre est **visible en texte** avec un
  * token texte à contraste garanti (`--color-text-primary` — jamais `--color-coin`/`--color-star`
- * qui échouent le contraste sur fond neutre, cf. tokens.css / rétro #104/#125).
+ * qui échouent le contraste sur fond neutre, cf. tokens.css / rétro #104/#125). Les étoiles
+ * utilisent de même `--results-star-filled`/`--results-star-empty` (tokens texte fiables,
+ * jamais `--color-star`/`-empty`, mêmes accents décoratifs qui échouaient le contraste ici).
  */
 export interface ResultsScreenProps {
   readonly stars: StarCount;
@@ -91,7 +93,7 @@ export function ResultsScreen({ stars, coins, onContinue }: ResultsScreenProps) 
             aria-hidden="true"
             style={{
               fontSize: "var(--font-size-3xl)",
-              color: slot <= stars ? "var(--color-star)" : "var(--color-star-empty)",
+              color: slot <= stars ? "var(--results-star-filled)" : "var(--results-star-empty)",
             }}
           >
             {slot <= stars ? FILLED_STAR : EMPTY_STAR}
