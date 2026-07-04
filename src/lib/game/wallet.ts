@@ -109,7 +109,10 @@ export function creditExists(
  *
  * - **Atomique** : upsert du solde + insertion de la ligne `ledger` dans **une seule
  *   transaction SYNCHRONE** better-sqlite3 (callback sans `await` → sérialisation,
- *   anti-TOCTOU #36). Soit les deux écritures passent, soit aucune.
+ *   anti-TOCTOU #36). Soit les deux écritures passent, soit aucune : si l'INSERT
+ *   `ledger` échoue APRÈS l'upsert du solde, la transaction **rollback** le crédit
+ *   (propriété prouvée par un test à effet observable — mutation-testée : retirer le
+ *   wrapper `db.transaction` fait échouer le test d'atomicité, cf. `wallet.test.ts`).
  * - **Idempotent** : un rejeu portant le même `(profileId, reason, refId)` est détecté
  *   (`creditExists`) → **aucun 2ᵉ crédit, aucune 2ᵉ ligne de journal**. On renvoie le
  *   solde inchangé avec `applied: false`.

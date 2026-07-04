@@ -116,16 +116,35 @@ describe("creditWallet — crédit atomique + journal", () => {
     expect(db.select().from(ledger).all()).toHaveLength(0);
   });
 
-  // GARDE ATOMICITÉ : si l'écriture du **journal** échoue, le crédit du portefeuille
-  // est ANNULÉ (rollback de toute la transaction). On force l'échec du 2ᵉ INSERT en
-  // supprimant la table `ledger` juste avant l'appel : le wallet s'écrit puis le
-  // ledger jette ("no such table") → la transaction synchrone rollback l'ensemble.
-  // Rouge si les deux écritures ne sont PAS dans la même transaction (le solde
-  // resterait crédité malgré l'échec du journal).
-  it("ATOMIQUE : l'échec du journal annule le crédit du portefeuille (rollback)", () => {
+  // GARDE ATOMICITÉ (effet observable, mutation-testée) : si l'INSERT du **journal**
+  // échoue APRÈS que le crédit du portefeuille a réussi, tout est ANNULÉ (rollback de
+  // la transaction). Le point subtil : `creditWallet` appelle d'abord `creditExists`
+  // (un `SELECT id FROM ledger`) — casser la table entière (`DROP`) ferait throw CE
+  // select AVANT toute écriture wallet → test VACUOUS (passerait même sans transaction,
+  // rétro #60/#61). On casse donc UNIQUEMENT l'INSERT : on rebuild `ledger` sans la
+  // colonne `amount` que l'INSERT fournit. Alors : (1) le SELECT `id` de `creditExists`
+  // fonctionne toujours, (2) l'upsert `wallet` s'exécute (crédit +50), (3) l'INSERT
+  // `ledger` jette « no such column: amount » → rollback. Sans le wrapper
+  // `db.transaction`, le crédit wallet SURVIVRAIT à l'échec → ce test CASSE (vérifié
+  // par mutation : retirer la transaction rend l'assertion `coins:0` fausse).
+  it("ATOMIQUE : l'échec de l'INSERT journal annule le crédit déjà écrit (rollback)", () => {
+    // Rebuild `ledger` sans `amount` : la structure reste requêtable (SELECT id ok),
+    // mais l'INSERT de `creditWallet` (qui pose `amount`) échouera.
     db.run(sql`DROP TABLE ledger`);
+    db.run(sql`CREATE TABLE ledger (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      profile_id integer NOT NULL,
+      direction text NOT NULL,
+      currency text NOT NULL,
+      reason text NOT NULL,
+      ref_id text,
+      created_at integer NOT NULL
+    )`);
+
     expect(() => creditWallet(db, earn({ amount: 50, refId: "atomic" }), NOW)).toThrow();
-    // Le crédit du portefeuille a été annulé : aucune ligne wallet ne subsiste.
+
+    // Preuve du rollback : le crédit du portefeuille (qui S'ÉTAIT écrit dans la
+    // transaction) a été annulé → aucune ligne wallet, solde à 0.
     expect(loadWallet(db, profileId)).toEqual({ coins: 0, shards: 0 });
     expect(db.select().from(wallet).all()).toHaveLength(0);
   });
