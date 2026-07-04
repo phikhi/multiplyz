@@ -270,6 +270,37 @@ export const fr = {
     },
   },
   /**
+   * Écran **carte du monde** (story #125, WIREFRAMES §2, PRODUCT §2.1, MAP §2/§4/§5).
+   * Chemin de nœuds « Candy Crush » du monde courant (déblocage linéaire). Voix de
+   * Teddy, tutoiement (écran enfant). Chaque type/état de nœud est doublé d'un texte
+   * (a11y daltonisme, jamais couleur/forme seule) — ces libellés sont le nom
+   * accessible des nœuds (`role="link"`/`role="img"`).
+   */
+  map: {
+    /** Titre de l'écran (`{n}` = numéro du monde, 1-based pour l'enfant). */
+    title: "Monde {n}",
+    /** Libellé accessible du nœud courant — invite à jouer, point de reprise. */
+    nodeCurrent: "Nœud {n} sur {total} — à toi de jouer !",
+    /** Libellé accessible d'un nœud terminé (`{stars}` = 0 à 3, rejoue possible). */
+    nodeCompleted: "Nœud {n} sur {total} — terminé, {stars}",
+    /** Libellé accessible d'un nœud verrouillé (pas encore jouable). */
+    nodeLocked: "Nœud {n} sur {total} — pas encore débloqué",
+    /** Libellé du nombre d'étoiles d'un nœud terminé (`{n}` = 0 à 3, MAP §4). */
+    starsLabel: "{n} étoile sur 3",
+    starsLabelPlural: "{n} étoiles sur 3",
+    /** Libellé de type accolé au nœud (doublage texte, a11y) — MAP §2. */
+    type: {
+      normal: "Niveau",
+      revision: "Révision",
+      treasure: "Trésor",
+      boss: "Boss",
+    },
+    /** États de chargement / erreur de l'écran (mêmes postures que `play`). */
+    loading: "Je prépare ta carte…",
+    loadError: "Oups, ça n'a pas marché. On réessaie ?",
+    loadErrorRetry: "Réessayer",
+  },
+  /**
    * Récupération du code parent via code de secours (AUTH.md §5). Écran
    * **parent** → registre **neutre/vouvoiement** (COPY.md §5, pas la voix de
    * Teddy). Message d'échec du code **générique** (rate-limité, AUTH.md §4).
