@@ -126,10 +126,22 @@ describe("runMigrations", () => {
     // — reproduction fidèle d'une base dev antérieure à la story #37.
     runMigrations(createDatabase(path));
     const seed = createDatabase(path);
+    // Le migrateur drizzle rejoue toute migration dont le `created_at` est > au
+    // dernier appliqué : pour re-jouer 0005 il faut dé-journaliser 0005 ET toutes
+    // les migrations postérieures, et retirer leurs artefacts (tables game-loop 0006).
+    seed.run(sql`DROP TABLE ledger`);
+    seed.run(sql`DROP TABLE wallet`);
+    seed.run(sql`DROP TABLE progress`);
     seed.run(sql`DROP INDEX profiles_name_key_unique`);
     seed.run(sql`ALTER TABLE profiles DROP COLUMN name_key`);
+    // Dé-journalise 0005 (6ᵉ migration, index 5) + tout ce qui suit → l'état « base
+    // dev antérieure à #37 » où seules 0000..0004 sont enregistrées. On cible 0005 par
+    // son **ordinal** (OFFSET 5 dans l'ordre chronologique) plutôt qu'un timestamp en
+    // dur : robuste à l'ajout de migrations ultérieures (0006, …).
     seed.run(
-      sql`DELETE FROM __drizzle_migrations WHERE created_at = (SELECT MAX(created_at) FROM __drizzle_migrations)`,
+      sql`DELETE FROM __drizzle_migrations WHERE created_at >= (
+        SELECT created_at FROM __drizzle_migrations ORDER BY created_at LIMIT 1 OFFSET 5
+      )`,
     );
     seed.run(sql`INSERT INTO profiles (name, pin_hash, avatar) VALUES ('Élodie', 'h', 'a')`);
 

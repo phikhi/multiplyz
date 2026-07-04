@@ -6,7 +6,18 @@ import { getTableConfig } from "drizzle-orm/sqlite-core";
 import { afterAll, describe, expect, it } from "vitest";
 import { createDatabase } from "./index";
 import { runMigrations } from "./migrate";
-import { attempts, mastery, masteryKey, pinAttempts, profiles, sessions } from "./schema";
+import {
+  attempts,
+  ledger,
+  mastery,
+  masteryKey,
+  pinAttempts,
+  profiles,
+  progress,
+  progressKey,
+  sessions,
+  wallet,
+} from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-auth-schema-"));
 let counter = 0;
@@ -336,6 +347,221 @@ describe("schéma attempts (journal append-only — ENGINE §10)", () => {
 
   it("référence attempts.profile_id → profiles.id en cascade", () => {
     const [fk] = getTableConfig(attempts).foreignKeys;
+    const ref = fk.reference();
+    expect(ref.foreignTable).toBe(profiles);
+    expect(ref.foreignColumns[0].name).toBe("id");
+    expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+// ============================================================================
+// Boucle jouer → récompense (epic #5) — progress / wallet / ledger
+// ============================================================================
+
+describe("progressKey (PK composite encodée en texte)", () => {
+  it("encode (profil, monde, niveau) en une clé stable séparée par `:`", () => {
+    expect(progressKey(1, 0, 2)).toBe("1:0:2");
+    expect(progressKey(42, 7, 3)).toBe("42:7:3");
+  });
+
+  it("distingue des tuples voisins (pas de collision d'encodage)", () => {
+    // (1,2,3) ≠ (12,3,«») ≠ (1,23,«») : les entiers séparés par `:` restent injectifs.
+    const keys = new Set([progressKey(1, 2, 3), progressKey(12, 3, 3), progressKey(1, 23, 3)]);
+    expect(keys.size).toBe(3);
+  });
+});
+
+describe("schéma progress (progression par niveau — MAP §4)", () => {
+  function seed(db: ReturnType<typeof freshDb>) {
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+  }
+
+  it("insère et relit une progression (défauts stars=0 / updated_at)", () => {
+    const db = freshDb();
+    seed(db);
+    // Sans `stars`/`updatedAt` → exerce leurs défauts DB (0 / unixepoch()).
+    db.insert(progress)
+      .values({ id: progressKey(1, 0, 0), profileId: 1, worldIndex: 0, levelIndex: 0 })
+      .run();
+
+    const row = db.select().from(progress).get();
+    expect(row).toMatchObject({ profileId: 1, worldIndex: 0, levelIndex: 0, stars: 0 });
+    expect(row?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("contraint l'unicité (profil, monde, niveau) via la PK texte encodée", () => {
+    const db = freshDb();
+    seed(db);
+    const row = {
+      id: progressKey(1, 2, 3),
+      profileId: 1,
+      worldIndex: 2,
+      levelIndex: 3,
+      stars: 2 as const,
+    };
+    db.insert(progress).values(row).run();
+    // Même (profil, monde, niveau) → même PK → doublon rejeté.
+    expect(() => db.insert(progress).values(row).run()).toThrow();
+  });
+
+  it("purge la progression à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(progress)
+      .values({ id: progressKey(1, 0, 0), profileId: 1, worldIndex: 0, levelIndex: 0 })
+      .run();
+    expect(db.select().from(progress).all()).toHaveLength(1);
+
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(progress).all()).toHaveLength(0);
+  });
+
+  it("refuse une progression orpheline (contrainte FK active)", () => {
+    const db = freshDb();
+    expect(() =>
+      db
+        .insert(progress)
+        .values({ id: progressKey(999, 0, 0), profileId: 999, worldIndex: 0, levelIndex: 0 })
+        .run(),
+    ).toThrow();
+  });
+
+  it("référence progress.profile_id → profiles.id en cascade", () => {
+    const [fk] = getTableConfig(progress).foreignKeys;
+    const ref = fk.reference();
+    expect(ref.foreignTable).toBe(profiles);
+    expect(ref.foreignColumns[0].name).toBe("id");
+    expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+describe("schéma wallet (portefeuille — ECONOMY §3.1)", () => {
+  function seed(db: ReturnType<typeof freshDb>) {
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+  }
+
+  it("insère et relit un portefeuille (défauts coins=0 / shards=0 / updated_at)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(wallet).values({ profileId: 1 }).run();
+
+    const row = db.select().from(wallet).get();
+    expect(row).toMatchObject({ profileId: 1, coins: 0, shards: 0 });
+    expect(row?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("une seule ligne par profil (PK = profile_id)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(wallet).values({ profileId: 1, coins: 10 }).run();
+    // 2ᵉ insert même profil → PK en conflit → rejeté.
+    expect(() => db.insert(wallet).values({ profileId: 1, coins: 20 }).run()).toThrow();
+  });
+
+  it("purge le portefeuille à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(wallet).values({ profileId: 1, coins: 30 }).run();
+    expect(db.select().from(wallet).all()).toHaveLength(1);
+
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(wallet).all()).toHaveLength(0);
+  });
+
+  it("référence wallet.profile_id → profiles.id en cascade", () => {
+    const [fk] = getTableConfig(wallet).foreignKeys;
+    const ref = fk.reference();
+    expect(ref.foreignTable).toBe(profiles);
+    expect(ref.foreignColumns[0].name).toBe("id");
+    expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+describe("schéma ledger (journal append-only — ECONOMY §3.7)", () => {
+  function seed(db: ReturnType<typeof freshDb>) {
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+  }
+
+  it("insère et relit un mouvement (ref_id nullable + défaut created_at)", () => {
+    const db = freshDb();
+    seed(db);
+    // Sans `refId`/`createdAt` → exerce le nullable de ref_id + le défaut created_at.
+    db.insert(ledger)
+      .values({ profileId: 1, direction: "earn", currency: "coins", amount: 10, reason: "level" })
+      .run();
+
+    const row = db.select().from(ledger).get();
+    expect(row).toMatchObject({
+      profileId: 1,
+      direction: "earn",
+      currency: "coins",
+      amount: 10,
+      reason: "level",
+      refId: null,
+    });
+    expect(row?.id).toBeTypeOf("number");
+    expect(row?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("est append-only : deux mouvements identiques coexistent (PK auto)", () => {
+    const db = freshDb();
+    seed(db);
+    const mv = {
+      profileId: 1,
+      direction: "earn" as const,
+      currency: "coins" as const,
+      amount: 10,
+      reason: "level",
+    };
+    db.insert(ledger).values(mv).run();
+    db.insert(ledger).values(mv).run();
+    expect(db.select().from(ledger).all()).toHaveLength(2);
+  });
+
+  it("laisse ref_id physiquement NULLABLE (garde de nullabilité, PRAGMA)", () => {
+    const db = freshDb();
+    const col = db
+      .all<{ name: string; notnull: number }>(sql`PRAGMA table_info(ledger)`)
+      .find((c) => c.name === "ref_id");
+    expect(col?.notnull).toBe(0);
+  });
+
+  it("purge le journal à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(ledger)
+      .values({ profileId: 1, direction: "earn", currency: "coins", amount: 10, reason: "level" })
+      .run();
+    expect(db.select().from(ledger).all()).toHaveLength(1);
+
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(ledger).all()).toHaveLength(0);
+  });
+
+  it("refuse un mouvement orphelin (contrainte FK active)", () => {
+    const db = freshDb();
+    expect(() =>
+      db
+        .insert(ledger)
+        .values({
+          profileId: 999,
+          direction: "earn",
+          currency: "coins",
+          amount: 1,
+          reason: "level",
+        })
+        .run(),
+    ).toThrow();
+  });
+
+  it("référence ledger.profile_id → profiles.id en cascade", () => {
+    const [fk] = getTableConfig(ledger).foreignKeys;
     const ref = fk.reference();
     expect(ref.foreignTable).toBe(profiles);
     expect(ref.foreignColumns[0].name).toBe("id");
