@@ -6,9 +6,11 @@ import {
   getAuthConfig,
   getConfig,
   getEngineConfig,
+  getMapConfig,
   loadAuthConfig,
   loadConfig,
   loadEngineConfig,
+  loadMapConfig,
   resetConfigCache,
 } from "./server-config";
 
@@ -253,6 +255,10 @@ describe("loadEngineConfig — défauts ⚙️ (ENGINE §11)", () => {
     expect(engine.antiMashMs).toBe(600);
     expect(engine.diagnosticSize).toBe(18);
   });
+
+  it("seuil de dette de révision = 12 (MAP §5)", () => {
+    expect(loadEngineConfig({}).revisionDebtThreshold).toBe(12);
+  });
 });
 
 describe("loadEngineConfig — surcharges ⚙️ par env", () => {
@@ -386,11 +392,80 @@ describe("loadEngineConfig — surcharges ⚙️ par env", () => {
     expect(engine.antiMashMs).toBe(800);
     expect(engine.diagnosticSize).toBe(24);
   });
+
+  it("surcharge le seuil de dette de révision (entier ≥ 0)", () => {
+    expect(loadEngineConfig({ ENGINE_REVISION_DEBT_THRESHOLD: "20" }).revisionDebtThreshold).toBe(
+      20,
+    );
+    // 0 accepté (parseNonNegativeInt) : extrême de calibration légitime.
+    expect(loadEngineConfig({ ENGINE_REVISION_DEBT_THRESHOLD: "0" }).revisionDebtThreshold).toBe(0);
+  });
+
+  it("retombe sur le défaut quand le seuil de dette est invalide (négatif / non numérique)", () => {
+    expect(loadEngineConfig({ ENGINE_REVISION_DEBT_THRESHOLD: "-3" }).revisionDebtThreshold).toBe(
+      CONFIG_DEFAULTS.engine.revisionDebtThreshold,
+    );
+    expect(loadEngineConfig({ ENGINE_REVISION_DEBT_THRESHOLD: "nope" }).revisionDebtThreshold).toBe(
+      CONFIG_DEFAULTS.engine.revisionDebtThreshold,
+    );
+  });
+});
+
+describe("loadMapConfig — défauts ⚙️ (MAP §1/§3/§6)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadMapConfig({})).toEqual(CONFIG_DEFAULTS.map);
+  });
+
+  it("monde = 10 niveaux + 1 boss, trésor tous les 4, boss ~13 questions", () => {
+    const map = loadMapConfig({});
+    expect(map.levelsPerWorld).toBe(10);
+    expect(map.treasureEvery).toBe(4);
+    expect(map.bossQuestionCount).toBe(13);
+  });
+});
+
+describe("loadMapConfig — surcharges ⚙️ par env", () => {
+  it("surcharge les trois paramètres de structure (positifs)", () => {
+    const map = loadMapConfig({
+      MAP_LEVELS_PER_WORLD: "8",
+      MAP_TREASURE_EVERY: "3",
+      MAP_BOSS_QUESTION_COUNT: "15",
+    });
+    expect(map.levelsPerWorld).toBe(8);
+    expect(map.treasureEvery).toBe(3);
+    expect(map.bossQuestionCount).toBe(15);
+  });
+
+  it("retombe sur le défaut quand une valeur est invalide (0 / négatif / non numérique)", () => {
+    // parsePositiveInt : ces trois ⚙️ doivent être ≥ 1 (monde, cadence, boss).
+    expect(loadMapConfig({ MAP_LEVELS_PER_WORLD: "0" }).levelsPerWorld).toBe(
+      CONFIG_DEFAULTS.map.levelsPerWorld,
+    );
+    expect(loadMapConfig({ MAP_TREASURE_EVERY: "-2" }).treasureEvery).toBe(
+      CONFIG_DEFAULTS.map.treasureEvery,
+    );
+    expect(loadMapConfig({ MAP_BOSS_QUESTION_COUNT: "x" }).bossQuestionCount).toBe(
+      CONFIG_DEFAULTS.map.bossQuestionCount,
+    );
+  });
 });
 
 describe("loadConfig — bloc engine intégré", () => {
   it("expose le bloc engine dans la config applicative", () => {
     expect(loadConfig({ NODE_ENV: "development" }).engine).toEqual(CONFIG_DEFAULTS.engine);
+  });
+
+  it("expose le bloc map dans la config applicative", () => {
+    expect(loadConfig({ NODE_ENV: "development" }).map).toEqual(CONFIG_DEFAULTS.map);
+  });
+});
+
+describe("getMapConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc map de la config applicative", () => {
+    expect(getMapConfig()).toBe(getConfig().map);
   });
 });
 
