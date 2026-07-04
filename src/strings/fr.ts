@@ -275,6 +275,13 @@ export const fr = {
        */
       coins: "Tu gagnes {n} pièce 🪙",
       coinsPlural: "Tu gagnes {n} pièces 🪙",
+      /**
+       * Révélation de la **créature légendaire** gagnée au boss (story 5.6, MAP §6, COPY §3
+       * « déblocage créature »). Voix de Teddy, intrépide/joyeuse. `legendaryTitle` = annonce
+       * visible ; `legendaryLabel` = nom accessible complet (`{nom}` interpolé) — doublage a11y.
+       */
+      legendaryTitle: "Créature légendaire !",
+      legendaryLabel: "Créature légendaire gagnée : {nom} 🌟",
       continue: "Continuer",
     },
   },
@@ -308,6 +315,68 @@ export const fr = {
     loading: "Je prépare ta carte…",
     loadError: "Oups, ça n'a pas marché. On réessaie ?",
     loadErrorRetry: "Réessayer",
+  },
+  /**
+   * Écran **Collection (Pokédex)** (story 5.6, WIREFRAMES §5, PRODUCT §2.3, ECONOMY
+   * §3.2/§3.3). Écran **enfant** → voix de Teddy, tutoiement. Créatures possédées (nom +
+   * histoire) + **renommage** libre. Chaque rareté est doublée d'un **texte** (a11y
+   * daltonisme, jamais couleur/forme seule).
+   */
+  collection: {
+    /** Titre de l'écran (WIREFRAMES §5a). */
+    title: "Ma collection 🐾",
+    /** Compteur possédées (`{n}` = nombre de créatures dans la collection). */
+    count: "{n} créature",
+    countPlural: "{n} créatures",
+    /** État vide (aucune créature encore — pas encore de boss battu, posture douce). */
+    empty:
+      "Pas encore d'ami dans ta collection — bats un boss pour gagner ta 1ʳᵉ créature légendaire ! 🌟",
+    /** Libellés FR des raretés (doublage texte de la rareté, a11y) — clé = `Rarity`. */
+    rarity: {
+      common: "commune",
+      rare: "rare",
+      legendary: "légendaire",
+    },
+    /** Libellé accessible d'une carte de créature (`{nom}` + `{rareté}`). */
+    cardLabel: "{nom} — créature {rareté}",
+    /** Bouton « renommer » (WIREFRAMES §5b). */
+    rename: "Renommer",
+    /** Libellé du champ de renommage. */
+    renameLabel: "Nouveau nom",
+    /** Validation du renommage. */
+    renameSubmit: "Enregistrer",
+    /** Annuler le renommage. */
+    renameCancel: "Annuler",
+    /** Enregistrement en cours. */
+    renaming: "Un instant…",
+    /** Erreur de renommage (posture douce, jamais « erreur »). */
+    renameError: "Oups, ce nom ne marche pas. Essaie un nom entre 1 et 20 lettres.",
+    /** États de chargement / erreur de l'écran (mêmes postures que `play`/`map`). */
+    loading: "Je prépare ta collection…",
+    loadError: "Oups, ça n'a pas marché. On réessaie ?",
+    loadErrorRetry: "Réessayer",
+    /** Retour à la carte (hub, WIREFRAMES §2). */
+    back: "Retour à la carte",
+    /**
+     * **Noms par défaut** des légendaires (placeholder — l'art réel + les vraies
+     * créatures arrivent à l'épic #6, WORLDGEN). Piochés **déterministe** par
+     * `world_index` (MAP §6) → même monde ⇒ même nom. Voix douce/mignonne (COPY §5,
+     * « noms par défaut mignons »). L'enfant peut renommer.
+     */
+    legendaryNames: ["Braisille", "Aquagon", "Sylvelune", "Astrogriffe", "Ombreneige", "Solflamme"],
+    /**
+     * **Histoires** par défaut des légendaires (beats courts, COPY §4 — placeholder
+     * épic #6). Piochées **déterministe** par `world_index` (même ordre que
+     * `legendaryNames`). 1 phrase mignonne, illustrable plus tard.
+     */
+    legendaryStories: [
+      "La gardienne légendaire de ce monde — elle veillait sur le boss.",
+      "Une créature rare des profondeurs, enfin libre grâce à toi.",
+      "Elle dormait au sommet du monde en attendant une championne.",
+      "Née d'une étoile filante, elle a choisi de te suivre.",
+      "Un esprit de givre au grand cœur, timide mais fidèle.",
+      "Le soleil de ce monde a pris vie pour te remercier.",
+    ],
   },
   /**
    * Récupération du code parent via code de secours (AUTH.md §5). Écran

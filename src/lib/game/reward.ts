@@ -16,12 +16,12 @@
  * désactivé) mais `creditWallet` (5.1) exige un montant **strictement positif** — l'appelant
  * ne crédite donc que si `total > 0` (cf. `finish-level.ts`).
  *
- * **Périmètre 5.5** : gain de **niveau** (base + étoiles) + **bonus trésor**. Le **gros lot
- * du boss** (`+50`, ECONOMY §5) et la **créature légendaire** sont **hors scope** (story 5.6) :
- * un nœud `boss` rapporte ici le **gain de niveau standard** (base + étoiles), sans bonus
- * spécifique — le bonus boss sera additionné en 5.6 sans changer ce module (juste un terme
- * de plus). Le nœud `revision` rapporte lui aussi le gain de niveau standard (c'est un niveau
- * comme un autre du point de vue du gain, sa spécificité est pédagogique — MAP §5).
+ * **Périmètre 5.6** : gain de **niveau** (base + étoiles) + **bonus trésor** (nœud trésor) +
+ * **bonus boss** (nœud boss — « gros lot de pièces », MAP §6 / ECONOMY §5 `+50`). Le nœud
+ * `boss` rapporte donc le gain de niveau standard **plus** le bonus boss (un terme de plus,
+ * ajouté sans changer la forme du barème). La **créature légendaire garantie** n'est **pas**
+ * un gain de pièces (couche collection `collection.ts`, hors barème). Le nœud `revision`
+ * rapporte le gain de niveau standard (sa spécificité est pédagogique — MAP §5, pas un bonus).
  */
 
 import type { EconomyConfig } from "@/config/server-config";
@@ -29,7 +29,7 @@ import type { NodeType } from "./map";
 import type { Stars } from "@/lib/db/schema";
 
 /** Raison ledger d'un mouvement de gain de fin de niveau (sous-ensemble d'ECONOMY §3.7). */
-export type RewardReason = "level" | "star_bonus" | "treasure";
+export type RewardReason = "level" | "star_bonus" | "treasure" | "boss";
 
 /**
  * **Décomposition** d'un gain de fin de niveau (transparence parent, ECONOMY §7 : le
@@ -45,6 +45,8 @@ export interface RewardBreakdown {
   readonly starBonus: number;
   /** Pièces **bonus trésor** (nœud `treasure` uniquement, sinon `0` — PRODUCT §2.1). */
   readonly treasureBonus: number;
+  /** Pièces **bonus boss** (nœud `boss` uniquement, sinon `0` — « gros lot », MAP §6). */
+  readonly bossBonus: number;
   /** Total crédité (somme des termes) — **toujours ≥ 0** (barème ≥ 0). */
   readonly total: number;
 }
@@ -52,11 +54,21 @@ export interface RewardBreakdown {
 /**
  * `true` si le nœud rapporte le **bonus trésor** : uniquement le type `treasure` (PRODUCT
  * §2.1 « mini-défi court → pièces bonus »). Isolé en prédicat pur pour rester couvrable et
- * pour que l'ajout d'un futur type porteur de bonus (ex. `boss` en 5.6) soit un changement
- * **local et explicite** (jamais un `default` implicite qui créditerait par accident).
+ * pour qu'un futur type porteur de bonus soit un changement **local et explicite** (jamais
+ * un `default` implicite qui créditerait par accident).
  */
 function hasTreasureBonus(nodeType: NodeType): boolean {
   return nodeType === "treasure";
+}
+
+/**
+ * `true` si le nœud rapporte le **bonus boss** (« gros lot de pièces », MAP §6) : uniquement
+ * le type `boss` (dernier nœud du monde). Isolé en prédicat pur (même discipline que
+ * `hasTreasureBonus`) — le boss n'est jamais un trésor (MAP §6), donc les deux bonus ne se
+ * cumulent jamais sur un même nœud.
+ */
+function hasBossBonus(nodeType: NodeType): boolean {
+  return nodeType === "boss";
 }
 
 /**
@@ -66,14 +78,17 @@ function hasTreasureBonus(nodeType: NodeType): boolean {
  * - **base** = `levelBaseCoins` (toujours, même à 0 étoile — no-fail : terminer rapporte
  *   toujours, ECONOMY §1 « ne bloque jamais l'apprentissage ») ;
  * - **starBonus** = `starBonusCoins × stars` (0..3 étoiles → 0..3× le bonus) ;
- * - **treasureBonus** = `treasureBonusCoins` **ssi** le nœud est un trésor, sinon `0`.
+ * - **treasureBonus** = `treasureBonusCoins` **ssi** le nœud est un trésor, sinon `0` ;
+ * - **bossBonus** = `bossBonusCoins` **ssi** le nœud est un boss (« gros lot », MAP §6),
+ *   sinon `0`. Boss et trésor étant exclusifs (MAP §6 : le boss n'est jamais un trésor),
+ *   au plus **un** de ces deux termes est non nul.
  *
  * @param nodeType type du nœud terminé (dérivé **serveur** de la géométrie de carte, jamais
- *   du client — cf. `finish-level.ts`). `normal`/`revision`/`boss` → pas de bonus trésor ;
- *   `treasure` → bonus trésor ajouté.
+ *   du client — cf. `finish-level.ts`). `normal`/`revision` → aucun bonus ; `treasure` →
+ *   bonus trésor ; `boss` → bonus boss.
  * @param stars étoiles obtenues (0..3, MAP §4 / ENGINE §5) — **jamais** une barrière, juste
  *   un multiplicateur de bonus (ECONOMY §1 : l'éco ne bloque pas l'apprentissage).
- * @param config barème ⚙️ (`EconomyConfig`) — base/étoile/trésor. Jamais de valeur en dur.
+ * @param config barème ⚙️ (`EconomyConfig`) — base/étoile/trésor/boss. Jamais de valeur en dur.
  */
 export function computeLevelReward(
   nodeType: NodeType,
@@ -83,10 +98,12 @@ export function computeLevelReward(
   const base = config.levelBaseCoins;
   const starBonus = config.starBonusCoins * stars;
   const treasureBonus = hasTreasureBonus(nodeType) ? config.treasureBonusCoins : 0;
+  const bossBonus = hasBossBonus(nodeType) ? config.bossBonusCoins : 0;
   return {
     base,
     starBonus,
     treasureBonus,
-    total: base + starBonus + treasureBonus,
+    bossBonus,
+    total: base + starBonus + treasureBonus + bossBonus,
   };
 }

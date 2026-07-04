@@ -469,6 +469,27 @@ export function MapScreen() {
             {fill(strings.map.title, { n: String(screen.map.worldIndex + 1) })}
           </h1>
           <NodePath map={screen.map} />
+          {/* Hub (WIREFRAMES §2) : accès à la Collection (Pokédex) depuis la carte. */}
+          <Link
+            href="/collection"
+            className="mz-focusable"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              minHeight: "var(--tap-target-min)",
+              padding: "var(--space-2) var(--space-5)",
+              fontFamily: "var(--font-family-display)",
+              fontSize: "var(--font-size-md)",
+              fontWeight: "var(--font-weight-bold)",
+              color: "var(--color-text-primary)",
+              backgroundColor: "var(--color-bg-tertiary)",
+              border: "1px solid var(--color-border-primary)",
+              borderRadius: "var(--border-radius-full)",
+              textDecoration: "none",
+            }}
+          >
+            {strings.collection.title}
+          </Link>
         </>
       )}
 

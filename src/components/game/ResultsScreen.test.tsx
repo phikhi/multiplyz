@@ -146,3 +146,88 @@ describe("ResultsScreen — contraste WCAG résolu des étoiles (rétro #104/#12
     },
   );
 });
+
+const FAKE_LEGENDARY = {
+  characterId: "legendary:0",
+  name: "Braisille",
+  story: "La gardienne légendaire de ce monde.",
+  artRef: "placeholder://legendary/0",
+};
+
+describe("ResultsScreen — révélation de la légendaire du boss (story 5.6, MAP §6)", () => {
+  // GARDE « boss ⇒ légendaire révélée » (a11y : nom accessible doublé du texte, jamais la seule
+  // icône/couleur) : la carte légendaire s'affiche avec un `role="img"` nommé + le nom visible.
+  it("boss ⇒ affiche la carte de la légendaire (nom accessible + nom visible + histoire)", () => {
+    render(<ResultsScreen stars={1} coins={60} legendary={FAKE_LEGENDARY} onContinue={vi.fn()} />);
+    const label = strings.play.results.legendaryLabel.replace("{nom}", "Braisille");
+    expect(screen.getByRole("img", { name: label })).toBeInTheDocument();
+    expect(screen.getByText("Braisille")).toBeInTheDocument();
+    expect(screen.getByText(FAKE_LEGENDARY.story)).toBeInTheDocument();
+  });
+
+  // GARDE « niveau non-boss ⇒ AUCUNE légendaire » (contraste, effet observable) : sans légendaire,
+  // aucune carte n'est rendue.
+  it("niveau non-boss (legendary null par défaut) ⇒ AUCUNE carte légendaire", () => {
+    render(<ResultsScreen stars={2} coins={20} onContinue={vi.fn()} />);
+    expect(screen.queryByText(strings.play.results.legendaryTitle)).not.toBeInTheDocument();
+  });
+
+  it("légendaire sans histoire ⇒ carte affichée sans ligne d'histoire", () => {
+    render(
+      <ResultsScreen
+        stars={1}
+        coins={60}
+        legendary={{ ...FAKE_LEGENDARY, story: "" }}
+        onContinue={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Braisille")).toBeInTheDocument();
+    expect(screen.queryByText(FAKE_LEGENDARY.story)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Contraste WCAG **résolu** des glyphes de la carte légendaire (rétro #104/#125/#126) : nom,
+ * rareté (★ + texte), histoire, silhouette placeholder — chacun sur le fond de carte réellement
+ * empilé (`--collection-card-bg`) ou son fond propre. Le ★ de rareté utilise
+ * `--collection-rarity-glyph` (token TEXTE fiable), jamais `--color-star` sur fond neutre (le
+ * piège exact de #126). Effet observable : remapper un token vers un accent faible-contraste
+ * rougirait le test.
+ */
+describe("ResultsScreen — contraste WCAG résolu de la carte légendaire (rétro #104/#125/#126)", () => {
+  it.each(["light", "dark"] as Theme[])(
+    "%s : le nom de la légendaire (--collection-text) ≥ 4.5:1 sur le fond de carte",
+    (theme) => {
+      const text = resolveTokenColor(theme, "--collection-text");
+      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as Theme[])(
+    "%s : le ★ + titre de rareté (--collection-rarity-glyph) ≥ 4.5:1 sur le fond de carte (jamais --color-star)",
+    (theme) => {
+      const glyph = resolveTokenColor(theme, "--collection-rarity-glyph");
+      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as Theme[])(
+    "%s : l'histoire de la légendaire (--collection-text-muted) ≥ 4.5:1 sur le fond de carte",
+    (theme) => {
+      const text = resolveTokenColor(theme, "--collection-text-muted");
+      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as Theme[])(
+    "%s : la silhouette placeholder (--collection-placeholder-glyph) ≥ 4.5:1 sur son fond",
+    (theme) => {
+      const glyph = resolveTokenColor(theme, "--collection-placeholder-glyph");
+      const bg = resolveTokenColor(theme, "--collection-placeholder-bg");
+      expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});

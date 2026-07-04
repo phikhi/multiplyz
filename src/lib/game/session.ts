@@ -75,9 +75,11 @@ function makeGameQuestion(question: LevelQuestion, makeId: IdFactory): GameQuest
 }
 
 /**
- * Initialise l'état de jeu pour un niveau (~10 questions, ENGINE §4) — **jamais** appelée
- * sur un niveau vide (cf. `PlayScreen`, cas défensif « niveau vide » routé en amont : un
- * niveau sans question ne peut pas produire de 1ʳᵉ `GameQuestion`).
+ * Initialise l'état de jeu pour un niveau (~10 questions ; un **boss** en a plus,
+ * `bossQuestionCount` ~12-15, MAP §6 — la taille vient du serveur, ce module est agnostique :
+ * il travaille sur `questions.length`, jamais une constante) — **jamais** appelée sur un
+ * niveau vide (cf. `PlayScreen`, cas défensif « niveau vide » routé en amont : un niveau
+ * sans question ne peut pas produire de 1ʳᵉ `GameQuestion`).
  *
  * @param questions questions du niveau (`Level.questions`, déjà ordonnées par 3.7).
  * @param now horodatage **injecté** (`performance.now()`) de l'affichage de la 1ʳᵉ question.

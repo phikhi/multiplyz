@@ -3,20 +3,22 @@
  * ECONOMY §4.1, SYNC).
  *
  * Câble, dans **UNE** transaction synchrone better-sqlite3 (`db.transaction`, callback
- * **sans `await`**), la garde de déblocage (`unlock.ts`) à **trois écritures atomiques** :
+ * **sans `await`**), la garde de déblocage (`unlock.ts`) à **plusieurs écritures atomiques** :
  * 1. la progression monotone (`recordStars`, 5.1) — 1ʳᵉ écriture ;
  * 2. le crédit de pièces au portefeuille (`creditWalletInTx`, 5.1) — 2ᵉ écriture ;
- * 3. la ligne de journal `ledger` (dans `creditWalletInTx`) — 3ᵉ écriture.
+ * 3. la ligne de journal `ledger` (dans `creditWalletInTx`) — 3ᵉ écriture ;
+ * 4. **(boss uniquement, 5.6)** l'ajout de la **légendaire garantie** à la collection
+ *    (`grantLegendaryInTx` : upsert catalogue + INSERT possession) — 4ᵉ/5ᵉ écritures.
  *
  * **Transaction MULTI-ÉCRITURES (≥2)** — atomicité **requise et prouvée** (règle #122/#124) :
- * depuis 5.5 la transaction protège **plusieurs écritures** (progress + wallet + ledger).
- * Si une écriture **postérieure** à la 1ʳᵉ échoue (ex. l'INSERT `ledger`), la transaction
- * **rollback** : ni les étoiles, ni le crédit ne sont persistés (aucun état partiel — un
- * enfant ne peut pas se retrouver crédité sans progression, ni l'inverse). Cette propriété
- * est **mutation-prouvée** : retirer le wrapper `db.transaction` casse le test de rollback
- * de `finish-level.test.ts` (la panne frappe l'écriture **gardée** — colonne `ledger`
- * manquante — APRÈS la 1ʳᵉ écriture `recordStars`, jamais une lecture en amont ; cf. règle
- * durcie #122 : `DROP TABLE` d'une table lue en amont = anti-pattern, on casse l'écriture).
+ * la transaction protège **plusieurs écritures** (progress + wallet + ledger + collection).
+ * Si une écriture **postérieure** à la 1ʳᵉ échoue (ex. l'INSERT `collection`), la transaction
+ * **rollback** : ni les étoiles, ni le crédit, ni la légendaire ne sont persistés (aucun état
+ * partiel — un enfant ne peut pas se retrouver avec la légendaire sans progression, ni
+ * l'inverse). Cette propriété est **mutation-prouvée** : retirer le wrapper `db.transaction`
+ * casse le test de rollback de `finish-level.test.ts` (la panne frappe l'écriture **gardée** —
+ * colonne manquante — APRÈS la 1ʳᵉ écriture `recordStars`, jamais une lecture en amont ; cf.
+ * règle durcie #122 : `DROP TABLE` d'une table lue en amont = anti-pattern, on casse l'écriture).
  *
  * **Idempotence** (progression idempotente CLAUDE.md, SYNC §2) — rejeu d'une **même fin de
  * niveau** ⇒ **aucun double effet** :
@@ -54,6 +56,7 @@ import { isLevelPlayable, isWorldUnlocked, loadWorldProgress } from "./unlock";
 import { baseNodeTypeAt } from "./map";
 import { computeLevelReward, type RewardBreakdown } from "./reward";
 import { assertPositiveAmount, creditWalletInTx, loadWallet, type WalletBalance } from "./wallet";
+import { grantLegendaryInTx, legendaryForWorld } from "./collection";
 
 /**
  * Cible **brute** (non fiable) d'une fin de niveau (endpoint public) — chaque champ est
@@ -67,6 +70,22 @@ export interface FinishLevelInput {
   readonly levelIndex: unknown;
   /** Étoiles obtenues (0..3) — validées ; **jamais** une barrière de déblocage (MAP §1/§8). */
   readonly stars: unknown;
+}
+
+/**
+ * **Légendaire garantie** d'un monde présentée à l'UI (écran résultats du boss, MAP §6).
+ * Sous-ensemble d'affichage du descripteur catalogue (`legendaryForWorld`) — nom + histoire
+ * + rareté + réf d'art placeholder (l'art réel arrive à l'épic #6).
+ */
+export interface GrantedLegendary {
+  /** Clé de catalogue (`legendary:<world>`). */
+  readonly characterId: string;
+  /** Nom par défaut (déterministe, MAP §6) — renommable ensuite dans la collection. */
+  readonly name: string;
+  /** Ligne d'histoire (placeholder épic #6). */
+  readonly story: string;
+  /** Réf d'art placeholder (`placeholder://…`) — silhouette/emoji de repli côté UI. */
+  readonly artRef: string;
 }
 
 /** Motif de refus d'une fin de niveau mal formée / non autorisée (mappé vers une réponse neutre). */
@@ -105,6 +124,17 @@ export type FinishLevelResult =
       readonly balance: WalletBalance;
       /** `false` si le crédit était un **rejeu** déjà journalisé (aucun 2ᵉ crédit appliqué). */
       readonly coinsApplied: boolean;
+      /**
+       * **Légendaire garantie** obtenue en battant le boss (MAP §6, ECONOMY §3.2), ou `null`
+       * pour un niveau non-boss. Toujours renvoyée sur un boss (même au rejeu — la légendaire
+       * décrit ce que le monde **donne**), mais `legendaryAdded` distingue la 1ʳᵉ obtention.
+       */
+      readonly legendary: GrantedLegendary | null;
+      /**
+       * `true` si la légendaire vient d'être **ajoutée** à la collection (1ʳᵉ victoire du boss) ;
+       * `false` sur un niveau non-boss **ou** au rejeu d'un boss déjà battu (aucun doublon parasite).
+       */
+      readonly legendaryAdded: boolean;
     }
   /** Refus **propre** (pas un 500) : forme invalide ou niveau/monde verrouillé. */
   | { readonly ok: false; readonly error: FinishLevelError };
@@ -144,7 +174,10 @@ export function levelRewardRefId(worldIndex: number, levelIndex: number): string
  *    crédit `creditWalletInTx` (**2ᵉ/3ᵉ écritures** : upsert wallet + ligne ledger,
  *    idempotent via `ref_id`) — un crédit **strictement positif** seulement (si le barème
  *    donne 0, aucun crédit : `creditWalletInTx` exige `amount > 0`, garde `total > 0`) ;
- * 4. `unlockedNextWorld` = le niveau complété **était le boss** (MAP §6), **jamais**
+ * 4. **si le niveau était le boss** (dernier nœud, MAP §6) : ajout de la **légendaire
+ *    garantie** à la collection (`grantLegendaryInTx`, **4ᵉ/5ᵉ écritures** : upsert catalogue +
+ *    INSERT possession, idempotent — rejeu ⇒ pas de doublon) **dans la même transaction** ;
+ * 5. `unlockedNextWorld` = le niveau complété **était le boss** (MAP §6), **jamais**
  *    conditionné aux étoiles (MAP §1/§8).
  *
  * @param db connexion applicative (source de vérité serveur).
@@ -152,7 +185,7 @@ export function levelRewardRefId(worldIndex: number, levelIndex: number): string
  * @param input cible brute (monde/niveau/étoiles) — validée ici.
  * @param mapConfig ⚙️ carte (`MapConfig`) — `levelsPerWorld` fixe la géométrie (boss =
  *   dernier), `treasureEvery` le type du nœud (bonus trésor).
- * @param economyConfig ⚙️ barème (`EconomyConfig`, config versionnée) — base/étoile/trésor.
+ * @param economyConfig ⚙️ barème (`EconomyConfig`, config versionnée) — base/étoile/trésor/boss.
  * @param now instant serveur injecté (jamais un `Date.now()` interne, LEARNINGS #46).
  */
 export function finishLevel(
@@ -184,8 +217,10 @@ export function finishLevel(
   const reward = computeLevelReward(nodeType, stars, economyConfig);
 
   // 3. Garde de déblocage + persistance dans une transaction SYNCHRONE (callback sans await).
-  //    MULTI-ÉCRITURES : recordStars (1ʳᵉ) + creditWalletInTx (2ᵉ/3ᵉ) sont atomiques ensemble
-  //    — un échec de la 2ᵉ/3ᵉ écriture rollback la 1ʳᵉ (aucun état partiel, règle #122).
+  //    MULTI-ÉCRITURES : recordStars (1ʳᵉ) + creditWalletInTx (2ᵉ/3ᵉ) + grantLegendaryInTx
+  //    (4ᵉ/5ᵉ, boss) sont atomiques ensemble — un échec d'une écriture postérieure rollback
+  //    la 1ʳᵉ (aucun état partiel, règle #122). Mutation-prouvé : retirer ce wrapper casse les
+  //    tests de rollback (ledger ET collection boss) de `finish-level.test.ts`.
   return db.transaction((tx): FinishLevelResult => {
     // Déblocage linéaire inter-mondes : le monde doit être ouvert (boss des mondes
     // précédents complété). Jamais fondé sur les étoiles (MAP §1/§8).
@@ -236,7 +271,37 @@ export function finishLevel(
 
     // Déblocage du monde suivant = ce niveau était le boss (dernier nœud). Dérivé du progress
     // — jamais un incrément séparé (pas de double effet au rejeu). Indépendant des étoiles.
-    const unlockedNextWorld = levelIndex === bossIndex;
-    return { ok: true, stars: storedStars, unlockedNextWorld, reward, balance, coinsApplied };
+    const isBoss = levelIndex === bossIndex;
+    const unlockedNextWorld = isBoss;
+
+    // 4ᵉ/5ᵉ ÉCRITURES (boss uniquement, 5.6) : **légendaire garantie** ajoutée à la collection
+    // (déterministe, HORS œufs — MAP §6). Idempotent : rejeu du boss ⇒ aucun doublon parasite
+    // (`grantLegendaryInTx` renvoie `added: false`). L'ajout est **dans la même transaction** →
+    // atomique avec progression + crédit (un échec de l'INSERT `collection` rollback TOUT : ni
+    // étoiles, ni pièces, ni légendaire — aucun état partiel, règle #122).
+    let legendary: GrantedLegendary | null = null;
+    let legendaryAdded = false;
+    if (isBoss) {
+      const grant = grantLegendaryInTx(tx, profileId, worldIndex, now);
+      legendaryAdded = grant.added;
+      const descriptor = legendaryForWorld(worldIndex);
+      legendary = {
+        characterId: descriptor.id,
+        name: descriptor.nameDefault,
+        story: descriptor.story,
+        artRef: descriptor.artRef,
+      };
+    }
+
+    return {
+      ok: true,
+      stars: storedStars,
+      unlockedNextWorld,
+      reward,
+      balance,
+      coinsApplied,
+      legendary,
+      legendaryAdded,
+    };
   });
 }

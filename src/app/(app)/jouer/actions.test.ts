@@ -39,7 +39,12 @@ const FAKE_CONFIG = { starThresholds: [0.6, 0.85, 1] as const };
 /** Config carte de test : `levelsPerWorld` transmis à `finishLevel`/`getUnlockedWorldCount`. */
 const FAKE_MAP_CONFIG = { levelsPerWorld: 10, treasureEvery: 4, bossQuestionCount: 13 };
 /** Barème ⚙️ de test — transmis à `finishLevel` (source de vérité serveur, ECONOMY §4.1). */
-const FAKE_ECONOMY_CONFIG = { levelBaseCoins: 10, starBonusCoins: 5, treasureBonusCoins: 15 };
+const FAKE_ECONOMY_CONFIG = {
+  levelBaseCoins: 10,
+  starBonusCoins: 5,
+  treasureBonusCoins: 15,
+  bossBonusCoins: 50,
+};
 
 vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => "DB") }));
@@ -72,9 +77,22 @@ const getUnlockedWorldCountMock = vi.mocked(getUnlockedWorldCount);
 const resolveTargetMock = vi.mocked(resolveCurrentLevelTarget);
 
 /** Décomposition de gain factice (le service la renvoie ; l'action la transmet au client). */
-const FAKE_REWARD: RewardBreakdown = { base: 10, starBonus: 10, treasureBonus: 0, total: 20 };
+const FAKE_REWARD: RewardBreakdown = {
+  base: 10,
+  starBonus: 10,
+  treasureBonus: 0,
+  bossBonus: 0,
+  total: 20,
+};
 /** Cible résolue **serveur** factice (monde/niveau) — jamais transmise par le client. */
 const FAKE_TARGET = { worldIndex: 0, levelIndex: 3 };
+/** Légendaire factice (le service la renvoie sur un boss ; l'action la transmet). */
+const FAKE_LEGENDARY = {
+  characterId: "legendary:0",
+  name: "Braisille",
+  story: "La gardienne légendaire de ce monde.",
+  artRef: "placeholder://legendary/0",
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -92,6 +110,8 @@ describe("startLevelAction", () => {
 
   it("authentifié → compose le niveau du profil de session (horloge + RNG injectés) + starThresholds", async () => {
     profileMock.mockResolvedValue(7);
+    // Cible résolue serveur = nœud NON-boss (levelIndex 3, treasure d'après la géométrie).
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
     const level = { questions: [] };
     startLevelMock.mockReturnValue(level);
     await expect(startLevelAction()).resolves.toEqual({
@@ -106,6 +126,34 @@ describe("startLevelAction", () => {
     expect(configArg).toBe(FAKE_CONFIG);
     expect(typeof nowArg).toBe("number");
     expect(typeof rngArg).toBe("function");
+  });
+
+  // GARDE « nœud NON-boss ⇒ taille normale (LEVEL_SIZE) » (effet observable) : la cible
+  // résolue serveur est un nœud non-boss (levelIndex 3 < boss 10 d'après la géométrie
+  // FAKE_MAP_CONFIG) → `startLevel` reçoit `{ size: 10 }`. Le type de nœud est dérivé
+  // SERVEUR (baseNodeTypeAt réel, jamais mocké), jamais transmis par le client.
+  it("nœud NON-boss ⇒ startLevel appelé avec size = LEVEL_SIZE (10), pas la taille boss", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 3 }); // treasure, non-boss
+    startLevelMock.mockReturnValue({ questions: [] });
+    await startLevelAction();
+    const options = startLevelMock.mock.calls[0][5];
+    expect(options).toEqual({ size: 10 }); // LEVEL_SIZE, jamais bossQuestionCount (13)
+    // Cible résolue SERVEUR depuis le profil de session (jamais du client).
+    expect(resolveTargetMock).toHaveBeenCalledWith("DB", 7, FAKE_MAP_CONFIG.levelsPerWorld);
+  });
+
+  // GARDE « nœud BOSS ⇒ taille plus longue (bossQuestionCount) » (effet observable,
+  // mutation-prouvé) : la cible résolue serveur est le boss (levelIndex === levelsPerWorld =
+  // 10, dernier nœud d'après la géométrie) → `startLevel` reçoit `{ size: 13 }` (⚙️
+  // bossQuestionCount). ROUGE si le boss retombait sur LEVEL_SIZE (le wiring `isBoss` sauté).
+  it("nœud BOSS ⇒ startLevel appelé avec size = bossQuestionCount (13), pas LEVEL_SIZE", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 10 }); // boss = dernier nœud
+    startLevelMock.mockReturnValue({ questions: [] });
+    await startLevelAction();
+    const options = startLevelMock.mock.calls[0][5];
+    expect(options).toEqual({ size: FAKE_MAP_CONFIG.bossQuestionCount }); // 13, PAS 10
   });
 });
 
@@ -214,6 +262,8 @@ describe("finishLevelAction", () => {
       reward: FAKE_REWARD,
       balance: { coins: 20, shards: 0 },
       coinsApplied: true,
+      legendary: null,
+      legendaryAdded: false,
       ...overrides,
     };
   }
@@ -227,6 +277,8 @@ describe("finishLevelAction", () => {
       reward: null,
       coins: null,
       coinsApplied: false,
+      legendary: null,
+      legendaryAdded: false,
       error: "UNAUTHENTICATED",
     });
     expect(resolveTargetMock).not.toHaveBeenCalled();
@@ -244,6 +296,8 @@ describe("finishLevelAction", () => {
       reward: null,
       coins: null,
       coinsApplied: false,
+      legendary: null,
+      legendaryAdded: false,
       error: "LEVEL_LOCKED",
     });
   });
@@ -260,6 +314,8 @@ describe("finishLevelAction", () => {
       reward: FAKE_REWARD,
       coins: 20,
       coinsApplied: true,
+      legendary: null,
+      legendaryAdded: false,
       error: null,
     });
     // La cible est résolue serveur depuis le profil de session + levelsPerWorld.
@@ -279,16 +335,25 @@ describe("finishLevelAction", () => {
     expect(nowArg).toBeInstanceOf(Date);
   });
 
-  it("succès boss → { unlockedNextWorld: true } (monde suivant débloqué)", async () => {
+  it("succès boss → { unlockedNextWorld: true } + légendaire surfacée (story 5.6)", async () => {
     profileMock.mockResolvedValue(7);
     resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 10 });
     finishLevelMock.mockReturnValue(
-      successResult({ stars: 1, unlockedNextWorld: true, reward: FAKE_REWARD }),
+      successResult({
+        stars: 1,
+        unlockedNextWorld: true,
+        reward: FAKE_REWARD,
+        legendary: FAKE_LEGENDARY,
+        legendaryAdded: true,
+      }),
     );
     const res = await finishLevelAction(1);
     expect(res.ok).toBe(true);
     expect(res.unlockedNextWorld).toBe(true);
     expect(res.coins).toBe(20);
+    // La légendaire garantie du boss est transmise au client (nom + histoire + art placeholder).
+    expect(res.legendary).toEqual(FAKE_LEGENDARY);
+    expect(res.legendaryAdded).toBe(true);
   });
 
   it("rejeu (coinsApplied false) → solde inchangé renvoyé, coinsApplied false (idempotence exposée)", async () => {

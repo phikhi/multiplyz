@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { strings } from "@/strings";
 import type { StarCount } from "@/lib/engine/stars";
+import type { GrantedLegendary } from "@/lib/game/finish-level";
 
 /**
  * Écran de résultats de fin de niveau (WIREFRAMES §4, ENGINE §5, ECONOMY §4.1, gains #126).
@@ -29,18 +30,111 @@ export interface ResultsScreenProps {
    * gain ; l'écran présente « tu gagnes N pièces »).
    */
   readonly coins: number | null;
+  /**
+   * **Légendaire garantie** obtenue en battant le boss (MAP §6, story 5.6), ou `null` pour un
+   * niveau non-boss (aucune carte légendaire affichée). Nom + histoire + réf d'art placeholder.
+   */
+  readonly legendary?: GrantedLegendary | null;
   readonly onContinue: () => void;
 }
 
 const FILLED_STAR = "★";
 const EMPTY_STAR = "☆";
 const STAR_SLOTS: readonly StarCount[] = [1, 2, 3];
+/** Emoji décoratif de la silhouette placeholder de la légendaire (art réel = épic #6). */
+const LEGENDARY_EMOJI = "🐾";
 
 function fill(template: string, token: string, value: string): string {
   return template.replace(token, value);
 }
 
-export function ResultsScreen({ stars, coins, onContinue }: ResultsScreenProps) {
+/**
+ * **Carte de la légendaire** révélée à l'écran de résultats du boss (MAP §6, COPY §3
+ * « déblocage créature »). Silhouette placeholder (art réel épic #6) + nom + histoire. Le
+ * nom + l'annonce sont **doublés d'un texte** (jamais la seule icône/couleur, a11y). Tokens
+ * `--collection-*` (texte fiable ≥4.5:1 sur le fond de carte, jamais `--color-star` sur fond
+ * neutre — rétro #126). L'ensemble est un `role="img"` au nom accessible explicite.
+ */
+function LegendaryReveal({ legendary }: { readonly legendary: GrantedLegendary }) {
+  const label = fill(strings.play.results.legendaryLabel, "{nom}", legendary.name);
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      data-results-legendary={legendary.characterId}
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "var(--space-2)",
+        padding: "var(--space-4)",
+        maxWidth: "var(--max-width-play)",
+        backgroundColor: "var(--collection-card-bg)",
+        border: "1px solid var(--collection-card-border)",
+        borderRadius: "var(--border-radius-lg)",
+      }}
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "var(--space-8)",
+          height: "var(--space-8)",
+          borderRadius: "var(--border-radius-full)",
+          backgroundColor: "var(--collection-placeholder-bg)",
+          color: "var(--collection-placeholder-glyph)",
+          fontSize: "var(--font-size-2xl)",
+        }}
+      >
+        {LEGENDARY_EMOJI}
+      </span>
+      <p
+        aria-hidden="true"
+        style={{
+          margin: 0,
+          fontFamily: "var(--font-family-display)",
+          fontSize: "var(--font-size-md)",
+          fontWeight: "var(--font-weight-bold)",
+          // Glyphe/texte de rareté = token TEXTE fiable (≥4.5:1 sur le fond de carte),
+          // jamais --color-star sur fond neutre (rétro #126). ★ + « légendaire » (double a11y).
+          color: "var(--collection-rarity-glyph)",
+        }}
+      >
+        {`${FILLED_STAR} ${strings.play.results.legendaryTitle}`}
+      </p>
+      <p
+        aria-hidden="true"
+        style={{
+          margin: 0,
+          fontFamily: "var(--font-family-display)",
+          fontSize: "var(--font-size-lg)",
+          fontWeight: "var(--font-weight-bold)",
+          color: "var(--collection-text)",
+        }}
+      >
+        {legendary.name}
+      </p>
+      {legendary.story !== "" && (
+        <p
+          aria-hidden="true"
+          style={{
+            margin: 0,
+            fontFamily: "var(--font-family-body)",
+            fontSize: "var(--font-size-sm)",
+            color: "var(--collection-text-muted)",
+            textAlign: "center",
+          }}
+        >
+          {legendary.story}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function ResultsScreen({ stars, coins, legendary = null, onContinue }: ResultsScreenProps) {
   // Ref-callback : focus le titre dès qu'il est monté (LEARNINGS #36 — évite la
   // branche `current === null` non couverte d'un `useEffect` + `?.`).
   const focusOnMount = useCallback((node: HTMLHeadingElement | null) => {
@@ -121,6 +215,8 @@ export function ResultsScreen({ stars, coins, onContinue }: ResultsScreenProps) 
           {coinsLabel}
         </p>
       )}
+
+      {legendary !== null && <LegendaryReveal legendary={legendary} />}
 
       <p
         style={{

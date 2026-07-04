@@ -205,6 +205,84 @@ describe("buildLevel — pools DUE / NEW / MAINT (ENGINE §4)", () => {
   });
 });
 
+describe("buildLevel — taille cible (boss « plus long », MAP §6, story 5.6)", () => {
+  // Taille du boss d'après le défaut ⚙️ (server-config) — le boss est « un peu plus long »
+  // que les 10 questions d'un niveau normal (MAP §6 : « ~12-15 questions »).
+  const BOSS_SIZE = CONFIG_DEFAULTS.map.bossQuestionCount; // 13
+
+  // GARDE « boss ⇒ niveau plus long » (effet observable, mutation-prouvé) : avec assez de
+  // DUE (box haute pour ne pas déclencher la consolidation qui capperait les NEW), un niveau
+  // de taille `bossQuestionCount` compose EXACTEMENT `bossQuestionCount` questions nominales.
+  // ROUGE si le boss retombait sur LEVEL_SIZE (10) : `size` ignoré ⇒ 10 ≠ 13.
+  it("boss (size = bossQuestionCount) compose bossQuestionCount questions, PAS LEVEL_SIZE", () => {
+    // 20 faits `add` DUE à box 3 (≥ interleaveMinBox, > consolidationMaxBox=1 → aucun weak,
+    // capNew reste à newMaxPerLevel mais on a assez de DUE pour remplir sans NEW). Une seule
+    // compétence → périmètre bloqué, tout DUE. Assez pour remplir 13.
+    const dueOnly = addFacts(20).map((f) => entry(f, state({ box: 3, nextDue: NOW - MS_PER_DAY })));
+    const level = buildLevel(dueOnly, CONFIG, NOW, { size: BOSS_SIZE });
+    // Compte des questions NOMINALES (hors re-ask ; aucun re-ask ici → longueur = size).
+    const nominal = level.filter((i) => !i.isReask);
+    expect(nominal).toHaveLength(BOSS_SIZE); // 13, PAS 10
+    expect(BOSS_SIZE).toBeGreaterThan(LEVEL_SIZE); // le boss est bien plus long (sanity)
+  });
+
+  // GARDE « niveau normal reste à LEVEL_SIZE » (contraste, effet observable) : sans `size`,
+  // ou avec `size: LEVEL_SIZE`, le même scope compose 10 — prouve que la taille vient bien
+  // de `size`, pas d'une constante figée.
+  it("niveau normal (size par défaut) reste à LEVEL_SIZE (10), le boss est plus grand", () => {
+    const dueOnly = addFacts(20).map((f) => entry(f, state({ box: 3, nextDue: NOW - MS_PER_DAY })));
+    const normal = buildLevel(dueOnly, CONFIG, NOW); // défaut LEVEL_SIZE
+    const boss = buildLevel(dueOnly, CONFIG, NOW, { size: BOSS_SIZE });
+    expect(normal.filter((i) => !i.isReask)).toHaveLength(LEVEL_SIZE); // 10
+    expect(boss.filter((i) => !i.isReask).length).toBeGreaterThan(normal.length); // 13 > 10
+  });
+
+  // GARDE « mix ~70 % DUE dérivé de la taille » (modèle inchangé, seule N change) : le quota
+  // DUE prioritaire est `round(size × 0.7)` — 9 pour un boss de 13 (vs 7 pour 10). Le cap de
+  // nouveaux (newMaxPerLevel) borne les NEW comme dans un niveau normal.
+  it("mix DUE dérive de la taille : ~70 % DUE prioritaires (9 sur 13), cap NEW respecté", () => {
+    // DUE à box 2 (> consolidationMaxBox=1 → aucun weak, capNew reste à newMaxPerLevel=2) :
+    // le boss doit alors mêler DUE (jusqu'à 11) + NEW (cap 2) pour atteindre 13.
+    const dueOnly = addFacts(11).map((f) => entry(f, state({ box: 2, nextDue: NOW - MS_PER_DAY })));
+    const newAdd = addFacts(20)
+      .slice(11)
+      .map((f) => entry(f, null));
+    const boss = buildLevel([...dueOnly, ...newAdd], CONFIG, NOW, { size: BOSS_SIZE });
+    const dueKeys = new Set(dueOnly.map((e) => e.fact.key));
+    const newKeys = new Set(newAdd.map((e) => e.fact.key));
+    const inLevelNew = boss.filter((i) => newKeys.has(i.fact.key)).length;
+    const inLevelDue = boss.filter((i) => dueKeys.has(i.fact.key)).length;
+    expect(boss.filter((i) => !i.isReask)).toHaveLength(BOSS_SIZE); // remplit bien 13
+    // Le cap de nouveaux est identique (2, modèle inchangé) — seule la taille grandit.
+    expect(inLevelNew).toBeLessThanOrEqual(CONFIG.newMaxPerLevel);
+    // Le reste (jusqu'à 13) est du DUE : 13 − NEW.
+    expect(inLevelDue).toBe(BOSS_SIZE - inLevelNew);
+  });
+
+  // GARDE « size borné à ≥ 1 » (garde de forme) : un `size` aberrant (0 / négatif) retombe
+  // sur au moins 1 question (no-fail : un niveau a toujours au moins une question).
+  it("size ≤ 0 borné à 1 (garde de forme no-fail)", () => {
+    const dueOnly = addFacts(5).map((f) => entry(f, state({ box: 3, nextDue: NOW - MS_PER_DAY })));
+    expect(buildLevel(dueOnly, CONFIG, NOW, { size: 0 }).filter((i) => !i.isReask)).toHaveLength(1);
+    expect(buildLevel(dueOnly, CONFIG, NOW, { size: -5 }).filter((i) => !i.isReask)).toHaveLength(
+      1,
+    );
+  });
+
+  // GARDE « repli d'impasse respecte la taille du boss » (effet observable) : dans une impasse
+  // (DUE ∅ ∧ MAINT ∅ ∧ capNew=0), le repli remonte jusqu'à `size` faits — donc jusqu'à
+  // bossQuestionCount pour un boss (pas plafonné à LEVEL_SIZE).
+  it("repli d'impasse remplit jusqu'à `size` (boss ⇒ jusqu'à bossQuestionCount)", () => {
+    // Impasse : 12 faits `add` box 1 (weak ≥ consolidationThreshold=8 → capNew 0) NON dus
+    // (échéance future) → DUE ∅, MAINT ∅, capNew 0 → le repli se déclenche.
+    const stuck = addFacts(12).map((f) => entry(f, state({ box: 1, nextDue: NOW + MS_PER_DAY })));
+    const boss = buildLevel(stuck, CONFIG, NOW, { size: BOSS_SIZE });
+    // Le repli remonte jusqu'à 12 (tous les remontables) — plus que LEVEL_SIZE (10),
+    // prouvant que la taille du boss n'est pas plafonnée à 10 au repli.
+    expect(boss.filter((i) => !i.isReask).length).toBeGreaterThan(LEVEL_SIZE);
+  });
+});
+
 describe("buildLevel — cap de nouveaux + consolidation (ENGINE §4/§7)", () => {
   it("weak ≥ consolidationThreshold → 0 nouveau (consolidation pure)", () => {
     // consolidationThreshold = 8 : 9 faits fragiles (box ≤ 1) DUE + des NEW.

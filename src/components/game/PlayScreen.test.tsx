@@ -61,9 +61,11 @@ beforeEach(() => {
     ok: true,
     stars: 0,
     unlockedNextWorld: false,
-    reward: { base: 10, starBonus: 0, treasureBonus: 0, total: 10 },
+    reward: { base: 10, starBonus: 0, treasureBonus: 0, bossBonus: 0, total: 10 },
     coins: 10,
     coinsApplied: true,
+    legendary: null,
+    legendaryAdded: false,
     error: null,
   });
 });
@@ -390,9 +392,11 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
       ok: true,
       stars: 3,
       unlockedNextWorld: false,
-      reward: { base: 10, starBonus: 15, treasureBonus: 0, total: 25 },
+      reward: { base: 10, starBonus: 15, treasureBonus: 0, bossBonus: 0, total: 25 },
       coins: 25,
       coinsApplied: true,
+      legendary: null,
+      legendaryAdded: false,
       error: null,
     });
 
@@ -434,6 +438,8 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
       reward: null,
       coins: null,
       coinsApplied: false,
+      legendary: null,
+      legendaryAdded: false,
       error: "UNAUTHENTICATED",
     });
 

@@ -51,6 +51,17 @@ async function renderReady(worldMap: WorldMap) {
   return result;
 }
 
+/**
+ * Le lien de **nœud** (vers `/jouer`) — l'écran carte porte aussi un lien de hub vers la
+ * collection (`/collection`, story 5.6, WIREFRAMES §2), donc on cible le nœud par son attribut
+ * `data-map-node` plutôt qu'un `getByRole("link")` ambigu.
+ */
+function nodeLink(): HTMLElement {
+  const link = document.querySelector<HTMLElement>("a[data-map-node]");
+  if (link === null) throw new Error("aucun lien de nœud rendu");
+  return link;
+}
+
 describe("MapScreen — chargement / erreur", () => {
   it("affiche un statut de chargement puis la carte (non authentifié → erreur)", async () => {
     currentMapActionMock.mockResolvedValue({ map: null });
@@ -183,7 +194,8 @@ describe("MapScreen — connecteur du chemin (métaphore Candy Crush, WIREFRAMES
 describe("MapScreen — états de nœud visibles (verrouillé / courant / terminé)", () => {
   it("nœud verrouillé : pas un lien, nom accessible dédié, jamais navigable", async () => {
     await renderReady(map([node({ status: "locked" })]));
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    // Aucun lien de NŒUD (le lien de hub collection est un lien distinct, non-nœud).
+    expect(document.querySelector("a[data-map-node]")).toBeNull();
     expect(
       screen.getByRole("img", {
         name:
@@ -196,7 +208,7 @@ describe("MapScreen — états de nœud visibles (verrouillé / courant / termin
 
   it("nœud courant : lien vers /jouer (point de reprise), nom accessible dédié", async () => {
     await renderReady(map([node({ status: "current" })]));
-    const link = screen.getByRole("link");
+    const link = nodeLink();
     expect(link).toHaveAttribute("href", "/jouer");
     expect(link).toHaveAccessibleName(
       strings.map.nodeCurrent.replace("{n}", "1").replace("{total}", "1") +
@@ -207,7 +219,7 @@ describe("MapScreen — états de nœud visibles (verrouillé / courant / termin
 
   it("nœud terminé : lien vers /jouer (rejoue monotone), nom accessible porte les étoiles", async () => {
     await renderReady(map([node({ status: "completed", stars: 2 })]));
-    const link = screen.getByRole("link");
+    const link = nodeLink();
     expect(link).toHaveAttribute("href", "/jouer");
     expect(link.getAttribute("aria-label")).toContain(
       strings.map.starsLabelPlural.replace("{n}", "2"),
@@ -216,7 +228,7 @@ describe("MapScreen — états de nœud visibles (verrouillé / courant / termin
 
   it("étoiles à 1 → libellé singulier, pas pluriel", async () => {
     await renderReady(map([node({ status: "completed", stars: 1 })]));
-    const link = screen.getByRole("link");
+    const link = nodeLink();
     expect(link.getAttribute("aria-label")).toContain(strings.map.starsLabel.replace("{n}", "1"));
   });
 });
@@ -231,7 +243,7 @@ describe("MapScreen — icône de type (normal / révision / trésor / boss), do
     "type=%s → le nom accessible du nœud porte le libellé de type '%s'",
     async (type, label) => {
       await renderReady(map([node({ status: "current", type })]));
-      expect(screen.getByRole("link").getAttribute("aria-label")).toContain(label);
+      expect(nodeLink().getAttribute("aria-label")).toContain(label);
     },
   );
 
@@ -251,10 +263,18 @@ describe("MapScreen — icône de type (normal / révision / trésor / boss), do
   );
 });
 
+describe("MapScreen — hub collection (story 5.6, WIREFRAMES §2)", () => {
+  it("affiche un lien vers la collection (Pokédex) depuis la carte (hub)", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    const link = screen.getByRole("link", { name: strings.collection.title });
+    expect(link).toHaveAttribute("href", "/collection");
+  });
+});
+
 describe("MapScreen — cibles tactiles ≥ 44px (a11y)", () => {
   it("chaque nœud navigable expose une cible ≥ --tap-target-min", async () => {
     await renderReady(map([node({ status: "current" })]));
-    const link = screen.getByRole("link");
+    const link = nodeLink();
     expect(link.style.minWidth).toBe("var(--tap-target-min)");
     expect(link.style.minHeight).toBe("var(--tap-target-min)");
   });

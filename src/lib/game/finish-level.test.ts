@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { ledger, profiles } from "@/lib/db/schema";
+import { characters, collection, collectionKey, ledger, profiles } from "@/lib/db/schema";
 import type { EconomyConfig, MapConfig } from "@/config/server-config";
 import { loadStars, recordStars } from "./progress";
 import { getUnlockedWorldCount } from "./unlock";
 import { loadWallet } from "./wallet";
+import { legendaryCharacterId, legendaryForWorld } from "./collection";
 import { finishLevel, levelRewardRefId, type FinishLevelInput } from "./finish-level";
 
 /**
@@ -25,8 +26,13 @@ const LATER = new Date(Date.UTC(2026, 6, 4, 11, 0, 0));
 /** 10 niveaux + boss (index 10). `treasureEvery: 4` → nœuds 3 et 7 sont des trésors. */
 const CONFIG: MapConfig = { levelsPerWorld: 10, treasureEvery: 4, bossQuestionCount: 13 };
 const BOSS = CONFIG.levelsPerWorld; // 10
-/** Barème ⚙️ (ECONOMY §5) : base 10, +5/étoile, +15 trésor. */
-const ECONOMY: EconomyConfig = { levelBaseCoins: 10, starBonusCoins: 5, treasureBonusCoins: 15 };
+/** Barème ⚙️ (ECONOMY §5) : base 10, +5/étoile, +15 trésor, +50 boss. */
+const ECONOMY: EconomyConfig = {
+  levelBaseCoins: 10,
+  starBonusCoins: 5,
+  treasureBonusCoins: 15,
+  bossBonusCoins: 50,
+};
 
 function seedProfile(name: string): number {
   return db
@@ -106,7 +112,13 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
     const result = finish(0, 0, 2); // nœud 0 = normal
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.reward).toEqual({ base: 10, starBonus: 10, treasureBonus: 0, total: 20 });
+    expect(result.reward).toEqual({
+      base: 10,
+      starBonus: 10,
+      treasureBonus: 0,
+      bossBonus: 0,
+      total: 20,
+    });
     expect(result.coinsApplied).toBe(true);
     expect(result.balance.coins).toBe(20);
     // Solde persisté réellement (pas seulement la valeur renvoyée).
@@ -134,7 +146,13 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
     const result = finish(0, 3, 1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.reward).toEqual({ base: 10, starBonus: 5, treasureBonus: 15, total: 30 });
+    expect(result.reward).toEqual({
+      base: 10,
+      starBonus: 5,
+      treasureBonus: 15,
+      bossBonus: 0,
+      total: 30,
+    });
     expect(loadWallet(db, profileId).coins).toBe(30);
   });
 
@@ -147,13 +165,17 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
     expect(result.ok && result.reward.total).toBe(15); // 10 + 5, pas de +15
   });
 
-  // GARDE « boss NE reçoit PAS le bonus trésor » (hors scope 5.5 : gros lot boss = 5.6) : le boss
-  // (dernier nœud) rapporte le gain de niveau standard, jamais un bonus trésor.
-  it("BOSS (dernier nœud) ⇒ gain de niveau standard, AUCUN bonus trésor (gros lot boss = 5.6)", () => {
+  // GARDE « boss ⇒ gros lot +50, jamais bonus trésor » (story 5.6) : le boss (dernier nœud)
+  // rapporte le gain de niveau standard + le bonus boss (+50), jamais un bonus trésor (le boss
+  // n'est jamais un trésor, MAP §6). À 3★ : 10 + 3×5 + 50 = 75.
+  it("BOSS (dernier nœud) ⇒ gros lot +50 ajouté, AUCUN bonus trésor (10 + 3×5 + 50 = 75)", () => {
     completeUpTo(0, BOSS);
     const result = finish(0, BOSS, 3);
     expect(result.ok && result.reward.treasureBonus).toBe(0);
-    expect(result.ok && result.reward.total).toBe(25); // 10 + 3×5
+    expect(result.ok && result.reward.bossBonus).toBe(50);
+    expect(result.ok && result.reward.total).toBe(75); // 10 + 3×5 + 50
+    // Le gros lot est réellement crédité au portefeuille.
+    expect(loadWallet(db, profileId).coins).toBe(75);
   });
 
   // GARDE « barème = config versionnée » : un barème différent change le montant (rouge si un
@@ -163,6 +185,7 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
       levelBaseCoins: 100,
       starBonusCoins: 50,
       treasureBonusCoins: 0,
+      bossBonusCoins: 0,
     };
     const result = finish(0, 0, 2, NOW, richConfig);
     expect(result.ok && result.reward.total).toBe(200); // 100 + 2×50
@@ -176,6 +199,7 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
       levelBaseCoins: 0,
       starBonusCoins: 0,
       treasureBonusCoins: 0,
+      bossBonusCoins: 0,
     };
     const result = finish(0, 0, 0, NOW, zeroConfig);
     expect(result.ok).toBe(true);
@@ -268,6 +292,65 @@ describe("finishLevel — ATOMICITÉ multi-écritures / rollback (règle #122/#1
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(2);
     expect(loadWallet(db, profileId).coins).toBe(20);
   });
+
+  // GARDE ROLLBACK BOSS — panne de l'INSERT `collection` (5ᵉ écriture, story 5.6) :
+  // Le chemin boss protège ≥2 écritures dans la MÊME transaction : recordStars (progress, 1ʳᵉ)
+  // → upsert wallet (2ᵉ) → INSERT ledger (3ᵉ) → upsert characters (4ᵉ) → INSERT collection (5ᵉ).
+  // On induit la panne à la 5ᵉ écriture GARDÉE — l'INSERT `collection` — en DROPPANT la colonne
+  // `count` de `collection` (rebuild sans `count`). Le `SELECT id FROM collection WHERE …`
+  // d'idempotence en amont (dans `grantLegendaryInTx`) reste requêtable (colonne id présente) →
+  // il NE court-circuite PAS avant la 1ʳᵉ écriture (règle #122 : la panne frappe l'écriture
+  // gardée, jamais une lecture en amont). L'ordre observé :
+  //   1. recordStars réussit (progress)            ← 1ʳᵉ écriture
+  //   2. upsert wallet réussit (+coins)            ← 2ᵉ écriture
+  //   3. INSERT ledger réussit                     ← 3ᵉ écriture
+  //   4. upsert characters réussit (catalogue)     ← 4ᵉ écriture
+  //   5. INSERT collection ÉCHOUE (colonne `count` manquante) ← 5ᵉ écriture gardée
+  //   ⇒ la transaction ROLLBACK : NI progress, NI wallet, NI ledger, NI catalogue ne persistent.
+  // PREUVE : retirer le wrapper `db.transaction` de finishLevel casse PRÉCISÉMENT ce test
+  // (progress + wallet + ledger + catalogue resteraient écrits malgré l'échec du collection insert).
+  it("ROLLBACK BOSS : panne de l'INSERT collection (5ᵉ écriture) ⇒ progress, wallet, ledger ET catalogue annulés", () => {
+    completeUpTo(0, BOSS); // ouvre le boss
+
+    // Rebuild `collection` SANS la colonne `count` : le SELECT d'idempotence (id) reste valide →
+    // l'échec survient à l'INSERT (qui pose `count`), APRÈS recordStars + wallet + ledger + characters.
+    db.run(sql`DROP TABLE collection`);
+    db.run(
+      sql`CREATE TABLE collection (
+        id text PRIMARY KEY NOT NULL,
+        profile_id integer NOT NULL,
+        character_id text NOT NULL,
+        stage integer NOT NULL DEFAULT 1,
+        nickname text,
+        unlocked_at integer NOT NULL DEFAULT (unixepoch())
+      )`,
+    );
+
+    expect(() => finish(0, BOSS, 3)).toThrow();
+
+    // ROLLBACK PROUVÉ : rien n'a persisté du boss — ni progression, ni pièces, ni ledger, ni
+    // catalogue de la légendaire (aucun état partiel : pas de légendaire sans progression, etc.).
+    expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: BOSS })).toBe(0);
+    // Le solde ne porte que les crédits des niveaux 0..9 (completeUpTo) — recordStars direct
+    // n'écrit pas de wallet ; aucun crédit boss n'a été appliqué → solde à 0.
+    expect(loadWallet(db, profileId).coins).toBe(0);
+    // Aucune ligne ledger (le crédit boss a été annulé).
+    expect(db.select({ id: ledger.id }).from(ledger).all()).toEqual([]);
+    // Le catalogue de la légendaire a été annulé (rollback de l'upsert characters).
+    expect(db.select().from(characters).all()).toEqual([]);
+  });
+
+  // Contrôle NÉGATIF du rollback boss : le MÊME boss SANS panne écrit progress + wallet + ledger
+  // + catalogue + possession (prouve que la panne est la SEULE cause du rollback boss).
+  it("CONTRÔLE BOSS : sans panne, le boss écrit progress, wallet, catalogue ET possession", () => {
+    completeUpTo(0, BOSS);
+    const result = finish(0, BOSS, 3);
+    expect(result.ok).toBe(true);
+    expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: BOSS })).toBe(3);
+    expect(loadWallet(db, profileId).coins).toBe(75); // 10 + 3×5 + 50 boss
+    expect(db.select().from(characters).all()).toHaveLength(1);
+    expect(db.select().from(collection).all()).toHaveLength(1);
+  });
 });
 
 describe("finishLevel — déblocage linéaire boss ⇒ monde suivant (MAP §6)", () => {
@@ -296,6 +379,89 @@ describe("finishLevel — déblocage linéaire boss ⇒ monde suivant (MAP §6)"
     expect(result.ok && result.stars).toBe(1);
     expect(result.ok && result.unlockedNextWorld).toBe(true);
     expect(getUnlockedWorldCount(db, profileId, CONFIG.levelsPerWorld)).toBe(2);
+  });
+});
+
+describe("finishLevel — légendaire garantie du boss (MAP §6, ECONOMY §3.2/§3.3, story 5.6)", () => {
+  // GARDE « boss ⇒ légendaire ajoutée » (effet observable) : battre le boss ajoute la légendaire
+  // déterministe du monde à la collection (hors œufs). Rouge si l'ajout cessait d'avoir lieu.
+  it("BOSS battu ⇒ légendaire du monde ajoutée à la collection (déterministe, hors œufs)", () => {
+    completeUpTo(0, BOSS);
+    const result = finish(0, BOSS, 3);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.legendaryAdded).toBe(true);
+    // La légendaire renvoyée = la légendaire déterministe du monde 0.
+    const expected = legendaryForWorld(0);
+    expect(result.legendary).toEqual({
+      characterId: expected.id,
+      name: expected.nameDefault,
+      story: expected.story,
+      artRef: expected.artRef,
+    });
+    // Effet réel persisté : la possession existe dans `collection`, le catalogue est amorcé.
+    const owned = db
+      .select()
+      .from(collection)
+      .where(eq(collection.id, collectionKey(profileId, legendaryCharacterId(0))))
+      .get();
+    expect(owned?.characterId).toBe(legendaryCharacterId(0));
+    expect(owned?.count).toBe(1);
+    const cat = db
+      .select()
+      .from(characters)
+      .where(eq(characters.id, legendaryCharacterId(0)))
+      .get();
+    expect(cat?.rarity).toBe("legendary");
+    // HORS ŒUFS (ECONOMY §4.2) : la légendaire du catalogue est exclue du pool d'œufs.
+    expect(cat?.inEggPool).toBe(false);
+  });
+
+  // GARDE « niveau NON-boss ⇒ AUCUNE légendaire » (effet observable, contraste) : un niveau
+  // normal ne donne jamais de légendaire (la collection reste vide).
+  it("niveau NON-BOSS ⇒ AUCUNE légendaire (collection vide, legendary null)", () => {
+    const result = finish(0, 0, 3);
+    expect(result.ok && result.legendary).toBeNull();
+    expect(result.ok && result.legendaryAdded).toBe(false);
+    expect(db.select().from(collection).all()).toHaveLength(0);
+  });
+
+  // GARDE « déterminisme par monde » : le monde 1 donne une légendaire DIFFÉRENTE du monde 0
+  // (id/nom dérivés de `world_index`). Rouge si la légendaire ne dépendait pas du monde.
+  it("chaque monde a SA légendaire déterministe (monde 1 ≠ monde 0)", () => {
+    // Ouvre le monde 1 en battant le boss du monde 0.
+    completeUpTo(0, BOSS);
+    finish(0, BOSS, 3);
+    // Bat le boss du monde 1.
+    for (let i = 0; i < BOSS; i += 1)
+      recordStars(db, { profileId, worldIndex: 1, levelIndex: i }, 3, NOW);
+    const result = finish(1, BOSS, 3);
+    expect(result.ok && result.legendary?.characterId).toBe(legendaryCharacterId(1));
+    // Deux légendaires distinctes possédées (une par monde).
+    expect(db.select().from(collection).all()).toHaveLength(2);
+    expect(legendaryCharacterId(1)).not.toBe(legendaryCharacterId(0));
+  });
+
+  // GARDE « IDEMPOTENCE : rejeu du boss ⇒ PAS de doublon parasite » (effet observable) : re-battre
+  // le boss n'ajoute JAMAIS une 2ᵉ ligne (la légendaire est garantie UNE fois). Rouge si l'ajout
+  // n'était pas idempotent (2ᵉ ligne / count incrémenté).
+  it("REJEU du boss ⇒ PAS de doublon parasite (une seule possession, legendaryAdded false au rejeu)", () => {
+    completeUpTo(0, BOSS);
+    const first = finish(0, BOSS, 3, NOW);
+    expect(first.ok && first.legendaryAdded).toBe(true);
+
+    const replay = finish(0, BOSS, 3, LATER); // rejeu réseau
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) return;
+    // La légendaire est TOUJOURS décrite (le monde la donne), mais NON ré-ajoutée.
+    expect(replay.legendary?.characterId).toBe(legendaryCharacterId(0));
+    expect(replay.legendaryAdded).toBe(false);
+    // Une SEULE possession (pas de doublon), count inchangé.
+    const owned = db.select().from(collection).all();
+    expect(owned).toHaveLength(1);
+    expect(owned[0]?.count).toBe(1);
+    // Un SEUL catalogue amorcé (upsert idempotent).
+    expect(db.select().from(characters).all()).toHaveLength(1);
   });
 });
 

@@ -79,7 +79,7 @@ export interface LevelItem {
   readonly isReask: boolean;
 }
 
-/** Nombre cible de questions par niveau (ENGINE §4 : « ~10 questions »). */
+/** Nombre cible de questions par niveau **normal** (ENGINE §4 : « ~10 questions »). */
 export const LEVEL_SIZE = 10;
 
 /**
@@ -91,10 +91,14 @@ export const LEVEL_SIZE = 10;
 export const DUE_TARGET_RATIO = 0.7;
 
 /**
- * Nombre d'items DUE visés dans un niveau plein (dérivé de `DUE_TARGET_RATIO`).
- * `Math.round(10 × 0.7) = 7` (ENGINE §4 pseudo-code : `prendre(due, 7)`).
+ * Nombre d'items DUE visés pour une **taille de niveau** donnée (dérivé de
+ * `DUE_TARGET_RATIO`, ENGINE §4 pseudo-code : `prendre(due, ~70 %)`). Fonction du `size`
+ * (10 normal → 7 ; 13 boss → 9) : le **modèle de sélection est identique**, seule la taille
+ * cible change (MAP §6 : le boss est « un peu plus long », même mix des compétences du moment).
  */
-const DUE_TARGET = Math.round(LEVEL_SIZE * DUE_TARGET_RATIO);
+function dueTargetFor(size: number): number {
+  return Math.round(size * DUE_TARGET_RATIO);
+}
 
 /**
  * `true` si le fait est **DUE** : déjà rencontré, boîte sous le plafond (`< maxBox`,
@@ -425,6 +429,18 @@ export interface BuildLevelOptions {
    * Défaut : aucun re-ask.
    */
   readonly reaskKeys?: ReadonlySet<string>;
+  /**
+   * **Taille cible** du niveau (nombre de questions nominales, hors re-ask). Défaut
+   * `LEVEL_SIZE` (10, niveau normal, ENGINE §4). Le **boss** compose un niveau **plus
+   * long** (`bossQuestionCount` ~12-15, MAP §6) en passant simplement un `size` plus grand
+   * — le **modèle de sélection est inchangé** (mêmes pools DUE/NEW/MAINT, même cap, même
+   * mix ~70 % DUE, même ordonnancement/re-ask), seule la **taille** varie (« un peu plus
+   * long, mix des compétences du moment », MAP §6). Résolu **serveur** (jamais du client) :
+   * l'appelant dérive `size` du **type de nœud** de la géométrie (`baseNodeTypeAt`, boss ⇒
+   * `bossQuestionCount`), source de vérité serveur. Une valeur `< 1` est bornée à 1 (garde
+   * de forme : un niveau a au moins une question).
+   */
+  readonly size?: number;
 }
 
 /**
@@ -460,6 +476,10 @@ export function buildLevel(
 ): LevelItem[] {
   const rotation = options.rotation ?? 0;
   const reaskKeys = options.reaskKeys ?? new Set<string>();
+  // Taille cible : `LEVEL_SIZE` (normal) ou `bossQuestionCount` (boss, MAP §6). Bornée à ≥ 1
+  // (garde de forme : un niveau a au moins une question). Le mix ~70 % DUE en dérive.
+  const size = Math.max(1, options.size ?? LEVEL_SIZE);
+  const dueTarget = dueTargetFor(size);
 
   // 1. Périmètre actif (§7 : bloqué → interleaving).
   const activeSkills = new Set(selectActiveSkills(scope, config, rotation));
@@ -509,14 +529,14 @@ export function buildLevel(
     }
   };
 
-  take(due, DUE_TARGET); // priorité consolidation (~70 %)
-  const newTaken = pickNew(neu, capNew, seen, picked); // introduit peu de nouveaux
-  take(maint, LEVEL_SIZE); // entretien pour compléter le reste
+  take(due, dueTarget); // priorité consolidation (~70 %)
+  const newTaken = pickNew(neu, capNew, seen, picked, size); // introduit peu de nouveaux
+  take(maint, size); // entretien pour compléter le reste
 
   // 5. Début de jeu (peu de DUE/MAINT) : compléter par du DUE restant puis du NEW,
-  //    toujours dans la limite du cap de nouveaux et de LEVEL_SIZE.
-  take(due, LEVEL_SIZE); // DUE au-delà du quota des 70 % si la place reste
-  pickNew(neu, capNew - newTaken, seen, picked); // NEW additionnel sous le cap résiduel
+  //    toujours dans la limite du cap de nouveaux et de la taille cible.
+  take(due, size); // DUE au-delà du quota des 70 % si la place reste
+  pickNew(neu, capNew - newTaken, seen, picked, size); // NEW additionnel sous le cap résiduel
 
   // 5.b **Repli d'impasse anti-niveau-vide** (ENGINE §4/§7, Option 2, issue #108, ADR
   //     0006). La sélection nominale peut produire un niveau **vide** dans une impasse
@@ -533,10 +553,10 @@ export function buildLevel(
   //     Ne se déclenche QUE si la sélection nominale est vide → aucune régression du cas
   //     nominal (verrouillé par un test anti-régression, cf. rétro #60/#61).
   if (picked.length === 0) {
-    picked.push(...fillFromDeadlock(active, config, now));
+    picked.push(...fillFromDeadlock(active, config, now, size));
   }
 
-  const level = picked.slice(0, LEVEL_SIZE);
+  const level = picked.slice(0, size);
 
   // 6. Ordonner facile → dur → presque-su (finir sur une victoire, §4).
   const ordered = orderForVictory(level);
@@ -548,7 +568,8 @@ export function buildLevel(
 /**
  * **Repli d'impasse** (Option 2, ADR 0006, issue #108) : remplit un niveau **vide** avec
  * les faits **box < maxBox** du périmètre actif les **plus proches de leur échéance**
- * (jusqu'à `LEVEL_SIZE`), quand la sélection nominale n'a rien produit (`DUE ∅ ∧ MAINT ∅
+ * (jusqu'à `size`, la taille cible du niveau — `LEVEL_SIZE` normal, `bossQuestionCount`
+ * boss), quand la sélection nominale n'a rien produit (`DUE ∅ ∧ MAINT ∅
  * ∧ capNew = 0`). Consolide exactement les faits weak que le gate veut résorber, un peu
  * en avance ; n'introduit **aucun NEW** (`isRescuable` exclut `state === null`). Tri
  * déterministe (proximité d'échéance puis clé). Mute `seen`/`picked` (helper interne).
@@ -565,28 +586,31 @@ function fillFromDeadlock(
   active: readonly ScopeEntry[],
   config: EngineConfig,
   now: number,
+  size: number,
 ): ScopeEntry[] {
   return active
     .filter((entry) => entry.state !== null && isRescuable(entry.state, config))
     .sort(makeCompareByDueProximity(now))
-    .slice(0, LEVEL_SIZE);
+    .slice(0, size);
 }
 
 /**
  * Prend jusqu'à `capNew` faits **NEW** non déjà retenus, en respectant l'anti-doublon
- * global et `LEVEL_SIZE`. Renvoie le **nombre effectivement pris** (pour décompter le
- * cap résiduel au remplissage de début de partie). Un `capNew ≤ 0` ne prend rien
- * (consolidation pure / cap déjà consommé). Mute `seen`/`picked` (helper interne).
+ * global et la taille cible `size` (`LEVEL_SIZE` normal, `bossQuestionCount` boss). Renvoie
+ * le **nombre effectivement pris** (pour décompter le cap résiduel au remplissage de début
+ * de partie). Un `capNew ≤ 0` ne prend rien (consolidation pure / cap déjà consommé). Mute
+ * `seen`/`picked` (helper interne).
  */
 function pickNew(
   neu: readonly ScopeEntry[],
   capNew: number,
   seen: Set<string>,
   picked: ScopeEntry[],
+  size: number,
 ): number {
   let taken = 0;
   for (const entry of neu) {
-    if (taken >= capNew || picked.length >= LEVEL_SIZE) {
+    if (taken >= capNew || picked.length >= size) {
       break;
     }
     if (!seen.has(entry.fact.key)) {

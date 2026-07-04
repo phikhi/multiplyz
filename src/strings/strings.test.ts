@@ -138,4 +138,34 @@ describe("strings (i18n FR)", () => {
     ]);
     expect(strings.recovery.errors.PARENT_PIN_SAME).toContain("différent");
   });
+
+  it("collection = gabarits interpolables + libellés de rareté + posture croissance (story 5.6)", () => {
+    // Gabarits singulier/pluriel du compteur.
+    expect(strings.collection.count).toContain("{n}");
+    expect(strings.collection.countPlural).toContain("{n}");
+    // Libellé de carte interpolable (nom + rareté, doublage a11y).
+    expect(strings.collection.cardLabel).toContain("{nom}");
+    expect(strings.collection.cardLabel).toContain("{rareté}");
+    // Les 3 raretés ont un libellé FR (doublage texte a11y).
+    expect(Object.keys(strings.collection.rarity).sort()).toEqual(["common", "legendary", "rare"]);
+    // Posture croissance : l'état vide encourage (jamais « faux »/« erreur »).
+    expect(strings.collection.empty.toLowerCase()).not.toContain("faux");
+    expect(strings.collection.empty.toLowerCase()).not.toContain("erreur");
+    expect(strings.collection.renameError.toLowerCase()).not.toContain("faux");
+  });
+
+  it("collection = banques légendaires déterministes (noms/histoires non vides, alignées)", () => {
+    // Les banques ne sont pas vides (le seed déterministe pioche dedans, MAP §6).
+    expect(strings.collection.legendaryNames.length).toBeGreaterThan(0);
+    expect(strings.collection.legendaryStories.length).toBeGreaterThan(0);
+    // Chaque entrée est une chaîne non vide (nom mignon + histoire courte).
+    for (const name of strings.collection.legendaryNames) expect(name.length).toBeGreaterThan(0);
+    for (const story of strings.collection.legendaryStories)
+      expect(story.length).toBeGreaterThan(0);
+  });
+
+  it("révélation légendaire (résultats) = gabarit nom interpolable + voix Teddy", () => {
+    expect(strings.play.results.legendaryLabel).toContain("{nom}");
+    expect(strings.play.results.legendaryTitle.length).toBeGreaterThan(0);
+  });
 });
