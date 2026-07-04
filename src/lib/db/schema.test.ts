@@ -355,6 +355,98 @@ describe("schéma attempts (journal append-only — ENGINE §10)", () => {
     expect(ref.foreignColumns[0].name).toBe("id");
     expect(fk.onDelete).toBe("cascade");
   });
+
+  // Idempotence DB-niveau (#82) : l'index UNIQUE composite `(profile_id,
+  // client_attempt_id)` doit **rejeter au niveau MOTEUR** un rejeu portant le même id
+  // client — indépendamment de la garde applicative `attemptExists`. On insère la 2ᵉ
+  // ligne EN BRUT (sans passer par `submitAttempt` qui court-circuiterait via
+  // `attemptExists`) → seule la contrainte DB peut lever. Effet observable : retirer le
+  // `uniqueIndex(...)` d'`attempts` (ou casser le SQL 0008) → l'insert passe → rouge.
+  // GARDE anti-drift (#82, même patron que la garde `profiles`) : après `runMigrations`,
+  // l'index UNIQUE `attempts_profile_client_attempt_unique` doit EXISTER en base (état
+  // réel `sqlite_master`, pas seulement le nom du token). Effet observable : retirer le
+  // `uniqueIndex(...)` d'`attempts` OU casser le SQL 0008 → l'index disparaît → rouge.
+  it("GARDE : l'index UNIQUE (profile_id, client_attempt_id) existe en base après migration (#82)", () => {
+    const db = freshDb();
+    const rows = db.all<{ name: string }>(
+      sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'attempts' AND name NOT LIKE 'sqlite_autoindex_%'`,
+    );
+    expect(rows.map((r) => r.name)).toContain("attempts_profile_client_attempt_unique");
+  });
+
+  it("rejette au niveau DB un doublon (profile_id, client_attempt_id) — idempotence moteur (#82)", () => {
+    const db = freshDb();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+    const row = {
+      profileId: 1,
+      factId: "mult_6x8",
+      skill: "mult" as const,
+      correct: true,
+      responseMs: 1800,
+      clientAttemptId: "attempt-abc",
+    };
+    db.insert(attempts).values(row).run();
+    // Même (profil, id client) → l'index UNIQUE partiel doit lever (le moteur DB, pas
+    // seulement la garde applicative, sérialise le dédoublonnage).
+    expect(() => db.insert(attempts).values(row).run()).toThrow();
+  });
+
+  // Index PARTIEL (`WHERE client_attempt_id IS NOT NULL`) : plusieurs lignes SANS id
+  // client (diagnostic, rejeux nus) doivent coexister — jamais dédoublonnées. Effet
+  // observable : rendre l'index NON partiel → SQLite verrait toujours les NULL distincts,
+  // MAIS un même (profil) + NULL resterait permis, donc ce test seul ne mute pas dessus ;
+  // il verrouille l'INTENTION (append-only libre sans clé) + garde contre un index qui
+  // deviendrait `NOT NULL`-only faux. Deux tentatives sans id client → 2 lignes.
+  it("laisse coexister plusieurs tentatives sans client_attempt_id (index partiel, #82)", () => {
+    const db = freshDb();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+    const base = {
+      profileId: 1,
+      factId: "mult_6x8",
+      skill: "mult" as const,
+      correct: true,
+      responseMs: 1800,
+    };
+    // clientAttemptId omis → NULL. Deux réponses distinctes sans id doivent coexister.
+    db.insert(attempts).values(base).run();
+    db.insert(attempts).values(base).run();
+    expect(db.select().from(attempts).all()).toHaveLength(2);
+  });
+
+  // Le même id client sur DEUX profils différents n'est PAS un doublon (la clé est
+  // COMPOSITE (profil, id) — un id client est scopé au profil). Effet observable : un
+  // index sur `client_attempt_id` seul (colonne unique, non composite) ferait lever ici.
+  it("autorise le même client_attempt_id sur deux profils distincts (clé composite, #82)", () => {
+    const db = freshDb();
+    db.insert(profiles)
+      .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+      .run();
+    db.insert(profiles)
+      .values({ id: 2, name: "Théo", nameKey: "théo", pinHash: "h", avatar: "cat" })
+      .run();
+    const base = {
+      factId: "mult_6x8",
+      skill: "mult" as const,
+      correct: true,
+      responseMs: 1800,
+      clientAttemptId: "attempt-shared",
+    };
+    db.insert(attempts)
+      .values({ ...base, profileId: 1 })
+      .run();
+    // Même id client, profil différent → clé composite distincte → accepté.
+    expect(() =>
+      db
+        .insert(attempts)
+        .values({ ...base, profileId: 2 })
+        .run(),
+    ).not.toThrow();
+    expect(db.select().from(attempts).all()).toHaveLength(2);
+  });
 });
 
 // ============================================================================
@@ -569,6 +661,84 @@ describe("schéma ledger (journal append-only — ECONOMY §3.7)", () => {
     expect(ref.foreignTable).toBe(profiles);
     expect(ref.foreignColumns[0].name).toBe("id");
     expect(fk.onDelete).toBe("cascade");
+  });
+
+  // Idempotence DB-niveau du crédit (#82) : l'index UNIQUE composite `(profile_id,
+  // reason, ref_id)` doit **rejeter au niveau MOTEUR** un rejeu de crédit portant la
+  // même clé de rejeu — indépendamment de la garde applicative `creditExists`. On insère
+  // la 2ᵉ ligne EN BRUT (sans passer par `creditWalletInTx`) → seule la contrainte DB
+  // peut lever. Effet observable : retirer le `uniqueIndex(...)` du `ledger` → rouge.
+  // GARDE anti-drift (#82) : après `runMigrations`, l'index UNIQUE
+  // `ledger_profile_reason_ref_unique` doit EXISTER en base (`sqlite_master`). Effet
+  // observable : retirer le `uniqueIndex(...)` du `ledger` OU casser le SQL 0008 → rouge.
+  it("GARDE : l'index UNIQUE (profile_id, reason, ref_id) existe en base après migration (#82)", () => {
+    const db = freshDb();
+    const rows = db.all<{ name: string }>(
+      sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'ledger' AND name NOT LIKE 'sqlite_autoindex_%'`,
+    );
+    expect(rows.map((r) => r.name)).toContain("ledger_profile_reason_ref_unique");
+  });
+
+  it("rejette au niveau DB un doublon (profile_id, reason, ref_id) — idempotence crédit (#82)", () => {
+    const db = freshDb();
+    seed(db);
+    const mv = {
+      profileId: 1,
+      direction: "earn" as const,
+      currency: "coins" as const,
+      amount: 10,
+      reason: "level",
+      refId: "level:0:2",
+    };
+    db.insert(ledger).values(mv).run();
+    // Même (profil, raison, clé de rejeu) → l'index UNIQUE partiel doit lever.
+    expect(() => db.insert(ledger).values(mv).run()).toThrow();
+  });
+
+  // Index PARTIEL (`WHERE ref_id IS NOT NULL`) : le journal reste append-only pour les
+  // mouvements SANS clé de rejeu (`ref_id` NULL) — jamais contraints. Effet observable :
+  // un index NON partiel n'attraperait toujours pas les NULL (distincts en SQLite), mais
+  // ce test verrouille l'invariant append-only (deux mouvements NULL identiques coexistent).
+  it("laisse coexister deux mouvements sans ref_id (append-only, index partiel #82)", () => {
+    const db = freshDb();
+    seed(db);
+    const mv = {
+      profileId: 1,
+      direction: "earn" as const,
+      currency: "coins" as const,
+      amount: 10,
+      reason: "level",
+      // refId omis → NULL : mouvement non-idempotent, jamais dédoublonné.
+    };
+    db.insert(ledger).values(mv).run();
+    db.insert(ledger).values(mv).run();
+    expect(db.select().from(ledger).all()).toHaveLength(2);
+  });
+
+  // La clé de rejeu est scopée par (profil, raison) : la MÊME `ref_id` sous une RAISON
+  // différente n'est pas un doublon (clé composite à 3 colonnes). Effet observable : un
+  // index sur `(profile_id, ref_id)` seul (sans `reason`) ferait lever ici.
+  it("autorise la même ref_id sous une raison différente (clé à 3 colonnes, #82)", () => {
+    const db = freshDb();
+    seed(db);
+    const base = {
+      profileId: 1,
+      direction: "earn" as const,
+      currency: "coins" as const,
+      amount: 10,
+      refId: "level:0:2",
+    };
+    db.insert(ledger)
+      .values({ ...base, reason: "level" })
+      .run();
+    // Même ref_id, raison différente → clé composite distincte → accepté.
+    expect(() =>
+      db
+        .insert(ledger)
+        .values({ ...base, reason: "star_bonus" })
+        .run(),
+    ).not.toThrow();
+    expect(db.select().from(ledger).all()).toHaveLength(2);
   });
 });
 

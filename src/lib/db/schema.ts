@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 // Import RELATIF (pas l'alias `@`) : drizzle-kit + le script tsx `db:migrate`
 // chargent ce module HORS du résolveur de paths de Next (même contrainte que
 // `config.ts`). `import type` = erased au build, mais on garde le relatif par
@@ -205,39 +205,64 @@ export const mastery = sqliteTable("mastery", {
  * §3) portant le même id **ne crée pas de doublon** et **ne recompte pas** la maîtrise.
  * SYNC.md est la spec **la plus précise** sur l'idempotence (« chaque écriture porte
  * un id client ») → colonne **in-contract** (même précédent que `is_retry`, absent de
- * PLAN §data mais requis par ENGINE §10, cf. LEARNINGS #58). L'unicité `(profil, id
- * client)` est vérifiée **au niveau requête dans la transaction synchrone** (pas de
- * callback `sqliteTable` d'extras qui casserait le gate 100 % fonctions, LEARNINGS
- * #34/#46 ; table single-tenant → scan filtré suffit, index différé). Nullable : le
- * diagnostic (3.6) amorce `mastery` sans passer par ce journal de réponse client.
+ * PLAN §data mais requis par ENGINE §10, cf. LEARNINGS #58). Nullable : le diagnostic
+ * (3.6) amorce `mastery` sans passer par ce journal de réponse client.
+ *
+ * **Idempotence en défense en profondeur (#82)** : l'unicité `(profil, id client)` est
+ * portée par DEUX couches. (1) La garde applicative `attemptExists` (dans la transaction
+ * synchrone) reste la barrière **primaire** : elle transforme un rejeu en **no-op propre**
+ * (aucune 2ᵉ écriture tentée) — correcte et atomique en **mono-process** (le daemon Node
+ * actuel, STACK.md). (2) L'**index UNIQUE composite** `(profile_id, client_attempt_id)`
+ * (déclaré via le callback table 3ᵉ-arg `(t) => [...]`) garantit le dédoublonnage **au
+ * niveau moteur DB** — filet forward-looking pour un futur multi-process/cluster où le
+ * check applicatif seul ne sérialiserait plus. **Index PARTIEL** (`WHERE client_attempt_id
+ * IS NOT NULL`) : SQLite traite chaque `NULL` comme distinct, mais on borne l'index aux
+ * lignes **porteuses d'un id** (le diagnostic + les rejeux sans id fournissent `NULL` et
+ * doivent coexister librement — jamais dédoublonnés). **Pas de piège coverage** (#34/#46) :
+ * le callback 3ᵉ-arg **retournant un tableau** est invoqué par drizzle **à la définition
+ * de la table** (chargement de module) → v8 le compte comme couvert (vérifié empiriquement,
+ * `schema.ts` 100 % fonctions). `db:generate` reste **no-op** (schema.ts ↔ snapshot ↔ SQL
+ * cohérents ; index sérialisé par drizzle-kit, jamais de SQL à la main).
  */
-export const attempts = sqliteTable("attempts", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Profil auteur — données enfant, purge en cascade (RGPD). */
-  profileId: integer("profile_id")
-    .notNull()
-    .references(() => profiles.id, { onDelete: "cascade" }),
-  /** Clé stable du fait répondu (contrat de faits 3.1). */
-  factId: text("fact_id").notNull(),
-  /** Compétence du fait (comp10 / add / sub / mult). */
-  skill: text("skill").$type<Skill>().notNull(),
-  /** Réponse juste ? (mode boolean drizzle → stocké 0/1). */
-  correct: integer("correct", { mode: "boolean" }).notNull(),
-  /** Temps de réponse (ms) — matière de la fluence. */
-  responseMs: integer("response_ms").notNull(),
-  /** Reprise après une erreur (« refait une fois », ENGINE §9 / PLAN). */
-  isRetry: integer("is_retry", { mode: "boolean" }).notNull().default(false),
-  /**
-   * Id opaque **fourni par le client** pour l'idempotence (SYNC §2). Un rejeu portant
-   * le même `(profile_id, client_attempt_id)` est ignoré (aucune 2ᵉ mutation). Unicité
-   * portée par la requête (dans la transaction sync), pas par un index (single-tenant).
-   */
-  clientAttemptId: text("client_attempt_id"),
-  /** Instant de la réponse (régularité / tendances). */
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(unixepoch())`),
-});
+export const attempts = sqliteTable(
+  "attempts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Profil auteur — données enfant, purge en cascade (RGPD). */
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    /** Clé stable du fait répondu (contrat de faits 3.1). */
+    factId: text("fact_id").notNull(),
+    /** Compétence du fait (comp10 / add / sub / mult). */
+    skill: text("skill").$type<Skill>().notNull(),
+    /** Réponse juste ? (mode boolean drizzle → stocké 0/1). */
+    correct: integer("correct", { mode: "boolean" }).notNull(),
+    /** Temps de réponse (ms) — matière de la fluence. */
+    responseMs: integer("response_ms").notNull(),
+    /** Reprise après une erreur (« refait une fois », ENGINE §9 / PLAN). */
+    isRetry: integer("is_retry", { mode: "boolean" }).notNull().default(false),
+    /**
+     * Id opaque **fourni par le client** pour l'idempotence (SYNC §2). Un rejeu portant
+     * le même `(profile_id, client_attempt_id)` est ignoré (aucune 2ᵉ mutation). Unicité
+     * portée par la garde applicative `attemptExists` (dans la transaction sync) **et** par
+     * l'index UNIQUE composite partiel du callback table (#82, défense en profondeur DB).
+     */
+    clientAttemptId: text("client_attempt_id"),
+    /** Instant de la réponse (régularité / tendances). */
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    // Index UNIQUE composite PARTIEL (#82) : dédoublonnage `(profil, id client)` garanti par
+    // le moteur DB (défense en profondeur, cf. doc de la table). `WHERE ... IS NOT NULL` →
+    // les lignes sans id client (diagnostic, rejeux nus) coexistent sans être contraintes.
+    uniqueIndex("attempts_profile_client_attempt_unique")
+      .on(t.profileId, t.clientAttemptId)
+      .where(sql`${t.clientAttemptId} IS NOT NULL`),
+  ],
+);
 
 // ============================================================================
 // Boucle jouer → récompense (epic #5) — progression + portefeuille + journal
@@ -352,36 +377,55 @@ export type LedgerCurrency = "coins" | "shards" | "item";
  * parent #7 en ajoutera un via migration si le volume le justifie).
  *
  * **Idempotence du crédit** (progression idempotente, CLAUDE.md) : un gain porte une
- * **clé de rejeu** stockée dans `ref_id` (ex. `level:<world>:<level>`). Un rejeu
- * réseau portant le même `(profile_id, reason, ref_id)` **ne recrédite pas** : la
- * garde (dans la transaction synchrone) détecte la ligne déjà journalisée. Unicité
- * vérifiée **au niveau requête** (pas de callback `sqliteTable` d'extras qui
- * casserait le gate 100 % fonctions ; table single-tenant → scan filtré suffit).
+ * **clé de rejeu** stockée dans `ref_id` (ex. `level:<world>:<level>`). Un rejeu réseau
+ * portant le même `(profile_id, reason, ref_id)` **ne recrédite pas**.
+ *
+ * **Défense en profondeur (#82)** — même doctrine que `attempts`. (1) La garde applicative
+ * `creditExists` (dans la transaction synchrone) reste la barrière **primaire** : elle
+ * transforme un rejeu de `finishLevel` en no-op (`applied: false`, aucune 2ᵉ ligne ledger,
+ * aucun 2ᵉ crédit) — correcte en **mono-process**. (2) L'**index UNIQUE composite**
+ * `(profile_id, reason, ref_id)` (callback table 3ᵉ-arg) garantit le dédoublonnage **au
+ * niveau moteur DB** — filet forward-looking multi-process. **Index PARTIEL** (`WHERE ref_id
+ * IS NOT NULL`) : un mouvement **sans clé de rejeu** (`ref_id NULL` — ex. un mouvement
+ * non-idempotent futur) reste **append-only libre** (jamais contraint) ; seuls les
+ * mouvements **porteurs d'une clé de rejeu** sont dédoublonnés. Pas de piège coverage
+ * (#34/#46, callback retournant un tableau = couvert), `db:generate` no-op.
  */
-export const ledger = sqliteTable("ledger", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  /** Profil concerné — données enfant, purge en cascade (RGPD). */
-  profileId: integer("profile_id")
-    .notNull()
-    .references(() => profiles.id, { onDelete: "cascade" }),
-  /** `earn` | `spend` (ECONOMY §3.7). */
-  direction: text("direction").$type<LedgerDirection>().notNull(),
-  /** `coins` | `shards` | `item` (ECONOMY §3.7). */
-  currency: text("currency").$type<LedgerCurrency>().notNull(),
-  /** Montant du mouvement (entier, ≥ 0 côté application). */
-  amount: integer("amount").notNull(),
-  /** Raison (`level`, `star_bonus`, `boss`, `daily_chest`, … — ECONOMY §3.7). */
-  reason: text("reason").notNull(),
-  /**
-   * Id de l'objet lié / **clé de rejeu** pour l'idempotence (nullable, ECONOMY §3.7).
-   * Un crédit rejoué portant le même `(profile_id, reason, ref_id)` est ignoré.
-   */
-  refId: text("ref_id"),
-  /** Instant serveur du mouvement (régularité / transparence parent). */
-  createdAt: integer("created_at", { mode: "timestamp" })
-    .notNull()
-    .default(sql`(unixepoch())`),
-});
+export const ledger = sqliteTable(
+  "ledger",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Profil concerné — données enfant, purge en cascade (RGPD). */
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    /** `earn` | `spend` (ECONOMY §3.7). */
+    direction: text("direction").$type<LedgerDirection>().notNull(),
+    /** `coins` | `shards` | `item` (ECONOMY §3.7). */
+    currency: text("currency").$type<LedgerCurrency>().notNull(),
+    /** Montant du mouvement (entier, ≥ 0 côté application). */
+    amount: integer("amount").notNull(),
+    /** Raison (`level`, `star_bonus`, `boss`, `daily_chest`, … — ECONOMY §3.7). */
+    reason: text("reason").notNull(),
+    /**
+     * Id de l'objet lié / **clé de rejeu** pour l'idempotence (nullable, ECONOMY §3.7).
+     * Un crédit rejoué portant le même `(profile_id, reason, ref_id)` est ignoré.
+     */
+    refId: text("ref_id"),
+    /** Instant serveur du mouvement (régularité / transparence parent). */
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    // Index UNIQUE composite PARTIEL (#82) : dédoublonnage du crédit `(profil, raison, clé de
+    // rejeu)` garanti par le moteur DB (défense en profondeur, cf. doc de la table). `WHERE
+    // ref_id IS NOT NULL` → un mouvement sans clé de rejeu reste append-only libre.
+    uniqueIndex("ledger_profile_reason_ref_unique")
+      .on(t.profileId, t.reason, t.refId)
+      .where(sql`${t.refId} IS NOT NULL`),
+  ],
+);
 
 // ============================================================================
 // Collection (epic #5, story 5.6) — catalogue de créatures + possession
