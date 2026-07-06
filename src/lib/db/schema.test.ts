@@ -11,6 +11,7 @@ import {
   characters,
   collection,
   collectionKey,
+  jobs,
   ledger,
   mastery,
   masteryKey,
@@ -20,6 +21,7 @@ import {
   progressKey,
   sessions,
   wallet,
+  worlds,
 } from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-auth-schema-"));
@@ -959,5 +961,153 @@ describe("schéma collection (possession — ECONOMY §3.3)", () => {
     expect(fk).toBeDefined();
     expect(fk?.reference().foreignColumns[0].name).toBe("id");
     expect(fk?.onDelete).toBe("cascade");
+  });
+});
+
+// ============================================================================
+// Pipeline mondes IA (story 6.1) — worlds (mondes générés) + jobs (file)
+// (WORLDGEN §3/§5, PLAN §Modèle de données, ADR 0008)
+// ============================================================================
+
+describe("schéma worlds (mondes générés — WORLDGEN §5)", () => {
+  function seedWorld(db: ReturnType<typeof freshDb>, overrides: Record<string, unknown> = {}) {
+    db.insert(worlds)
+      .values({
+        id: "world:0",
+        index: 0,
+        theme: "forêt enchantée",
+        palette: '{"accent":"#3aa76d"}',
+        assetRefs: '{"background":"world/0/bg.png","tiles":"world/0/tiles.png"}',
+        prompt: "flat 2D kawaii vector illustration, forest world background …",
+        seed: "seed-forest-0",
+        ...overrides,
+      })
+      .run();
+  }
+
+  it("insère et relit un monde (défaut status=buffered + approved_by nullable + created_at)", () => {
+    const db = freshDb();
+    // Sans `status`/`approvedBy`/`createdAt` → exerce le défaut DB + le nullable approved_by.
+    seedWorld(db);
+    const row = db.select().from(worlds).get();
+    expect(row).toMatchObject({
+      id: "world:0",
+      index: 0,
+      theme: "forêt enchantée",
+      palette: '{"accent":"#3aa76d"}',
+      assetRefs: '{"background":"world/0/bg.png","tiles":"world/0/tiles.png"}',
+      prompt: "flat 2D kawaii vector illustration, forest world background …",
+      seed: "seed-forest-0",
+      status: "buffered",
+      approvedBy: null,
+    });
+    expect(row?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste un monde actif validé par un parent (status=active + approved_by)", () => {
+    const db = freshDb();
+    seedWorld(db, { status: "active", approvedBy: "parent" });
+    const row = db.select().from(worlds).get();
+    expect(row).toMatchObject({ status: "active", approvedBy: "parent" });
+  });
+
+  it("contraint l'unicité de l'index (un seul monde par index) via .unique()", () => {
+    const db = freshDb();
+    seedWorld(db);
+    // Même `index`, id différent → l'index UNIQUE `worlds_index_unique` doit lever.
+    expect(() => seedWorld(db, { id: "world:0-bis" })).toThrow();
+  });
+
+  it("autorise des mondes à des index distincts", () => {
+    const db = freshDb();
+    seedWorld(db);
+    expect(() => seedWorld(db, { id: "world:1", index: 1 })).not.toThrow();
+    expect(db.select().from(worlds).all()).toHaveLength(2);
+  });
+
+  it("contraint l'unicité de l'id (PK texte) — même id rejeté", () => {
+    const db = freshDb();
+    seedWorld(db);
+    expect(() => seedWorld(db, { index: 99 })).toThrow();
+  });
+
+  // GARDE anti-drift (#91/#105, doctrine snapshot↔SQL) : `approved_by` est
+  // volontairement NULLABLE en base (schema.ts sans `.notNull()`, snapshot notNull:false,
+  // SQL `approved_by text`). Le contraste `theme` NOT NULL prouve que la garde n'est pas
+  // vacuous (elle distingue une colonne réellement nullable d'une colonne obligatoire).
+  // Effet observable : « corriger » approved_by en `.notNull()` + rebuild → notnull=1 → rouge.
+  it("laisse approved_by physiquement NULLABLE, theme NOT NULL (garde PRAGMA)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(worlds)`);
+    expect(info.find((c) => c.name === "approved_by")?.notnull).toBe(0);
+    expect(info.find((c) => c.name === "theme")?.notnull).toBe(1);
+  });
+
+  // GARDE anti-drift (#82, même patron que les gardes `profiles`/`attempts`) : après
+  // `runMigrations`, l'index UNIQUE `worlds_index_unique` doit EXISTER en base (état réel
+  // `sqlite_master`, pas seulement le nom du token dans schema.ts). Effet observable :
+  // retirer `.unique()` de `worlds.index` OU casser le SQL 0009 → l'index disparaît → rouge.
+  it("GARDE : l'index UNIQUE worlds_index_unique existe en base après migration", () => {
+    const db = freshDb();
+    const rows = db.all<{ name: string }>(
+      sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'worlds' AND name NOT LIKE 'sqlite_autoindex_%'`,
+    );
+    expect(rows.map((r) => r.name)).toContain("worlds_index_unique");
+  });
+});
+
+describe("schéma jobs (file de génération — WORLDGEN §3)", () => {
+  function seedJob(db: ReturnType<typeof freshDb>, overrides: Record<string, unknown> = {}) {
+    db.insert(jobs)
+      .values({
+        type: "generate_world",
+        payload: '{"world_index":0}',
+        ...overrides,
+      })
+      .run();
+  }
+
+  it("insère et relit un job (défauts status=pending / attempts=0 / last_error null / timestamps)", () => {
+    const db = freshDb();
+    // Sans `status`/`attempts`/`lastError`/timestamps → exerce les défauts + nullable last_error.
+    seedJob(db);
+    const row = db.select().from(jobs).get();
+    expect(row).toMatchObject({
+      type: "generate_world",
+      payload: '{"world_index":0}',
+      status: "pending",
+      attempts: 0,
+      lastError: null,
+    });
+    expect(row?.id).toBeTypeOf("number");
+    expect(row?.createdAt).toBeInstanceOf(Date);
+    expect(row?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste un job échoué (status=failed + attempts + last_error)", () => {
+    const db = freshDb();
+    seedJob(db, { status: "failed", attempts: 3, lastError: "model 503 after retries" });
+    const row = db.select().from(jobs).get();
+    expect(row).toMatchObject({
+      status: "failed",
+      attempts: 3,
+      lastError: "model 503 after retries",
+    });
+  });
+
+  it("est une file : plusieurs jobs coexistent (PK autoincrement)", () => {
+    const db = freshDb();
+    seedJob(db);
+    seedJob(db, { payload: '{"world_index":1}' });
+    expect(db.select().from(jobs).all()).toHaveLength(2);
+  });
+
+  // GARDE anti-drift (#91/#105) : `last_error` est volontairement NULLABLE (schema.ts sans
+  // `.notNull()`, snapshot notNull:false). Le contraste `type` NOT NULL empêche un test vacuous.
+  it("laisse last_error physiquement NULLABLE, type NOT NULL (garde PRAGMA)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(jobs)`);
+    expect(info.find((c) => c.name === "last_error")?.notnull).toBe(0);
+    expect(info.find((c) => c.name === "type")?.notnull).toBe(1);
   });
 });

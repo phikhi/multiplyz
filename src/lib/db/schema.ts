@@ -542,3 +542,110 @@ export const collection = sqliteTable("collection", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+// ============================================================================
+// Pipeline mondes IA (epic #6, story 6.1) — mondes générés + file de jobs
+// (WORLDGEN.md §3/§5, PLAN.md §Modèle de données, ADR 0008). Source de vérité
+// SERVEUR : les mondes sont générés côté serveur (worker daemon), partagés entre
+// profils du foyer (assets « mis en cache pour toujours », WORLDGEN §1 → PAS de FK
+// profil, pas de cascade RGPD : ce ne sont pas des données enfant).
+// ============================================================================
+
+/** Statut d'un monde généré (WORLDGEN §3) : en tampon (QA) ou actif (jouable). */
+export type WorldStatus = "buffered" | "active";
+
+/**
+ * **Mondes générés** (WORLDGEN §5, PLAN §Modèle de données). Une ligne par monde,
+ * **partagé** entre profils du foyer (pas de FK profil ni de cascade : asset partagé
+ * « mis en cache pour toujours », WORLDGEN §1, non enfant-spécifique). Amorcé/rempli
+ * par le worker daemon (épic #6). L'`index` = position sur la carte infinie (même seed
+ * que la carte procédurale, MAP §3), **unique** (un seul monde par index).
+ *
+ * PK `id` **texte** (clé stable, ex. `world:0`) : déterministe pour l'amorçage
+ * idempotent du socle pré-généré + le seed reproductible (WORLDGEN §7). Aucun callback
+ * `sqliteTable` d'extras (uniqueIndex composite) qui casserait le gate 100 % fonctions
+ * (LEARNINGS #34/#46) : l'unicité de l'index est déclarée via la **méthode chaînée
+ * `.unique()` de la colonne** (drizzle la sérialise dans le snapshot ET le SQL ;
+ * `db:generate` = no-op car schema.ts == snapshot ; le `.unique()` de colonne n'ajoute
+ * **aucune** fonction non couverte, contrairement au callback 3ᵉ-arg — même patron
+ * éprouvé que `profiles.name_key`, LEARNINGS #411-419).
+ *
+ * Table **neuve** (jamais peuplée avant cette migration) → colonnes `NOT NULL` +
+ * `default` sans le piège « ADD NOT NULL sur table peuplée » (issue #105). `approved_by`
+ * est **nullable** : renseigné seulement si la validation parent est activée et qu'un
+ * parent a approuvé (WORLDGEN §6 ; un monde auto-validé n'a pas d'approbateur).
+ */
+export const worlds = sqliteTable("worlds", {
+  /** Clé stable (ex. `world:0`) — déterministe, permet l'amorçage idempotent du socle. */
+  id: text("id").primaryKey(),
+  /**
+   * Position du monde sur la carte infinie (croît à l'infini, MAP §1). **Unique**
+   * (un seul monde par index) via `.unique()` de colonne — pas de callback extras
+   * (LEARNINGS #34/#46). `index` est un mot réservé SQL → nom de colonne physique
+   * `world_index` (jamais `index`) pour éviter toute ambiguïté avec les index DB.
+   */
+  index: integer("world_index").notNull().unique("worlds_index_unique"),
+  /** Thème du monde (pool kid-safe, WORLDGEN §4) — ex. `forêt enchantée`. */
+  theme: text("theme").notNull(),
+  /** Palette dérivée (json) → pose `--world-accent` (DESIGN_TOKENS, WORLDGEN §4). */
+  palette: text("palette").notNull(),
+  /** Références d'assets (json : fond/tuiles servis par Nginx, WORLDGEN §5). */
+  assetRefs: text("asset_refs").notNull(),
+  /** Prompt de génération complet (reproductibilité à l'identique, WORLDGEN §7). */
+  prompt: text("prompt").notNull(),
+  /** Seed du modèle (reproductibilité à l'identique, WORLDGEN §5/§7). */
+  seed: text("seed").notNull(),
+  /** `buffered` (en QA) | `active` (jouable après QA + validation parent). Défaut `buffered`. */
+  status: text("status").$type<WorldStatus>().notNull().default("buffered"),
+  /**
+   * Identité de l'approbateur parent (nullable) — renseigné **uniquement** si la
+   * validation parent est activée et qu'un parent a approuvé le monde (WORLDGEN §6).
+   * Un monde auto-validé (toggle off) reste `NULL`.
+   */
+  approvedBy: text("approved_by"),
+  /** Instant serveur de la génération. */
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+/** Statut d'un job de la file de génération (WORLDGEN §3). */
+export type JobStatus = "pending" | "running" | "done" | "failed";
+
+/**
+ * **File de jobs** de génération de mondes (WORLDGEN §3 : « une file de jobs — table
+ * `jobs` SQLite — consommée par un worker daemon »). Une ligne par job enqueue quand
+ * l'enfant avance (buffer d'avance, WORLDGEN §3). Pas une donnée enfant (asset partagé)
+ * → pas de FK profil ni de cascade RGPD.
+ *
+ * PK `id` autoincrement simple : pas de callback `sqliteTable` d'extras qui casserait le
+ * gate 100 % fonctions (LEARNINGS #34/#46, même pattern que `attempts`/`ledger`). Pas
+ * d'index secondaire pour l'instant (single-tenant, file courte ; à ajouter via migration
+ * si le volume le justifie).
+ *
+ * Table **neuve** → colonnes `NOT NULL` + `default` sans le piège #105. `last_error` est
+ * **nullable** (renseigné seulement quand `status = failed`). `attempts` matérialise le
+ * compteur d'essais du **retry worker** (WORLDGEN §6 « jusqu'à N essais »), distinct du
+ * retry réseau transitoire du client image (ADR 0008 contrainte 1).
+ */
+export const jobs = sqliteTable("jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Type de job (ex. `generate_world`) — extensible (Stage A/B, QA). */
+  type: text("type").notNull(),
+  /** Charge utile (json : `world_index`, thème, seed…). */
+  payload: text("payload").notNull(),
+  /** `pending` | `running` | `done` | `failed`. Défaut `pending`. */
+  status: text("status").$type<JobStatus>().notNull().default("pending"),
+  /** Nombre d'essais consommés (retry worker, WORLDGEN §6). Défaut 0. */
+  attempts: integer("attempts").notNull().default(0),
+  /** Dernier message d'erreur (nullable) — renseigné quand `status = failed`. */
+  lastError: text("last_error"),
+  /** Instant de création du job. */
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  /** Instant de la dernière mise à jour (changement de statut / nouvel essai). */
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
