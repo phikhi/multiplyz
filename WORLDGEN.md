@@ -38,7 +38,7 @@
 
 ## 5. Modèle d'image & stockage
 
-- **Modèle** : **Nano Banana (Gemini 2.5 Flash Image)** — **consistance de personnage** + **img2img** + fusion multi-références (idéal pour Teddy). Candidat principal, **à confirmer par spike** (qualité kawaii flat-vector / coût / latence / sur-censure) ⚙️. Clé **API Gemini**.
+- **Modèle** : **Nano Banana (Gemini 2.5 Flash Image)** — **consistance de personnage** + **img2img** + fusion multi-références (idéal pour Teddy). **Confirmé par spike** (ADR 0008, 2026-07-06 — cf. `docs/spike/nano-banana/`) : qualité kawaii flat-vector excellente, consistance Stage A→B excellente, **~0,039 $/image** (~0,45 $/monde), aucune sur-censure. Clé **API Gemini** (`GEMINI_API_KEY`). Modèle ⚙️ (`IMAGE_MODEL` override) — chemin d'upgrade vers `gemini-3-*-image` ouvert sans lock-in. **Contraintes actées** (spike) : retry transitoire (500/503/429), prompt « blank ear tag, no text », pas d'alpha fiable (fond blanc → détourage/carte pleine ⚙️).
 - **Assets** → **disque local du VPS**, servis par **Nginx** (dossier `public/`/storage). (Cloudflare devant en option plus tard pour le cache.)
 - **Métadonnées** → **SQLite local** : `worlds` (theme, palette, asset_refs, **prompt**, **seed**, status, approved_by) + `characters` (cf. ECONOMY).
 
@@ -70,7 +70,7 @@
 | Buffer | 2 mondes d'avance |
 | Modération | Auto-filtre + **validation parent optionnelle** |
 | Stockage | Assets sur **disque VPS** (Nginx), métadonnées + prompt + seed en **SQLite** |
-| Modèle image | **Nano Banana** (Gemini 2.5 Flash Image) — img2img + consistance ; spike à confirmer |
+| Modèle image | **Nano Banana** (Gemini 2.5 Flash Image) — img2img + consistance ; **confirmé par spike** (ADR 0008) |
 | Teddy | **2 stages** : master validé (Stage A) → ancre par monde (Stage B) ; jamais les photos après A |
 | Coût | Cache permanent + partage → ~1 paiement / monde unique |
 | Partage | Mondes partagés entre profils du foyer |
