@@ -3,7 +3,7 @@
 - **Statut** : accepted
 - **Type** : deps
 - **Portée** : majeure (dans le contrat — HOW dans le WHAT ; acceptée en autonomie par l'orchestrateur, ADR 0003/0004)
-- **Liens** : issue #6 (épic) · #146 (blocage levé) · PR #… · specs : `WORLDGEN.md` §5/§9, `ART.md` §5
+- **Liens** : issue #6 (épic) · #146 (blocage levé) · PR #147 · specs : `WORLDGEN.md` §5/§9, `ART.md` §5
 
 ## Contexte
 
