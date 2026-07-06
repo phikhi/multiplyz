@@ -71,6 +71,13 @@
       "when": 1783361771917,
       "tag": "0009_furry_azazel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1783364533693,
+      "tag": "0010_shallow_roxanne_simpson",
+      "breakpoints": true
     }
   ]
 }

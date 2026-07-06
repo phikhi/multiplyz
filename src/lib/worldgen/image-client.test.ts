@@ -18,6 +18,12 @@ function cfg(overrides: Partial<WorldGenConfig> = {}): WorldGenConfig {
     maxRetries: 3,
     retryBackoffMs: 500,
     prompts: { style: "", negative: "", teddy: "", creature: "", background: "" },
+    stageA: {
+      photosDir: "docs/teddy",
+      outputDir: "storage/reference/teddy",
+      backgroundStrategy: "post-cutout",
+      matteColor: "#ffffff",
+    },
     ...overrides,
   };
 }

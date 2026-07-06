@@ -20,6 +20,7 @@ import {
   progress,
   progressKey,
   sessions,
+  teddyReferenceAssets,
   wallet,
   worlds,
 } from "./schema";
@@ -1109,5 +1110,93 @@ describe("schéma jobs (file de génération — WORLDGEN §3)", () => {
     const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(jobs)`);
     expect(info.find((c) => c.name === "last_error")?.notnull).toBe(0);
     expect(info.find((c) => c.name === "type")?.notnull).toBe(1);
+  });
+});
+
+describe("schéma teddy_reference_assets (assets de référence — WORLDGEN §8, story 6.2)", () => {
+  function seedAsset(db: ReturnType<typeof freshDb>, overrides: Record<string, unknown> = {}) {
+    db.insert(teddyReferenceAssets)
+      .values({
+        id: "teddy:master",
+        kind: "master",
+        assetRef: "storage/reference/teddy/teddy-master.png",
+        backgroundStrategy: "post-cutout",
+        transparent: 1,
+        sourcePhotosHash: "abc123",
+        ...overrides,
+      })
+      .run();
+  }
+
+  it("insère et relit le master (défaut status=candidate + expression/approved_by nullable)", () => {
+    const db = freshDb();
+    // Sans `status`/`expression`/`approvedBy`/`createdAt` → exerce le défaut + les nullables.
+    seedAsset(db);
+    const row = db.select().from(teddyReferenceAssets).get();
+    expect(row).toMatchObject({
+      id: "teddy:master",
+      kind: "master",
+      expression: null,
+      assetRef: "storage/reference/teddy/teddy-master.png",
+      backgroundStrategy: "post-cutout",
+      transparent: 1,
+      sourcePhotosHash: "abc123",
+      status: "candidate",
+      approvedBy: null,
+    });
+    expect(row?.createdAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste une expression du model sheet (kind=expression + slug)", () => {
+    const db = freshDb();
+    seedAsset(db, {
+      id: "teddy:expression:oups",
+      kind: "expression",
+      expression: "oups",
+      assetRef: "storage/reference/teddy/teddy-oups.png",
+    });
+    const row = db.select().from(teddyReferenceAssets).get();
+    expect(row).toMatchObject({ kind: "expression", expression: "oups" });
+  });
+
+  it("persiste un asset approuvé (status=approved + approved_by = sign-off owner)", () => {
+    const db = freshDb();
+    seedAsset(db, { status: "approved", approvedBy: "owner" });
+    const row = db.select().from(teddyReferenceAssets).get();
+    expect(row).toMatchObject({ status: "approved", approvedBy: "owner" });
+  });
+
+  it("contraint l'unicité de l'id (PK texte) — même id rejeté", () => {
+    const db = freshDb();
+    seedAsset(db);
+    expect(() => seedAsset(db, { kind: "expression", expression: "content" })).toThrow();
+  });
+
+  it("stocke master + 5 expressions à des id distincts (le model sheet complet)", () => {
+    const db = freshDb();
+    seedAsset(db);
+    for (const slug of ["neutre", "content", "oups", "acclame", "intrepide"]) {
+      seedAsset(db, {
+        id: `teddy:expression:${slug}`,
+        kind: "expression",
+        expression: slug,
+        assetRef: `storage/reference/teddy/teddy-${slug}.png`,
+      });
+    }
+    expect(db.select().from(teddyReferenceAssets).all()).toHaveLength(6);
+  });
+
+  // GARDE anti-drift (#91/#105) : `expression` et `approved_by` sont volontairement NULLABLES
+  // (schema.ts sans `.notNull()`). Le contraste `kind`/`asset_ref` NOT NULL empêche un test
+  // vacuous. Effet observable : « corriger » l'une en `.notNull()` + rebuild → notnull=1 → rouge.
+  it("laisse expression + approved_by NULLABLES, kind + asset_ref NOT NULL (garde PRAGMA)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(
+      sql`PRAGMA table_info(teddy_reference_assets)`,
+    );
+    expect(info.find((c) => c.name === "expression")?.notnull).toBe(0);
+    expect(info.find((c) => c.name === "approved_by")?.notnull).toBe(0);
+    expect(info.find((c) => c.name === "kind")?.notnull).toBe(1);
+    expect(info.find((c) => c.name === "asset_ref")?.notnull).toBe(1);
   });
 });
