@@ -214,6 +214,56 @@ export interface EconomyConfig {
   bossBonusCoins: number;
 }
 
+/**
+ * ⚙️ **Prompts de base verrouillés** du pipeline de génération (charte ART §5). Constantes
+ * (jamais de texte en dur ailleurs — CLAUDE.md « prompt de base verrouillé ») : `style` +
+ * `negative` sont **constants** (« jamais modifié », ART §5) ; les trois gabarits (`teddy`,
+ * `creature`, `background`) portent des **variables** `{…}` injectées par le worker (Stage
+ * A/B, épic #6 — pas cette story). Regroupés dans `WorldGenConfig` pour rester **calibrables
+ * ⚙️** au playtest (ADR 0008 contrainte 4 « ombrage calibrable ») via un override d'env, sans
+ * les figer dans le code du client image.
+ */
+export interface WorldGenPrompts {
+  /** STYLE DE BASE (constant, réinjecté tel quel à chaque génération — ART §5). */
+  style: string;
+  /** NEGATIVE (constant — ART §5). Inclut « text, letters » (ADR 0008 : Nano Banana rend du texte parasite). */
+  negative: string;
+  /** Gabarit Teddy (variables `{base_style}` / `{world_accessory}` — ART §5 ; « blank ear tag » ADR 0008 contrainte 2). */
+  teddy: string;
+  /** Gabarit créature (variables `{base_style}` / `{creature_concept}` / `{features}` / `{world_palette}` — ART §5). */
+  creature: string;
+  /** Gabarit fond de monde (variables `{base_style}` / `{world_theme}` / `{world_palette}` — ART §5). */
+  background: string;
+}
+
+/**
+ * Config ⚙️ du **pipeline de génération de mondes** (WORLDGEN.md §2/§3/§5, ADR 0008).
+ * **Posée** ici (contrat épic #6, story 6.1) ; **consommée** par le worker/buffer + le client
+ * image (stories 6.x). Source unique des ⚙️ du pipeline (garde-fou budget, buffer, retry,
+ * prompts de base) : aucune valeur en dur ailleurs. Mêmes conventions que `loadEngineConfig`.
+ */
+export interface WorldGenConfig {
+  /**
+   * **Plafond budgétaire mensuel** en euros (WORLDGEN §2 « alerte/plafond mensuel ⚙️ »,
+   * plafond proprio ~20 €/mois — ADR 0008). Garde-fou coût : le worker cesse d'enqueue une
+   * génération payante une fois le plafond atteint (consommé par le worker, story 6.x).
+   * Défaut `20`.
+   */
+  monthlyBudgetEur: number;
+  /** Mondes d'avance maintenus sur le `world_index` courant (buffer, WORLDGEN §3). Défaut `2`. */
+  bufferAhead: number;
+  /**
+   * Essais **supplémentaires** du retry réseau transitoire du client image (HTTP 500/503/429
+   * → backoff, ADR 0008 contrainte 1). C'est le nombre de **ré-essais** au-delà de la 1ʳᵉ
+   * tentative (0 = aucun retry). Défaut `3`.
+   */
+  maxRetries: number;
+  /** Délai de base du backoff entre deux essais (ms) — croissance linéaire × n° d'essai. Défaut `500`. */
+  retryBackoffMs: number;
+  /** Prompts de base verrouillés (charte ART §5). Constantes ⚙️ (cf. `WorldGenPrompts`). */
+  prompts: WorldGenPrompts;
+}
+
 export interface AppConfig {
   mode: AppMode;
   database: DatabaseConfig;
@@ -222,6 +272,7 @@ export interface AppConfig {
   engine: EngineConfig;
   map: MapConfig;
   economy: EconomyConfig;
+  worldgen: WorldGenConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -305,6 +356,40 @@ export const CONFIG_DEFAULTS = {
     treasureBonusCoins: 15,
     // Gros lot du boss (ECONOMY §5 « Bonus boss +50 », MAP §6).
     bossBonusCoins: 50,
+  },
+  worldgen: {
+    // Plafond éco ~20 €/mois (WORLDGEN §2, ADR 0008 : ~45 mondes/mois sous plafond).
+    monthlyBudgetEur: 20,
+    // Buffer de 2 mondes d'avance (WORLDGEN §3).
+    bufferAhead: 2,
+    // Retry transitoire : 3 ré-essais + backoff 500 ms de base (ADR 0008 contrainte 1).
+    maxRetries: 3,
+    retryBackoffMs: 500,
+    // Prompts de base verrouillés — copie VERBATIM de la charte ART §5 (jamais en dur ailleurs).
+    prompts: {
+      style:
+        "flat 2D kawaii vector illustration, soft rounded shapes, cute chibi proportions, " +
+        "big shiny friendly eyes, gentle minimal shading, soft pastel palette with bright " +
+        "accent highlights, clean simple background, children's app art, high quality, " +
+        "consistent art style",
+      negative:
+        "photorealistic, 3d render, realistic, scary, creepy, dark, gore, text, letters, " +
+        "watermark, signature, extra limbs, deformed, busy cluttered details, harsh shadows, " +
+        "gradient noise, low quality",
+      teddy:
+        '{base_style}, "Teddy" a cute vintage 1980s Steiff teddy bear, golden mohair fur, ' +
+        "stitched snout, round dark eyes, rounded ears, classic jointed teddy with a slightly " +
+        "humped back, small yellow blank ear tag with no text, wearing {world_accessory}, " +
+        "faithful to the reference photos, centered, transparent background --ar 1:1",
+      creature:
+        "{base_style}, a cute round collectible creature: {creature_concept}, " +
+        "1-2 distinctive features: {features}, color palette: {world_palette}, " +
+        "centered, full body, transparent background --ar 1:1",
+      background:
+        "{base_style}, a {world_theme} world background landscape, palette: {world_palette}, " +
+        "calm uncluttered composition with open space in the lower-center for UI, " +
+        "no characters, no text --ar 16:9",
+    },
   },
 } as const;
 
@@ -551,6 +636,47 @@ export function loadEconomyConfig(env: Env): EconomyConfig {
 }
 
 /**
+ * Parse une **chaîne** de configuration : valeur d'env **non vide** (espaces compactés à ses
+ * extrémités) sinon défaut. Retenu pour les prompts de base ⚙️ (override d'un gabarit ART §5
+ * au playtest) — une valeur vide/espaces retombe sur la charte verrouillée (jamais de prompt
+ * vide envoyé au modèle).
+ */
+function parseString(raw: string | undefined, fallback: string): string {
+  const trimmed = raw?.trim();
+  return trimmed ? trimmed : fallback;
+}
+
+/**
+ * Bloc **pipeline mondes IA** de la config (WORLDGEN §2/§3/§5, ADR 0008), isolé en fonction
+ * pure (mêmes conventions que `loadEngineConfig`). Source unique des ⚙️ du pipeline : plafond
+ * budgétaire (garde-fou coût WORLDGEN §2), buffer d'avance, retry réseau transitoire (ADR 0008
+ * contrainte 1), et **prompts de base verrouillés** (charte ART §5, calibrables ⚙️ au playtest).
+ *
+ * `parsePositiveInt` pour budget/buffer (≥ 1 : un plafond `0` bloquerait toute génération, un
+ * buffer `0` ne maintiendrait aucune avance — invalide → défaut). `parseNonNegativeInt` pour
+ * `maxRetries` (0 = « aucun ré-essai » légitime, désactive le retry) + `retryBackoffMs` via
+ * `parsePositiveInt` (un backoff `0`/négatif n'a pas de sens → défaut). Comme `loadMapConfig`,
+ * sans validation de secrets : réglages purs, pas de clé (la clé Gemini reste dans `imageModel`).
+ */
+export function loadWorldGenConfig(env: Env): WorldGenConfig {
+  const d = CONFIG_DEFAULTS.worldgen;
+  const p = d.prompts;
+  return {
+    monthlyBudgetEur: parsePositiveInt(env.WORLDGEN_MONTHLY_BUDGET_EUR, d.monthlyBudgetEur),
+    bufferAhead: parsePositiveInt(env.WORLDGEN_BUFFER_AHEAD, d.bufferAhead),
+    maxRetries: parseNonNegativeInt(env.WORLDGEN_MAX_RETRIES, d.maxRetries),
+    retryBackoffMs: parsePositiveInt(env.WORLDGEN_RETRY_BACKOFF_MS, d.retryBackoffMs),
+    prompts: {
+      style: parseString(env.WORLDGEN_PROMPT_STYLE, p.style),
+      negative: parseString(env.WORLDGEN_PROMPT_NEGATIVE, p.negative),
+      teddy: parseString(env.WORLDGEN_PROMPT_TEDDY, p.teddy),
+      creature: parseString(env.WORLDGEN_PROMPT_CREATURE, p.creature),
+      background: parseString(env.WORLDGEN_PROMPT_BACKGROUND, p.background),
+    },
+  };
+}
+
+/**
  * Construit la config typée depuis un environnement. Fonction pure (testable).
  * En mode `production`, lève `ConfigError` si une variable requise manque (fail-fast).
  */
@@ -582,6 +708,7 @@ export function loadConfig(env: Env): AppConfig {
     engine: loadEngineConfig(env),
     map: loadMapConfig(env),
     economy: loadEconomyConfig(env),
+    worldgen: loadWorldGenConfig(env),
   };
 }
 
@@ -625,6 +752,15 @@ export function getMapConfig(): MapConfig {
  */
 export function getEconomyConfig(): EconomyConfig {
   return getConfig().economy;
+}
+
+/**
+ * Bloc **pipeline mondes IA** de la config applicative (mémoïsé). Consommé par le client
+ * image (`lib/worldgen/image-client.ts`, retry) et le worker/buffer (stories 6.x) qui
+ * tournent DANS le runtime Node. Source unique des ⚙️ du pipeline (budget/buffer/retry/prompts).
+ */
+export function getWorldGenConfig(): WorldGenConfig {
+  return getConfig().worldgen;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */

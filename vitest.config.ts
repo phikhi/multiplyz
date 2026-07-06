@@ -5,7 +5,16 @@ import { resolve } from "node:path";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { "@": resolve(__dirname, "src") },
+    alias: {
+      "@": resolve(__dirname, "src"),
+      // `import "server-only"` est un MARQUEUR de frontière serveur (Next le résout via
+      // la condition `react-server` → un module vide `empty.js` ; le bundle client le
+      // résout vers `index.js` qui THROW à l'import → fuite impossible côté client). Vitest
+      // (Node, sans condition `react-server`) résoudrait `index.js` et casserait le test des
+      // modules server-only. On le mappe donc vers `empty.js` (no-op) — même résolution que
+      // le serveur Next, la garde anti-fuite restant portée par le bundler client.
+      "server-only": resolve(__dirname, "node_modules/server-only/empty.js"),
+    },
   },
   test: {
     environment: "jsdom",

@@ -8,11 +8,13 @@ import {
   getEconomyConfig,
   getEngineConfig,
   getMapConfig,
+  getWorldGenConfig,
   loadAuthConfig,
   loadConfig,
   loadEconomyConfig,
   loadEngineConfig,
   loadMapConfig,
+  loadWorldGenConfig,
   resetConfigCache,
 } from "./server-config";
 
@@ -510,6 +512,89 @@ describe("loadConfig — bloc engine intégré", () => {
   it("expose le bloc economy dans la config applicative", () => {
     expect(loadConfig({ NODE_ENV: "development" }).economy).toEqual(CONFIG_DEFAULTS.economy);
   });
+
+  it("expose le bloc worldgen dans la config applicative", () => {
+    expect(loadConfig({ NODE_ENV: "development" }).worldgen).toEqual(CONFIG_DEFAULTS.worldgen);
+  });
+});
+
+describe("loadWorldGenConfig — défauts ⚙️ (WORLDGEN §2/§3/§5, ADR 0008)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadWorldGenConfig({})).toEqual(CONFIG_DEFAULTS.worldgen);
+  });
+
+  it("plafond 20 €/mois, buffer 2, 3 ré-essais + backoff 500 ms (WORLDGEN §2/§3, ADR 0008)", () => {
+    const wg = loadWorldGenConfig({});
+    expect(wg.monthlyBudgetEur).toBe(20);
+    expect(wg.bufferAhead).toBe(2);
+    expect(wg.maxRetries).toBe(3);
+    expect(wg.retryBackoffMs).toBe(500);
+  });
+
+  it("prompts de base = charte ART §5 (STYLE constant, NEGATIVE avec « text », gabarits variabilisés)", () => {
+    const { prompts } = loadWorldGenConfig({});
+    // STYLE constant : ancrage kawaii flat-vector (ART §5).
+    expect(prompts.style).toContain("flat 2D kawaii vector illustration");
+    expect(prompts.style).toContain("consistent art style");
+    // NEGATIVE inclut « text, letters » (ADR 0008 : Nano Banana rend du texte parasite).
+    expect(prompts.negative).toContain("text, letters");
+    // Teddy : étiquette VIERGE sans texte (ADR 0008 contrainte 2) + variables injectées.
+    expect(prompts.teddy).toContain("blank ear tag with no text");
+    expect(prompts.teddy).toContain("{base_style}");
+    expect(prompts.teddy).toContain("{world_accessory}");
+    // Créature + fond : gabarits variabilisés (variables ART §5).
+    expect(prompts.creature).toContain("{creature_concept}");
+    expect(prompts.creature).toContain("{features}");
+    expect(prompts.background).toContain("{world_theme}");
+    expect(prompts.background).toContain("--ar 16:9");
+  });
+});
+
+describe("loadWorldGenConfig — surcharges ⚙️ par env", () => {
+  it("surcharge budget / buffer / retry / backoff", () => {
+    const wg = loadWorldGenConfig({
+      WORLDGEN_MONTHLY_BUDGET_EUR: "40",
+      WORLDGEN_BUFFER_AHEAD: "3",
+      WORLDGEN_MAX_RETRIES: "5",
+      WORLDGEN_RETRY_BACKOFF_MS: "1000",
+    });
+    expect(wg.monthlyBudgetEur).toBe(40);
+    expect(wg.bufferAhead).toBe(3);
+    expect(wg.maxRetries).toBe(5);
+    expect(wg.retryBackoffMs).toBe(1000);
+  });
+
+  it("accepte maxRetries = 0 (désactive le retry) mais rejette budget/buffer invalides → défaut", () => {
+    // maxRetries via parseNonNegativeInt : 0 légitime (aucun ré-essai).
+    expect(loadWorldGenConfig({ WORLDGEN_MAX_RETRIES: "0" }).maxRetries).toBe(0);
+    // budget/buffer via parsePositiveInt : 0 / négatif / non numérique → défaut.
+    expect(loadWorldGenConfig({ WORLDGEN_MONTHLY_BUDGET_EUR: "0" }).monthlyBudgetEur).toBe(
+      CONFIG_DEFAULTS.worldgen.monthlyBudgetEur,
+    );
+    expect(loadWorldGenConfig({ WORLDGEN_BUFFER_AHEAD: "-1" }).bufferAhead).toBe(
+      CONFIG_DEFAULTS.worldgen.bufferAhead,
+    );
+    expect(loadWorldGenConfig({ WORLDGEN_RETRY_BACKOFF_MS: "oops" }).retryBackoffMs).toBe(
+      CONFIG_DEFAULTS.worldgen.retryBackoffMs,
+    );
+    // maxRetries négatif → défaut (parseNonNegativeInt).
+    expect(loadWorldGenConfig({ WORLDGEN_MAX_RETRIES: "-2" }).maxRetries).toBe(
+      CONFIG_DEFAULTS.worldgen.maxRetries,
+    );
+  });
+
+  it("surcharge un prompt de base (calibrage playtest ⚙️) sans toucher les autres", () => {
+    const { prompts } = loadWorldGenConfig({ WORLDGEN_PROMPT_STYLE: "custom kawaii style" });
+    expect(prompts.style).toBe("custom kawaii style");
+    // Les autres gabarits restent la charte.
+    expect(prompts.negative).toBe(CONFIG_DEFAULTS.worldgen.prompts.negative);
+  });
+
+  it("retombe sur la charte quand un prompt est vide / espaces (jamais de prompt vide)", () => {
+    expect(loadWorldGenConfig({ WORLDGEN_PROMPT_TEDDY: "   " }).prompts.teddy).toBe(
+      CONFIG_DEFAULTS.worldgen.prompts.teddy,
+    );
+  });
 });
 
 describe("getMapConfig — accès mémoïsé", () => {
@@ -536,6 +621,15 @@ describe("getEconomyConfig — accès mémoïsé", () => {
 
   it("expose le bloc economy de la config applicative", () => {
     expect(getEconomyConfig()).toBe(getConfig().economy);
+  });
+});
+
+describe("getWorldGenConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc worldgen de la config applicative", () => {
+    expect(getWorldGenConfig()).toBe(getConfig().worldgen);
   });
 });
 
