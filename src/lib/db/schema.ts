@@ -649,3 +649,77 @@ export const jobs = sqliteTable("jobs", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+/**
+ * Nature d'un asset de référence Teddy (WORLDGEN §8) : le **master** kawaii canonique, ou
+ * une **expression** du model sheet (neutre · content · oups · acclame · intrépide — COPY
+ * réactions). Le master ancre le Stage B (par monde) ; les expressions servent de sprites de
+ * réaction en jeu (double usage, WORLDGEN §8).
+ */
+export type TeddyAssetKind = "master" | "expression";
+
+/**
+ * Statut de validation d'un asset de référence (WORLDGEN §8 « validé à la main »). Un asset
+ * est produit **candidat** par l'outil Stage A ; le figeage du Teddy canonique (`approved`)
+ * est un **sign-off propriétaire** (action manuelle, jamais automatique — checkpoint owner,
+ * ADR 0008). Voir `lib/worldgen/reference-assets.ts`.
+ */
+export type ReferenceAssetStatus = "candidate" | "approved";
+
+/**
+ * **Assets de référence Teddy** (WORLDGEN §8, story 6.2) — master kawaii + model sheet
+ * d'expressions produits par l'outil Stage A depuis les photos réelles (une seule fois). Ce
+ * sont des **assets partagés du foyer** (pas de FK profil, pas de cascade RGPD : non
+ * enfant-spécifiques, comme `worlds`). Le Stage B (par monde) ancre sur le **master** approuvé,
+ * plus jamais les photos (WORLDGEN §8).
+ *
+ * PK `id` **texte** (clé stable, ex. `teddy:master`, `teddy:expression:neutre`) :
+ * déterministe → amorçage/upsert idempotent des candidats par l'outil (rejouer Stage A
+ * remplace le candidat au même id sans doublon). Aucun callback `sqliteTable` d'extras
+ * (index/PK composite) qui casserait le gate 100 % fonctions (LEARNINGS #34/#46) — même
+ * patron que `worlds`/`jobs`.
+ *
+ * Table **neuve** (jamais peuplée avant cette migration) → colonnes `NOT NULL` + `default`
+ * sans le piège « ADD NOT NULL sur table peuplée » (issue #105). `expression` est **nullable**
+ * (renseigné seulement pour `kind = expression` ; le master n'a pas d'expression). `approvedBy`
+ * est **nullable** (renseigné uniquement au sign-off owner ; un candidat non figé reste `NULL`).
+ *
+ * `source_photos_hash` matérialise la **garde « photos consommées uniquement au Stage A »**
+ * (WORLDGEN §8) : c'est une empreinte du lot de photos figée à la génération ; le Stage B lit
+ * `master_ref` (l'asset dérivé), jamais les photos. `transparent` (bool 0/1) et
+ * `background_strategy` tracent la **stratégie de fond** appliquée (⚙️ story 6.2) → lisibilité
+ * Pokédex vérifiable (PRODUCT §2.3).
+ */
+export const teddyReferenceAssets = sqliteTable("teddy_reference_assets", {
+  /** Clé stable (ex. `teddy:master`, `teddy:expression:neutre`) — upsert idempotent. */
+  id: text("id").primaryKey(),
+  /** `master` (Teddy canonique) | `expression` (sprite du model sheet). */
+  kind: text("kind").$type<TeddyAssetKind>().notNull(),
+  /**
+   * Slug d'expression (`neutre`/`content`/`oups`/`acclame`/`intrepide`) — **nullable**,
+   * renseigné uniquement pour `kind = expression` (le master n'a pas d'expression).
+   */
+  expression: text("expression"),
+  /** Référence de l'asset dérivé (chemin/URL servi par Nginx, WORLDGEN §5). */
+  assetRef: text("asset_ref").notNull(),
+  /** Stratégie de fond appliquée (⚙️ story 6.2) — `post-cutout` | `full-card`. */
+  backgroundStrategy: text("background_strategy").notNull(),
+  /** Fond transparent ? (1 = détouré/transparent, 0 = carte pleine). Bool SQLite (0/1). */
+  transparent: integer("transparent").notNull(),
+  /**
+   * Empreinte du lot de **photos réelles** figée au Stage A (garde « photos jamais
+   * re-consommées après A », WORLDGEN §8). Le Stage B lit `master_ref`, jamais les photos.
+   */
+  sourcePhotosHash: text("source_photos_hash").notNull(),
+  /** `candidate` (produit par l'outil) | `approved` (figé au sign-off owner). Défaut `candidate`. */
+  status: text("status").$type<ReferenceAssetStatus>().notNull().default("candidate"),
+  /**
+   * Identité du propriétaire qui a **approuvé** l'asset (nullable) — renseigné uniquement au
+   * sign-off manuel (WORLDGEN §8, ADR 0008). Un candidat non figé reste `NULL`.
+   */
+  approvedBy: text("approved_by"),
+  /** Instant serveur de la génération du candidat. */
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});

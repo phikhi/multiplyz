@@ -595,6 +595,40 @@ describe("loadWorldGenConfig — surcharges ⚙️ par env", () => {
       CONFIG_DEFAULTS.worldgen.prompts.teddy,
     );
   });
+
+  it("surcharge les ⚙️ Stage A (dirs / matte) — chemins gitignorés overridables", () => {
+    const { stageA } = loadWorldGenConfig({
+      WORLDGEN_STAGE_A_PHOTOS_DIR: "/mnt/teddy-photos",
+      WORLDGEN_STAGE_A_OUTPUT_DIR: "/srv/assets/teddy",
+      WORLDGEN_STAGE_A_MATTE_COLOR: "#00ff00",
+    });
+    expect(stageA.photosDir).toBe("/mnt/teddy-photos");
+    expect(stageA.outputDir).toBe("/srv/assets/teddy");
+    expect(stageA.matteColor).toBe("#00ff00");
+    // Non surchargée → défaut.
+    expect(stageA.backgroundStrategy).toBe(CONFIG_DEFAULTS.worldgen.stageA.backgroundStrategy);
+  });
+
+  it("accepte les deux stratégies de fond valides (post-cutout / full-card)", () => {
+    expect(
+      loadWorldGenConfig({ WORLDGEN_STAGE_A_BACKGROUND_STRATEGY: "post-cutout" }).stageA
+        .backgroundStrategy,
+    ).toBe("post-cutout");
+    expect(
+      loadWorldGenConfig({ WORLDGEN_STAGE_A_BACKGROUND_STRATEGY: "  full-card  " }).stageA
+        .backgroundStrategy,
+    ).toBe("full-card");
+  });
+
+  it("rejette une stratégie de fond inconnue / vide → défaut (jamais de stratégie invalide)", () => {
+    expect(
+      loadWorldGenConfig({ WORLDGEN_STAGE_A_BACKGROUND_STRATEGY: "cutout-magique" }).stageA
+        .backgroundStrategy,
+    ).toBe(CONFIG_DEFAULTS.worldgen.stageA.backgroundStrategy);
+    expect(
+      loadWorldGenConfig({ WORLDGEN_STAGE_A_BACKGROUND_STRATEGY: "   " }).stageA.backgroundStrategy,
+    ).toBe(CONFIG_DEFAULTS.worldgen.stageA.backgroundStrategy);
+  });
 });
 
 describe("getMapConfig — accès mémoïsé", () => {

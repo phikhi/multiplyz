@@ -133,6 +133,7 @@ describe("runMigrations", () => {
     // référence `characters` par FK, donc drop dans cet ordre ; index UNIQUE 0008 sur
     // `attempts` — celui du `ledger` part avec son DROP TABLE ; tables worldgen 0009 :
     // worlds/jobs — sans FK, drop libre — pour que leur `CREATE TABLE` puisse rejouer).
+    seed.run(sql`DROP TABLE teddy_reference_assets`);
     seed.run(sql`DROP TABLE jobs`);
     seed.run(sql`DROP TABLE worlds`);
     seed.run(sql`DROP INDEX attempts_profile_client_attempt_unique`);
@@ -194,7 +195,9 @@ describe("runMigrations", () => {
     // Retour à l'état pré-0008 : retirer les deux index + dé-journaliser 0008 (9ᵉ
     // migration, ordinal 8 dans l'ordre chronologique — robuste à l'ajout ultérieur de
     // migrations, comme la régression #105). La dé-journalisation `>= OFFSET 8` retire
-    // AUSSI 0009 (worlds/jobs) → on drope ces tables pour que leur `CREATE TABLE` rejoue.
+    // AUSSI 0009 (worlds/jobs) et 0010 (teddy_reference_assets) → on drope ces tables pour
+    // que leur `CREATE TABLE` rejoue.
+    seed.run(sql`DROP TABLE teddy_reference_assets`);
     seed.run(sql`DROP TABLE jobs`);
     seed.run(sql`DROP TABLE worlds`);
     seed.run(sql`DROP INDEX attempts_profile_client_attempt_unique`);

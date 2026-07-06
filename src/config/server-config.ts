@@ -237,6 +237,56 @@ export interface WorldGenPrompts {
 }
 
 /**
+ * **Stratégie de fond** des assets de personnage (Teddy/créatures), ⚙️ tranché story 6.2.
+ *
+ * ADR 0008 contrainte 3 : Nano Banana **ne garantit pas l'alpha** (rend un fond blanc plein).
+ * Or ART §4 exige un **fond transparent** (1:1 WebP) pour l'affichage Pokédex/collection
+ * (PRODUCT §2.3 — la créature détourée se pose proprement sur n'importe quel fond d'UI). Deux
+ * options :
+ * - `post-cutout` (**retenu par défaut**) : générer sur fond de matte plein (blanc), puis
+ *   **détourer** en post-traitement → asset à fond transparent, lisible partout dans le Pokédex.
+ * - `full-card` : garder la carte pleine (fond opaque) — plus simple mais casse la lisibilité
+ *   Pokédex (chaque vignette porte son propre fond au lieu de se fondre dans l'UI).
+ *
+ * Consommé par l'outil Stage A (`lib/worldgen/stage-a.ts`) : la stratégie **change la sortie
+ * observable** (asset détouré vs carte pleine + drapeau `transparent`). Calibrable au playtest.
+ */
+export type BackgroundStrategy = "post-cutout" | "full-card";
+
+/** Stratégies de fond valides (source unique pour le parsing ⚙️). */
+export const BACKGROUND_STRATEGIES = ["post-cutout", "full-card"] as const;
+
+/**
+ * Config ⚙️ de l'**outil Stage A** (WORLDGEN §8 — master Teddy + model sheet, story 6.2).
+ * Outil **one-shot hors chemin runtime enfant** : lit les photos réelles **une seule fois**
+ * (Stage A), produit le master + les 5 expressions, applique la stratégie de fond. `photosDir`
+ * et `outputDir` sont gitignorés (photos privées + assets dérivés — cf. `.gitignore`).
+ */
+export interface StageAConfig {
+  /**
+   * Dossier des **photos réelles** de Teddy (Stage A **uniquement** — jamais relu après,
+   * WORLDGEN §8). Gitignoré (`/docs/teddy/`). Défaut `docs/teddy`.
+   */
+  photosDir: string;
+  /**
+   * Dossier de **sortie** des assets de référence dérivés (master + expressions), servis
+   * ensuite par Nginx (WORLDGEN §5). Gitignoré (`/storage/`). Défaut `storage/reference/teddy`.
+   */
+  outputDir: string;
+  /**
+   * Stratégie de fond ⚙️ (ADR 0008 contrainte 3). **Consommée** par l'outil Stage A :
+   * `post-cutout` détoure (asset transparent, lisibilité Pokédex) ; `full-card` garde le fond
+   * plein. Défaut `post-cutout`.
+   */
+  backgroundStrategy: BackgroundStrategy;
+  /**
+   * Couleur du **matte** de génération (fond plein sur lequel le modèle rend, à détourer en
+   * `post-cutout`). Blanc par défaut (ADR 0008 : Nano Banana rend un fond blanc). Défaut `#ffffff`.
+   */
+  matteColor: string;
+}
+
+/**
  * Config ⚙️ du **pipeline de génération de mondes** (WORLDGEN.md §2/§3/§5, ADR 0008).
  * **Posée** ici (contrat épic #6, story 6.1) ; **consommée** par le worker/buffer + le client
  * image (stories 6.x). Source unique des ⚙️ du pipeline (garde-fou budget, buffer, retry,
@@ -262,6 +312,8 @@ export interface WorldGenConfig {
   retryBackoffMs: number;
   /** Prompts de base verrouillés (charte ART §5). Constantes ⚙️ (cf. `WorldGenPrompts`). */
   prompts: WorldGenPrompts;
+  /** ⚙️ Outil Stage A (master Teddy + model sheet, WORLDGEN §8) — consommé par `stage-a.ts` (story 6.2). */
+  stageA: StageAConfig;
 }
 
 export interface AppConfig {
@@ -389,6 +441,17 @@ export const CONFIG_DEFAULTS = {
         "{base_style}, a {world_theme} world background landscape, palette: {world_palette}, " +
         "calm uncluttered composition with open space in the lower-center for UI, " +
         "no characters, no text --ar 16:9",
+    },
+    // Outil Stage A (WORLDGEN §8) — photos gitignorées → sortie gitignorée (storage).
+    stageA: {
+      // Photos réelles de Teddy (Stage A uniquement) — dossier gitignoré (`/docs/teddy/`).
+      photosDir: "docs/teddy",
+      // Assets de référence dérivés (master + expressions) — dossier gitignoré (`/storage/`).
+      outputDir: "storage/reference/teddy",
+      // ADR 0008 contrainte 3 : pas d'alpha fiable → détourage post pour la lisibilité Pokédex.
+      backgroundStrategy: "post-cutout",
+      // Fond plein rendu par Nano Banana (blanc) — matte à détourer en `post-cutout`.
+      matteColor: "#ffffff",
     },
   },
 } as const;
@@ -647,6 +710,19 @@ function parseString(raw: string | undefined, fallback: string): string {
 }
 
 /**
+ * Parse la **stratégie de fond** ⚙️ (Stage A). Accepte l'une des valeurs de
+ * `BACKGROUND_STRATEGIES` (insensible aux espaces) ; toute autre valeur → défaut (jamais de
+ * stratégie invalide propagée à l'outil, qui la consomme réellement).
+ */
+function parseBackgroundStrategy(
+  raw: string | undefined,
+  fallback: BackgroundStrategy,
+): BackgroundStrategy {
+  const v = raw?.trim();
+  return BACKGROUND_STRATEGIES.find((s) => s === v) ?? fallback;
+}
+
+/**
  * Bloc **pipeline mondes IA** de la config (WORLDGEN §2/§3/§5, ADR 0008), isolé en fonction
  * pure (mêmes conventions que `loadEngineConfig`). Source unique des ⚙️ du pipeline : plafond
  * budgétaire (garde-fou coût WORLDGEN §2), buffer d'avance, retry réseau transitoire (ADR 0008
@@ -672,6 +748,15 @@ export function loadWorldGenConfig(env: Env): WorldGenConfig {
       teddy: parseString(env.WORLDGEN_PROMPT_TEDDY, p.teddy),
       creature: parseString(env.WORLDGEN_PROMPT_CREATURE, p.creature),
       background: parseString(env.WORLDGEN_PROMPT_BACKGROUND, p.background),
+    },
+    stageA: {
+      photosDir: parseString(env.WORLDGEN_STAGE_A_PHOTOS_DIR, d.stageA.photosDir),
+      outputDir: parseString(env.WORLDGEN_STAGE_A_OUTPUT_DIR, d.stageA.outputDir),
+      backgroundStrategy: parseBackgroundStrategy(
+        env.WORLDGEN_STAGE_A_BACKGROUND_STRATEGY,
+        d.stageA.backgroundStrategy,
+      ),
+      matteColor: parseString(env.WORLDGEN_STAGE_A_MATTE_COLOR, d.stageA.matteColor),
     },
   };
 }
