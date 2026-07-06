@@ -35,6 +35,9 @@ test-results/
 /public/generated/
 /storage/
 
+# Photos sources de Teddy (Stage A) — input local, jamais commité (binaires lourds + perso)
+/docs/teddy/
+
 # Artefacts locaux
 multiplyz-ds-*.png
 
