@@ -1068,9 +1068,9 @@ describe("schéma jobs (file de génération — WORLDGEN §3)", () => {
       .run();
   }
 
-  it("insère et relit un job (défauts status=pending / attempts=0 / last_error null / timestamps)", () => {
+  it("insère et relit un job (défauts status=pending / attempts=0 / qa_attempts=0 / last_error null / timestamps)", () => {
     const db = freshDb();
-    // Sans `status`/`attempts`/`lastError`/timestamps → exerce les défauts + nullable last_error.
+    // Sans `status`/`attempts`/`qaAttempts`/`lastError`/timestamps → exerce les défauts + nullable.
     seedJob(db);
     const row = db.select().from(jobs).get();
     expect(row).toMatchObject({
@@ -1078,6 +1078,7 @@ describe("schéma jobs (file de génération — WORLDGEN §3)", () => {
       payload: '{"world_index":0}',
       status: "pending",
       attempts: 0,
+      qaAttempts: 0, // compteur de régénération QA (story 6.5) — défaut 0, distinct de `attempts`.
       lastError: null,
     });
     expect(row?.id).toBeTypeOf("number");
@@ -1094,6 +1095,25 @@ describe("schéma jobs (file de génération — WORLDGEN §3)", () => {
       attempts: 3,
       lastError: "model 503 after retries",
     });
+  });
+
+  it("compteurs DISTINCTS : `attempts` (générateur) et `qa_attempts` (régénération QA) coexistent (story 6.5)", () => {
+    const db = freshDb();
+    // Un job peut porter des essais générateur ET des régénérations QA sans que l'un ampute l'autre.
+    seedJob(db, { attempts: 2, qaAttempts: 3 });
+    const row = db.select().from(jobs).get();
+    expect(row?.attempts).toBe(2);
+    expect(row?.qaAttempts).toBe(3);
+  });
+
+  it("`qa_attempts` est NOT NULL DEFAULT 0 (colonne additive migration 0011, jamais NOT NULL sans default)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number; dflt_value: string | null }>(
+      sql`PRAGMA table_info(jobs)`,
+    );
+    const col = info.find((c) => c.name === "qa_attempts");
+    expect(col?.notnull).toBe(1);
+    expect(col?.dflt_value).toBe("0");
   });
 
   it("est une file : plusieurs jobs coexistent (PK autoincrement)", () => {

@@ -329,7 +329,11 @@ export function ensureBuffer(
   return { enqueued, skippedForBudget, skippedExisting };
 }
 
-/** Résultat de `processNextJob` : le job traité + son issue (aucun job → `idle`). */
+/**
+ * Résultat de `processNextJob` : le job traité + son issue (aucun job → `idle`). Pour `retry`/`failed`,
+ * `attempts` = le compteur **de la phase qui a échoué** : échec générateur → `jobs.attempts` (vs
+ * `maxRetries`) ; rejet QA → `jobs.qa_attempts` (vs `qa.maxAttempts`). Deux compteurs distincts.
+ */
 export type ProcessResult =
   | { readonly outcome: "idle" }
   | { readonly outcome: "done"; readonly jobId: number; readonly worldIndex: number }
@@ -352,13 +356,14 @@ export type ProcessResult =
  * puis persiste **atomiquement** le statut de modération du monde + le job `done`. Aucun job →
  * `{ outcome: "idle" }`.
  *
- * **Deux chemins d'échec** (compteurs de seuil distincts, WORLDGEN §6) :
- * - **Générateur qui lève** (réseau/gen) : `attempts += 1` + `last_error`, `pending` tant que
+ * **Deux chemins d'échec, deux compteurs DB DISTINCTS et indépendants** (WORLDGEN §6, bornes exactes) :
+ * - **Générateur qui lève** (réseau/gen) : `jobs.attempts += 1` + `last_error`, `pending` tant que
  *   `attempts ≤ maxRetries`, sinon `failed` (le monde reste sur le fallback 6.6).
  * - **Rejet QA** (asset avec texte parasite / effrayant / hors-charte, OU inspecteur fail-closed) :
- *   `attempts += 1`, régénération `pending` tant que `attempts ≤ qa.maxAttempts`, sinon `failed`.
- *   Dans les deux cas de rejet QA, le monde reste `buffered` (posé par 6.3) → **jamais** `active`
- *   tant que la QA n'a pas réussi (AC3 « jamais de monde non-QA en active »).
+ *   `jobs.qa_attempts += 1`, régénération `pending` tant que `qa_attempts ≤ qa.maxAttempts`, sinon
+ *   `failed`. Le monde reste `buffered` (posé par 6.3) → **jamais** `active` tant que la QA n'a pas
+ *   réussi (AC3). **Compteurs séparés** : d'éventuels échecs générateur antérieurs n'amputent PAS
+ *   le budget de régénération QA (et inversement) — chaque borne est **exacte**.
  *
  * **Transaction multi-écritures** (#122/#124) : la génération (async) tourne **hors** transaction
  * (better-sqlite3 n'accepte pas d'`await` dans `db.transaction`) ; le générateur persiste déjà le
@@ -380,12 +385,19 @@ export async function processNextJob(
   const now = deps.now();
 
   // ── Prendre le prochain job pending (FIFO par id) ──
-  // On ne lit QUE les colonnes consommées (`id`/`payload`/`attempts`) — pas `status`/`updated_at`
-  // (déjà connus/réécrits). Sélection explicite (pas `.select()` global) : garde la lecture amont
-  // découplée des colonnes que la finalisation ÉCRIT, ce qui permet un test de rollback non-vacuous
-  // (la panne frappe l'écriture gardée, jamais cette lecture — règle #122).
+  // On ne lit QUE les colonnes consommées (`id`/`payload`/`attempts`/`qa_attempts`) — pas
+  // `status`/`updated_at` (déjà connus/réécrits). Les **deux compteurs** sont lus séparément :
+  // `attempts` borne les échecs générateur (vs `maxRetries`), `qa_attempts` borne les régénérations
+  // QA (vs `qa.maxAttempts`) — budgets indépendants (schema.ts `jobs`). Sélection explicite (pas
+  // `.select()` global) : garde la lecture amont découplée des colonnes que la finalisation ÉCRIT,
+  // ce qui permet un test de rollback non-vacuous (la panne frappe l'écriture gardée — règle #122).
   const job = db
-    .select({ id: jobs.id, payload: jobs.payload, attempts: jobs.attempts })
+    .select({
+      id: jobs.id,
+      payload: jobs.payload,
+      attempts: jobs.attempts,
+      qaAttempts: jobs.qaAttempts,
+    })
     .from(jobs)
     .where(and(eq(jobs.type, GENERATE_WORLD_JOB), eq(jobs.status, "pending")))
     .orderBy(jobs.id)
@@ -452,24 +464,27 @@ export async function processNextJob(
   }
   if (qaFailReason !== null) {
     // Régénérer jusqu'à `qa.maxAttempts` essais, sinon rester sur le fallback (WORLDGEN §6 « jusqu'à
-    // N essais »). Même sémantique de seuil que le retry réseau, compteur `qa.maxAttempts` distinct :
-    // `failed` dès que `attempts > qa.maxAttempts`. Écriture unique par branche (LEARNINGS #124).
-    const attempts = job.attempts + 1;
-    const nextStatus: JobStatus = attempts > deps.config.qa.maxAttempts ? "failed" : "pending";
+    // N essais »). On incrémente le compteur **DÉDIÉ** `qa_attempts` (jamais `attempts`, le compteur
+    // générateur) → budget de régénération QA **exact**, non amputé par d'éventuels échecs réseau
+    // antérieurs sur le même job (bornes exactes, Backend #173). `failed` dès que
+    // `qa_attempts > qa.maxAttempts`. Écriture unique par branche (LEARNINGS #124).
+    const qaAttempts = job.qaAttempts + 1;
+    const nextStatus: JobStatus = qaAttempts > deps.config.qa.maxAttempts ? "failed" : "pending";
     db.update(jobs)
       .set({
         status: nextStatus,
-        attempts,
+        qaAttempts,
         lastError: `QA kid-safe échouée : ${qaFailReason}`,
         updatedAt: now,
       })
       .where(eq(jobs.id, job.id))
       .run();
+    // Le champ `attempts` du résultat porte le compteur de la phase qui a échoué (ici QA → `qa_attempts`).
     return {
       outcome: nextStatus === "failed" ? "failed" : "retry",
       jobId: job.id,
       worldIndex,
-      attempts,
+      attempts: qaAttempts,
     };
   }
 
@@ -588,9 +603,10 @@ export function worldPassedQa(db: AppDatabase, worldIndex: number): boolean {
  *   actif (test rouge).
  *
  * **Écriture unique** (un seul `UPDATE worlds`) après les gardes de lecture → aucun état partiel à
- * annuler ⇒ **pas de transaction** (un test de rollback serait vacuous, interdit — rétro #124). La
- * progression est **monotone** (`buffered` → `active`) : une double approbation concurrente réécrit
- * le même statut `active` (idempotent), aucun état incohérent.
+ * annuler ⇒ **pas de transaction** (un test de rollback serait vacuous, interdit — rétro #124). Une
+ * **2ᵉ approbation** d'un monde déjà `active` est **refusée** (`WorldModerationError` via la garde
+ * « statut `buffered` requis ») — pas silencieusement idempotente (comportement prouvé par le test
+ * dédié). La transition reste **monotone** (`buffered` → `active`, jamais l'inverse).
  */
 export function approveWorld(db: AppDatabase, worldId: string, approvedBy: string): void {
   const who = approvedBy.trim();

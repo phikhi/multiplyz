@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `qa_attempts` integer DEFAULT 0 NOT NULL;

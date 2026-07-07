@@ -615,6 +615,7 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
         payload text NOT NULL,
         status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','failed')),
         attempts integer NOT NULL DEFAULT 0,
+        qa_attempts integer NOT NULL DEFAULT 0,
         last_error text,
         created_at integer NOT NULL DEFAULT (unixepoch()),
         updated_at integer NOT NULL DEFAULT (unixepoch())
@@ -684,7 +685,9 @@ describe("processNextJob — QA kid-safe : asset rejeté ⇒ régénère, monde 
     expect(out).toMatchObject({ outcome: "retry", jobId, worldIndex: 70, attempts: 1 });
     const job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
     expect(job?.status).toBe("pending"); // re-tentable (régénération)
-    expect(job?.attempts).toBe(1);
+    // Le rejet QA incrémente le compteur DÉDIÉ `qa_attempts`, JAMAIS `attempts` (générateur).
+    expect(job?.qaAttempts).toBe(1);
+    expect(job?.attempts).toBe(0);
     expect(job?.lastError).toContain("QA kid-safe");
     expect(job?.lastError).toContain("style_coherence");
     // Le monde N'EST JAMAIS active tant que la QA n'a pas réussi (AC3). Retirer la garde QA de
@@ -730,6 +733,76 @@ describe("processNextJob — QA kid-safe : asset rejeté ⇒ régénère, monde 
     expect(out).toMatchObject({ outcome: "failed", attempts: 1 });
     expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("failed");
     expect(db.select().from(worlds).where(eq(worlds.index, 73)).get()?.status).toBe("buffered");
+  });
+
+  it("MUTATION-PROUVÉ : budgets DISTINCTS — k échecs générateur PUIS N rejets QA sur le MÊME job ⇒ la QA obtient ses `qa.maxAttempts` régénérations COMPLÈTES (bornes exactes, Backend #173)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 76);
+    // Générateur : ÉCHOUE au 1er appel (réseau), puis RÉUSSIT ensuite (insère le monde buffered).
+    let genCalls = 0;
+    const generate = vi.fn(async (_db: AppDatabase, theme: string, worldIndex: number) => {
+      genCalls += 1;
+      if (genCalls === 1) throw new Error("boom réseau (1er essai)");
+      db.insert(worlds)
+        .values({
+          id: `world:${worldIndex}`,
+          index: worldIndex,
+          theme,
+          palette: "{}",
+          assetRefs: "{}",
+          prompt: "p",
+          seed: `s-${worldIndex}`,
+          status: "buffered",
+          createdAt: NOW,
+        })
+        .onConflictDoUpdate({ target: worlds.id, set: { seed: `s-${worldIndex}` } })
+        .run();
+      return {
+        worldId: `world:${worldIndex}`,
+        worldIndex,
+        themeSlug: theme,
+        themeLabel: theme,
+        palette: "{}",
+        assetRefs: { background: "b", tiles: "t", teddy: "td" },
+        creatures: [],
+        seed: `s-${worldIndex}`,
+        status: "buffered" as const,
+        cost: { paidImageCalls: 3, estimatedEur: 0.11, monthlyBudgetEur: 20 },
+      };
+    });
+    // maxRetries assez haut pour survivre à l'échec réseau ; qa.maxAttempts = 2 (le budget testé).
+    const deps = baseDeps({
+      generate,
+      inspect: failInspector,
+      config: cfgQa({ maxAttempts: 2 }, { maxRetries: 3 }),
+    });
+
+    // Tick 1 : générateur ÉCHOUE ⇒ attempts(générateur)=1, qa_attempts INTACT à 0.
+    let out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 1 });
+    let job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+    expect(job?.attempts).toBe(1); // compteur générateur
+    expect(job?.qaAttempts).toBe(0); // budget QA JAMAIS entamé par l'échec réseau
+
+    // Tick 2 : génération OK, rejet QA ⇒ qa_attempts=1 ≤ 2 ⇒ retry (régénère). attempts INCHANGÉ à 1.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 1 }); // = qa_attempts
+    job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+    expect(job?.attempts).toBe(1); // le compteur générateur ne bouge plus
+    expect(job?.qaAttempts).toBe(1);
+
+    // Tick 3 : rejet QA ⇒ qa_attempts=2 ≤ 2 ⇒ ENCORE retry. Si les compteurs FUSIONNAIENT, on aurait
+    // attempts=1(réseau)+2(QA)=3 > 2 ⇒ failed prématuré ICI ⇒ ce test rougirait. Bornes exactes prouvées.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 2 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("pending");
+
+    // Tick 4 : qa_attempts=3 > 2 ⇒ failed. La QA a bien eu ses 2 régénérations COMPLÈTES.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "failed", attempts: 3 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("failed");
+    // Le monde n'est JAMAIS devenu active (fallback).
+    expect(db.select().from(worlds).where(eq(worlds.index, 76)).get()?.status).toBe("buffered");
   });
 
   it("inspecteur qui LÈVE (fail-closed) ⇒ rejet QA, monde jamais active, lastError = message de l'inspecteur", async () => {

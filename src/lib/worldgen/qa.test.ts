@@ -182,6 +182,18 @@ describe("assessWorldAssets — le monde n'est conforme que si TOUS ses assets p
     });
   });
 
+  it("un asset d'EN-TÊTE (le fond, 1er de la liste) rejeté ⇒ nommé en position (pas seulement une créature)", () => {
+    const world = makeWorld(["world/0/creature-0.png"]);
+    // Texte parasite détecté UNIQUEMENT sur le fond (premier asset énuméré) → doit être nommé lui.
+    const inspect: WorldInspector = (asset) =>
+      asset.kind === "background" ? { detectedText: "LOGO", unsafeScore: 0, styleScore: 1 } : CLEAN;
+    expect(assessWorldAssets(world, inspect, qaCfg())).toEqual({
+      ok: false,
+      failedRule: "no_parasitic_text",
+      failedAssetRef: "world/0/background.png",
+    });
+  });
+
   it("propage l'exception de l'inspecteur (fail-closed) — jamais un faux verdict conforme", () => {
     expect(() => assessWorldAssets(makeWorld(), defaultInspector, qaCfg())).toThrow(
       QaInspectionError,
