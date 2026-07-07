@@ -250,6 +250,19 @@ describe("MapScreen — états de nœud visibles (verrouillé / courant / termin
     const link = nodeLink();
     expect(link.getAttribute("aria-label")).toContain(strings.map.starsLabel.replace("{n}", "1"));
   });
+
+  it("le médaillon d'étoiles est ABSOLU (hors flux) sur un chip blanc — n'allonge pas le nœud (playtest owner : le connecteur atteint le cercle suivant + trait sous les étoiles)", async () => {
+    // Effet observable : si les étoiles repassaient EN FLUX (position statique), la ligne
+    // du nœud s'allongerait et le connecteur `height:--map-node-gap` ne rejoindrait plus
+    // le cercle suivant (bug « le trait s'arrête avant le 2ᵉ rond »). La garde casse si on
+    // retire `position:absolute` ou le fond opaque du chip (sous lequel le trait passe).
+    await renderReady(map([node({ status: "completed", stars: 3 })]));
+    const stars = document.querySelector<HTMLElement>("[data-map-stars]");
+    expect(stars).not.toBeNull();
+    expect(stars!.style.position).toBe("absolute");
+    expect(stars!.style.backgroundColor).toBe("var(--map-node-star-badge-bg)");
+    expect(Number(stars!.style.zIndex)).toBeGreaterThan(0); // au-dessus du connecteur (zIndex 0)
+  });
 });
 
 describe("MapScreen — icône de type (normal / révision / trésor / boss), doublage a11y", () => {
@@ -343,27 +356,28 @@ describe("MapScreen — contraste WCAG résolu (piège #94/#104, feed-forward br
     },
   );
 
-  // Les étoiles (★ pleine / ☆ vide) sont rendues SOUS la pastille, sur le fond de PAGE
-  // (--color-bg-primary), pas sur le médaillon coloré → on résout le contraste contre CE
-  // fond réel (le fond effectif du glyphe, cf. StarsRow). Une garde PAR glyphe rendu
-  // (pleine ET vide), pas une fois par famille (CLAUDE.md : « tout glyphe visible »).
+  // Les étoiles (★ pleine / ☆ vide) sont désormais rendues sur le MÉDAILLON BLANC (chip,
+  // `--map-node-star-badge-bg` = --color-bg-secondary), plus sur le fond de page (playtest
+  // owner : étoiles sorties du flux). Le fond de RÉFÉRENCE du contraste = ce fond réellement
+  // empilé derrière le glyphe (rétro #125/#126 : jamais un fond que le glyphe ne touche pas).
+  // Une garde PAR glyphe rendu (pleine ET vide), pas une fois par famille (CLAUDE.md).
   it.each(["light", "dark"] as const)(
-    "%s : étoile PLEINE (--map-node-star-filled) ≥ 4.5:1 sur le fond de page (fond réel du glyphe)",
+    "%s : étoile PLEINE (--map-node-star-filled) ≥ 4.5:1 sur le médaillon blanc (fond réel du glyphe)",
     (theme) => {
       const star = resolveTokenColor(theme, "--map-node-star-filled");
-      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      const bg = resolveTokenColor(theme, "--map-node-star-badge-bg");
       expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
 
   it.each(["light", "dark"] as const)(
-    "%s : étoile VIDE (--map-node-star-empty) ≥ 4.5:1 sur le fond de page (fond réel du glyphe)",
+    "%s : étoile VIDE (--map-node-star-empty) ≥ 4.5:1 sur le médaillon blanc (fond réel du glyphe)",
     (theme) => {
       // Effet observable : ☆ vide est un glyphe rendu à part entière (pas juste une
       // absence) — casse si le token est remappé sur une couleur à faible contraste
       // (ex. --color-star/-star-empty décoratifs, qui échouent ~1.2:1 en light).
       const star = resolveTokenColor(theme, "--map-node-star-empty");
-      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      const bg = resolveTokenColor(theme, "--map-node-star-badge-bg");
       expect(contrastRatio(star, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
