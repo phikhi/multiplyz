@@ -624,9 +624,17 @@ export type JobStatus = "pending" | "running" | "done" | "failed";
  * si le volume le justifie).
  *
  * Table **neuve** → colonnes `NOT NULL` + `default` sans le piège #105. `last_error` est
- * **nullable** (renseigné seulement quand `status = failed`). `attempts` matérialise le
- * compteur d'essais du **retry worker** (WORLDGEN §6 « jusqu'à N essais »), distinct du
- * retry réseau transitoire du client image (ADR 0008 contrainte 1).
+ * **nullable** (renseigné seulement quand `status = failed`). **Deux compteurs d'essais
+ * DISTINCTS et indépendants** (le worker traverse deux phases séquentielles par job) :
+ * - `attempts` borne les échecs du **générateur** (réseau/gen transitoire) vs `maxRetries`
+ *   (ADR 0008 contrainte 1) ;
+ * - `qa_attempts` borne les **régénérations après rejet QA kid-safe** vs `qa.maxAttempts`
+ *   (WORLDGEN §6 « jusqu'à N essais », story 6.5).
+ *
+ * Séparés pour que **chaque budget soit exact** : un échec réseau antérieur n'ampute PAS le
+ * budget de régénération QA (et inversement). `qa_attempts` est un **ajout additif** sur une
+ * table existante — `NOT NULL DEFAULT 0` (jamais `NOT NULL` sans default sur table peuplée,
+ * CLAUDE.md migrations) ; migration 0011 régénérée par drizzle-kit (`db:generate` no-op après).
  */
 export const jobs = sqliteTable("jobs", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -636,8 +644,14 @@ export const jobs = sqliteTable("jobs", {
   payload: text("payload").notNull(),
   /** `pending` | `running` | `done` | `failed`. Défaut `pending`. */
   status: text("status").$type<JobStatus>().notNull().default("pending"),
-  /** Nombre d'essais consommés (retry worker, WORLDGEN §6). Défaut 0. */
+  /** Échecs du **générateur** (réseau/gen) consommés — borne `maxRetries` (ADR 0008). Défaut 0. */
   attempts: integer("attempts").notNull().default(0),
+  /**
+   * Régénérations après **rejet QA kid-safe** consommées (WORLDGEN §6, story 6.5) — borne
+   * `qa.maxAttempts`. **Compteur DISTINCT** de `attempts` : un échec générateur antérieur
+   * n'ampute pas ce budget (bornes exactes). Défaut 0.
+   */
+  qaAttempts: integer("qa_attempts").notNull().default(0),
   /** Dernier message d'erreur (nullable) — renseigné quand `status = failed`. */
   lastError: text("last_error"),
   /** Instant de création du job. */

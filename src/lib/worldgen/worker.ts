@@ -5,20 +5,32 @@ import { CURATED_THEMES, type CuratedTheme } from "@/config/worldgen-themes";
 import type { AppDatabase } from "@/lib/db";
 import { jobs, progress, worlds, type JobStatus } from "@/lib/db/schema";
 import { generateWorld, ESTIMATED_EUR_PER_IMAGE, type GeneratedWorld } from "./generate-world";
+import {
+  assessWorldAssets,
+  defaultInspector,
+  moderatedStatusAfterQaPass,
+  type WorldInspector,
+} from "./qa";
 
 /**
- * **Worker daemon — logique cœur** (WORLDGEN §2/§3, story 6.4, épic #6). Consommé par un
- * process daemon **séparé** géré par Forge (STACK.md ; le wiring process = gate-déploiement
+ * **Worker daemon — logique cœur** (WORLDGEN §2/§3/§6, stories 6.4 + 6.5, épic #6). Consommé par
+ * un process daemon **séparé** géré par Forge (STACK.md ; le wiring process = gate-déploiement
  * différé #47/#9 — hors scope ici). Ce module ne contient que la **logique testable** :
  *
  * 1. `ensureBuffer` — maintient `bufferAhead` mondes d'avance sur le `world_index` courant
  *    (dérivé de `progress`) : chaque monde manquant de la fenêtre est **enqueue** (job
  *    `generate_world` `pending`), sous garde de **plafond budgétaire mensuel** (WORLDGEN §2).
  * 2. `processNextJob` — prend un job `pending` → `running` → appelle le générateur (6.3,
- *    **injecté/mockable** → zéro appel réseau réel en CI) → insère le monde `buffered` → job
- *    `done`. Sur échec : `attempts += 1` + `last_error` ; après `maxRetries` → `failed`.
+ *    **injecté/mockable** → zéro appel réseau réel en CI) → **QA kid-safe** (6.5, WORLDGEN §6) →
+ *    persiste le statut de modération du monde (`active` auto OU `buffered` en attente d'approbation
+ *    parent, selon le toggle ⚙️) + job `done`. Sur échec générateur (réseau) : `attempts += 1`,
+ *    `failed` après `maxRetries`. Sur **rejet QA** : régénère, `failed` après `qa.maxAttempts`
+ *    (le monde reste sur le fallback, jamais `active` sans QA — WORLDGEN §6).
  * 3. **Reprise après crash** : un job `running` **orphelin** (worker mort avant `done`) est
  *    remis `pending` au boot (`recoverStaleJobs`) → re-tentable, sans perte ni double.
+ * 4. `approveWorld` — **mécanisme de validation parent** (6.5, WORLDGEN §6) : transitionne un monde
+ *    `buffered` QA-validé → `active` en enregistrant l'identité **parent** (`approvedBy`). L'UI vit
+ *    dans l'espace parent (épic #7) — ici seul le mécanisme de transition d'état.
  *
  * **Budget ⚙️ qui AGIT** (le cœur de 6.4, rétro #155) : 6.1/6.3 ont **posé** `monthlyBudgetEur`
  * et **rapporté** le coût sans rien enforcer ; 6.4 le **consomme**. La dépense du mois courant
@@ -86,6 +98,13 @@ export interface WorkerDeps {
   now: () => Date;
   /** Config worldgen (défaut : config centrale). Injectée en test. */
   config: WorldGenConfig;
+  /**
+   * **Inspecteur vision kid-safe** (QA WORLDGEN §6, story 6.5). Produit les signaux (texte OCR,
+   * score effrayant, score de style) de chaque asset généré. Défaut : `defaultInspector`
+   * (**fail-closed** — lève tant qu'aucun classifieur vision réel n'est branché → le monde reste
+   * sur le fallback, jamais actif). **Injecté en test** (signaux d'échec pour exercer chaque règle).
+   */
+  inspect: WorldInspector;
 }
 
 /** Résout les dépendances par défaut (prod), surchargées en test. */
@@ -96,6 +115,7 @@ export function resolveWorkerDeps(overrides?: Partial<WorkerDeps>): WorkerDeps {
       ((db, theme, worldIndex, recent) => generateWorld(db, theme, worldIndex, recent)),
     now: overrides?.now ?? (() => new Date()),
     config: overrides?.config ?? getWorldGenConfig(),
+    inspect: overrides?.inspect ?? defaultInspector,
   };
 }
 
@@ -309,7 +329,11 @@ export function ensureBuffer(
   return { enqueued, skippedForBudget, skippedExisting };
 }
 
-/** Résultat de `processNextJob` : le job traité + son issue (aucun job → `idle`). */
+/**
+ * Résultat de `processNextJob` : le job traité + son issue (aucun job → `idle`). Pour `retry`/`failed`,
+ * `attempts` = le compteur **de la phase qui a échoué** : échec générateur → `jobs.attempts` (vs
+ * `maxRetries`) ; rejet QA → `jobs.qa_attempts` (vs `qa.maxAttempts`). Deux compteurs distincts.
+ */
 export type ProcessResult =
   | { readonly outcome: "idle" }
   | { readonly outcome: "done"; readonly jobId: number; readonly worldIndex: number }
@@ -328,18 +352,27 @@ export type ProcessResult =
 
 /**
  * Prend le **prochain job `pending`** (FIFO par `id`), le passe `running`, appelle le générateur
- * (6.3, injecté → **zéro appel réseau réel** en test), puis persiste **atomiquement** le monde
- * `buffered` + le job `done`. Sur échec du générateur : `attempts += 1` + `last_error` ; le job
- * repasse `pending` (re-tentable) tant que `attempts ≤ maxRetries`, sinon `failed` (le monde
- * reste sur le fallback 6.6). Aucun job → `{ outcome: "idle" }`.
+ * (6.3, injecté → **zéro appel réseau réel** en test), passe le monde à la **QA kid-safe** (6.5),
+ * puis persiste **atomiquement** le statut de modération du monde + le job `done`. Aucun job →
+ * `{ outcome: "idle" }`.
+ *
+ * **Deux chemins d'échec, deux compteurs DB DISTINCTS et indépendants** (WORLDGEN §6, bornes exactes) :
+ * - **Générateur qui lève** (réseau/gen) : `jobs.attempts += 1` + `last_error`, `pending` tant que
+ *   `attempts ≤ maxRetries`, sinon `failed` (le monde reste sur le fallback 6.6).
+ * - **Rejet QA** (asset avec texte parasite / effrayant / hors-charte, OU inspecteur fail-closed) :
+ *   `jobs.qa_attempts += 1`, régénération `pending` tant que `qa_attempts ≤ qa.maxAttempts`, sinon
+ *   `failed`. Le monde reste `buffered` (posé par 6.3) → **jamais** `active` tant que la QA n'a pas
+ *   réussi (AC3). **Compteurs séparés** : d'éventuels échecs générateur antérieurs n'amputent PAS
+ *   le budget de régénération QA (et inversement) — chaque borne est **exacte**.
  *
  * **Transaction multi-écritures** (#122/#124) : la génération (async) tourne **hors** transaction
  * (better-sqlite3 n'accepte pas d'`await` dans `db.transaction`) ; le générateur persiste déjà le
  * monde `worlds`/`characters` (6.3). La transaction du worker enveloppe les **≥2 écritures** de
- * **finalisation** : (1) mise à jour du monde en `status = buffered` (garantie explicite) puis
+ * **finalisation** (uniquement quand la QA a réussi) : (1) mise à jour du **statut de modération**
+ * du monde (`active` auto OU `buffered` en attente d'approbation parent, selon le toggle ⚙️) puis
  * (2) mise à jour du job en `status = done`. Si la 2ᵉ (job `done`) échoue **après** la 1ʳᵉ, tout
- * rollback (ni le monde `buffered` ni le job `done` ne persistent) → pas d'état partiel « monde
- * livré mais job jamais fermé » qui re-générerait à l'infini. Mutation-prouvé (test dédié).
+ * rollback → pas d'état partiel « monde livré mais job jamais fermé ». Mutation-prouvé (test dédié).
+ * Un **job `done`** ne survient donc **que** sur QA réussie ⇒ preuve de QA-validation (cf. `approveWorld`).
  *
  * **Marquage `running` séparé** (avant l'await) : un job pris est immédiatement `running` (visible
  * par la reprise après crash) — cette écriture est **distincte** de la transaction de finalisation.
@@ -352,12 +385,19 @@ export async function processNextJob(
   const now = deps.now();
 
   // ── Prendre le prochain job pending (FIFO par id) ──
-  // On ne lit QUE les colonnes consommées (`id`/`payload`/`attempts`) — pas `status`/`updated_at`
-  // (déjà connus/réécrits). Sélection explicite (pas `.select()` global) : garde la lecture amont
-  // découplée des colonnes que la finalisation ÉCRIT, ce qui permet un test de rollback non-vacuous
-  // (la panne frappe l'écriture gardée, jamais cette lecture — règle #122).
+  // On ne lit QUE les colonnes consommées (`id`/`payload`/`attempts`/`qa_attempts`) — pas
+  // `status`/`updated_at` (déjà connus/réécrits). Les **deux compteurs** sont lus séparément :
+  // `attempts` borne les échecs générateur (vs `maxRetries`), `qa_attempts` borne les régénérations
+  // QA (vs `qa.maxAttempts`) — budgets indépendants (schema.ts `jobs`). Sélection explicite (pas
+  // `.select()` global) : garde la lecture amont découplée des colonnes que la finalisation ÉCRIT,
+  // ce qui permet un test de rollback non-vacuous (la panne frappe l'écriture gardée — règle #122).
   const job = db
-    .select({ id: jobs.id, payload: jobs.payload, attempts: jobs.attempts })
+    .select({
+      id: jobs.id,
+      payload: jobs.payload,
+      attempts: jobs.attempts,
+      qaAttempts: jobs.qaAttempts,
+    })
     .from(jobs)
     .where(and(eq(jobs.type, GENERATE_WORLD_JOB), eq(jobs.status, "pending")))
     .orderBy(jobs.id)
@@ -384,8 +424,9 @@ export async function processNextJob(
   db.update(jobs).set({ status: "running", updatedAt: now }).where(eq(jobs.id, job.id)).run();
 
   // ── Générer (async, HORS transaction — zéro appel réseau réel en test via override) ──
+  let world: GeneratedWorld;
   try {
-    await deps.generate(db, themeForWorld(worldIndex).slug, worldIndex, []);
+    world = await deps.generate(db, themeForWorld(worldIndex).slug, worldIndex, []);
   } catch (error) {
     // Échec : incrémenter le compteur d'essais + tracer l'erreur. Écriture unique par branche
     // (pas d'état partiel à annuler → pas de transaction, LEARNINGS #124).
@@ -407,12 +448,55 @@ export async function processNextJob(
     };
   }
 
-  // ── Succès : finaliser ATOMIQUEMENT (monde `buffered` PUIS job `done`) ──
+  // ── QA kid-safe (WORLDGEN §6, story 6.5) : filtrer les assets générés AVANT toute activation ──
+  // L'inspection tourne HORS transaction (règles pures, synchrones). L'inspecteur peut LEVER
+  // (`defaultInspector` fail-closed) : on traite toute erreur d'inspection **comme un rejet QA**
+  // (fail-closed) → jamais de monde non-vérifié en `active` (AC3). Le monde reste `buffered` (posé
+  // par le générateur), donc un rejet QA n'a **aucun état partiel** à annuler (pas de transaction).
+  let qaFailReason: string | null = null;
+  try {
+    const qa = assessWorldAssets(world, deps.inspect, deps.config.qa);
+    if (!qa.ok) {
+      qaFailReason = `asset "${qa.failedAssetRef}" rejeté (règle ${qa.failedRule})`;
+    }
+  } catch (error) {
+    qaFailReason = error instanceof Error ? error.message : String(error);
+  }
+  if (qaFailReason !== null) {
+    // Régénérer jusqu'à `qa.maxAttempts` essais, sinon rester sur le fallback (WORLDGEN §6 « jusqu'à
+    // N essais »). On incrémente le compteur **DÉDIÉ** `qa_attempts` (jamais `attempts`, le compteur
+    // générateur) → budget de régénération QA **exact**, non amputé par d'éventuels échecs réseau
+    // antérieurs sur le même job (bornes exactes, Backend #173). `failed` dès que
+    // `qa_attempts > qa.maxAttempts`. Écriture unique par branche (LEARNINGS #124).
+    const qaAttempts = job.qaAttempts + 1;
+    const nextStatus: JobStatus = qaAttempts > deps.config.qa.maxAttempts ? "failed" : "pending";
+    db.update(jobs)
+      .set({
+        status: nextStatus,
+        qaAttempts,
+        lastError: `QA kid-safe échouée : ${qaFailReason}`,
+        updatedAt: now,
+      })
+      .where(eq(jobs.id, job.id))
+      .run();
+    // Le champ `attempts` du résultat porte le compteur de la phase qui a échoué (ici QA → `qa_attempts`).
+    return {
+      outcome: nextStatus === "failed" ? "failed" : "retry",
+      jobId: job.id,
+      worldIndex,
+      attempts: qaAttempts,
+    };
+  }
+
+  // ── QA réussie : finaliser ATOMIQUEMENT (statut de modération PUIS job `done`) ──
   // Transaction multi-écritures (#122) : la 2ᵉ écriture (job `done`) protégée derrière la 1ʳᵉ
-  // (monde `buffered`). Une panne de la 2ᵉ rollback la 1ʳᵉ → jamais « monde livré, job ouvert ».
+  // (statut du monde). Une panne de la 2ᵉ rollback la 1ʳᵉ → jamais « monde livré, job ouvert ».
+  // Statut cible = **toggle validation parent** ⚙️ (WORLDGEN §6) : `active` auto (toggle off) OU
+  // `buffered` en attente d'approbation parent (toggle on) — jamais `active` sans QA passée (AC3).
+  const targetStatus = moderatedStatusAfterQaPass(deps.config.qa);
   db.transaction((tx) => {
-    // 1ʳᵉ écriture : garantir le statut `buffered` du monde généré (WORLDGEN §3, avant QA 6.5).
-    tx.update(worlds).set({ status: "buffered" }).where(eq(worlds.index, worldIndex)).run();
+    // 1ʳᵉ écriture : statut de modération du monde QA-validé (WORLDGEN §6).
+    tx.update(worlds).set({ status: targetStatus }).where(eq(worlds.index, worldIndex)).run();
     // 2ᵉ écriture (gardée) : fermer le job. Si elle échoue APRÈS la 1ʳᵉ → rollback complet.
     tx.update(jobs).set({ status: "done", updatedAt: now }).where(eq(jobs.id, job.id)).run();
   });
@@ -469,4 +553,83 @@ export async function runWorkerTick(
   const buffer = ensureBuffer(db, currentIndex, overrides);
   const processed = await processNextJob(db, overrides);
   return { recovered, buffer, processed };
+}
+
+// ============================================================================
+// Modération — validation parent (WORLDGEN §6, story 6.5)
+// Le MÉCANISME de transition d'état (flag `approved_by`). L'UI d'approbation vit
+// dans l'espace parent (épic #7, HORS scope ici).
+// ============================================================================
+
+/** Erreur de modération d'un monde (approbateur manquant, monde inconnu / non approuvable). */
+export class WorldModerationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorldModerationError";
+  }
+}
+
+/**
+ * Le monde a-t-il **passé la QA** ? ⇔ il existe un job `generate_world` **`done`** pour cet index.
+ * Invariant maintenu par `processNextJob` : un job n'est marqué `done` **que** dans la transaction
+ * de finalisation, atteinte **uniquement** après une QA réussie (un rejet QA laisse le job
+ * `pending`/`failed`). Donc `done` ⟺ génération + QA réussies. Sert de garde à `approveWorld` (jamais
+ * approuver un monde QA-rejeté). Lecture seule.
+ *
+ * NB (v1) : s'appuie sur la **persistance du job** (aucune purge de la file en v1 — single-tenant,
+ * pas de cron, cf. `AuthConfig.gcSessionsOnLogin`). Si une purge de jobs arrive un jour, matérialiser
+ * la preuve QA autrement (ex. colonne `worlds`) — hors scope 6.5.
+ */
+export function worldPassedQa(db: AppDatabase, worldIndex: number): boolean {
+  const rows = db
+    .select({ payload: jobs.payload })
+    .from(jobs)
+    .where(and(eq(jobs.type, GENERATE_WORLD_JOB), eq(jobs.status, "done")))
+    .all();
+  return rows.some((r) => parseWorldIndex(r.payload) === worldIndex);
+}
+
+/**
+ * **Approbation parent** (mécanisme de la validation parent optionnelle, WORLDGEN §6). Transitionne
+ * un monde `buffered` **QA-validé** → `active` en enregistrant l'identité **PARENT** (`approvedBy`,
+ * jamais un enfant — donnée non-enfant, comme `teddyReferenceAssets.approvedBy`). L'UI d'approbation
+ * est l'espace parent (épic #7) ; ici seulement le **mécanisme** de transition.
+ *
+ * Gardes (AC3 « jamais de monde non-QA en active ») — chacune à effet observable (mutation-prouvée) :
+ * - `approvedBy` **non vide** (identité parent requise) — sinon `WorldModerationError`.
+ * - le monde **existe** et est **`buffered`** (jamais ré-activer un `active`) — sinon erreur.
+ * - le monde a **passé la QA** (`worldPassedQa`) → un monde QA-rejeté (job `failed`, jamais `done`)
+ *   ne peut **jamais** être approuvé en `active`. Retirer cette garde = un monde non-QA devient
+ *   actif (test rouge).
+ *
+ * **Écriture unique** (un seul `UPDATE worlds`) après les gardes de lecture → aucun état partiel à
+ * annuler ⇒ **pas de transaction** (un test de rollback serait vacuous, interdit — rétro #124). Une
+ * **2ᵉ approbation** d'un monde déjà `active` est **refusée** (`WorldModerationError` via la garde
+ * « statut `buffered` requis ») — pas silencieusement idempotente (comportement prouvé par le test
+ * dédié). La transition reste **monotone** (`buffered` → `active`, jamais l'inverse).
+ */
+export function approveWorld(db: AppDatabase, worldId: string, approvedBy: string): void {
+  const who = approvedBy.trim();
+  if (!who) {
+    throw new WorldModerationError("approbation refusée : approbateur parent (approvedBy) requis.");
+  }
+  const world = db
+    .select({ index: worlds.index, status: worlds.status })
+    .from(worlds)
+    .where(eq(worlds.id, worldId))
+    .get();
+  if (!world) {
+    throw new WorldModerationError(`approbation refusée : monde "${worldId}" inconnu.`);
+  }
+  if (world.status !== "buffered") {
+    throw new WorldModerationError(
+      `approbation refusée : monde "${worldId}" pas en attente d'approbation (statut ${world.status}).`,
+    );
+  }
+  if (!worldPassedQa(db, world.index)) {
+    throw new WorldModerationError(
+      `approbation refusée : monde "${worldId}" non QA-validé — jamais de monde non-QA en active (WORLDGEN §6).`,
+    );
+  }
+  db.update(worlds).set({ status: "active", approvedBy: who }).where(eq(worlds.id, worldId)).run();
 }

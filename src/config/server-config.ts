@@ -287,10 +287,57 @@ export interface StageAConfig {
 }
 
 /**
- * Config ⚙️ du **pipeline de génération de mondes** (WORLDGEN.md §2/§3/§5, ADR 0008).
+ * Config ⚙️ de la **modération kid-safe + validation parent** (WORLDGEN §6, ART §6, story 6.5).
+ *
+ * **Consommée** par le worker (`processNextJob`) : après génération d'un monde, ses assets passent
+ * à l'auto-filtre kid-safe (règles WORLDGEN §6). Chaque champ AGIT sur le chemin runtime :
+ * - `parentValidationEnabled` : le worker choisit le statut du monde QA-validé (`buffered` en
+ *   attente d'approbation parent si `true`, `active` auto si `false`) — cf. `moderatedStatusAfterQaPass`.
+ * - `maxAttempts` : nombre de **régénérations** tolérées après un rejet QA avant que le monde reste
+ *   sur le **fallback** (WORLDGEN §6 « jusqu'à N essais »). Même sémantique que `maxRetries` côté
+ *   réseau (seuil `attempts > maxAttempts → failed`), mais compteur distinct d'un rejet QA.
+ * - `unsafeMaxScore` / `styleMinScore` : **seuils** des règles `safe_content` / `style_coherence`
+ *   (cf. `lib/worldgen/qa.ts`). Un asset dont le score dépasse/rate le seuil est **rejeté**.
+ *
+ * ⚠️ Les **signaux** que ces seuils comparent (texte OCR, score effrayant, score de style) sont
+ * produits par un **inspecteur vision** injecté ; l'inspecteur par défaut échoue **closed** (jamais
+ * de monde non-vérifié en `active`) tant qu'un classifieur réel n'est pas branché — cf. `qa.ts`.
+ */
+export interface QaConfig {
+  /**
+   * ⚙️ **Toggle validation parent** (WORLDGEN §6, validation parent **optionnelle**). `true` → un
+   * monde QA-validé reste `buffered` jusqu'à l'approbation parent (`approvedBy`) ; `false` (défaut)
+   * → il passe `active` **auto** après QA. L'UI d'approbation est l'espace parent (épic #7) — ici
+   * seul le **mécanisme** de transition d'état est posé. Défaut `false` (auto : ADR 0008 « aucune
+   * sur-censure observée » ; le proprio l'active via env s'il veut valider chaque monde à la main).
+   */
+  readonly parentValidationEnabled: boolean;
+  /**
+   * ⚙️ **Régénérations** après un rejet QA avant de rester sur le **fallback** (WORLDGEN §6 « jusqu'à
+   * N essais »). Nombre de **ré-essais** au-delà de la 1ʳᵉ tentative (`0` = aucun ré-essai : 1er rejet
+   * QA → fallback). Compteur distinct du retry réseau (`maxRetries`). Défaut `3`.
+   */
+  readonly maxAttempts: number;
+  /**
+   * ⚙️ Seuil **max** du score « effrayant/inapproprié » `[0,1]` toléré (règle `safe_content`,
+   * WORLDGEN §6) — un asset dont le score **dépasse** ce seuil est rejeté. `0` = tolérance nulle,
+   * `1` = tout accepté. Défaut `0.5` (filet ⚙️, à calibrer au playtest avec le classifieur réel).
+   */
+  readonly unsafeMaxScore: number;
+  /**
+   * ⚙️ Seuil **min** de cohérence de style vs charte `[0,1]` exigé (règle `style_coherence`, ART §6)
+   * — un asset dont le score **rate** ce seuil est rejeté (hors-charte). `0` = style non gardé,
+   * `1` = conformité parfaite exigée. Défaut `0.6` (filet ⚙️, à calibrer au playtest).
+   */
+  readonly styleMinScore: number;
+}
+
+/**
+ * Config ⚙️ du **pipeline de génération de mondes** (WORLDGEN.md §2/§3/§5/§6, ADR 0008).
  * **Posée** ici (contrat épic #6, story 6.1) ; **consommée** par le worker/buffer + le client
- * image (stories 6.x). Source unique des ⚙️ du pipeline (garde-fou budget, buffer, retry,
- * prompts de base) : aucune valeur en dur ailleurs. Mêmes conventions que `loadEngineConfig`.
+ * image + la QA kid-safe (stories 6.x). Source unique des ⚙️ du pipeline (garde-fou budget, buffer,
+ * retry, prompts de base, modération kid-safe) : aucune valeur en dur ailleurs. Mêmes conventions
+ * que `loadEngineConfig`.
  */
 export interface WorldGenConfig {
   /**
@@ -314,6 +361,8 @@ export interface WorldGenConfig {
   prompts: WorldGenPrompts;
   /** ⚙️ Outil Stage A (master Teddy + model sheet, WORLDGEN §8) — consommé par `stage-a.ts` (story 6.2). */
   stageA: StageAConfig;
+  /** ⚙️ Modération kid-safe + validation parent (WORLDGEN §6) — consommée par le worker (story 6.5). */
+  qa: QaConfig;
 }
 
 export interface AppConfig {
@@ -460,6 +509,17 @@ export const CONFIG_DEFAULTS = {
       backgroundStrategy: "post-cutout",
       // Fond plein rendu par Nano Banana (blanc) — matte à détourer en `post-cutout`.
       matteColor: "#ffffff",
+    },
+    // Modération kid-safe + validation parent (WORLDGEN §6) — consommée par le worker (story 6.5).
+    qa: {
+      // Validation parent OPTIONNELLE : défaut auto (ADR 0008 « aucune sur-censure »). Le proprio
+      // l'active via `WORLDGEN_QA_PARENT_VALIDATION=true` pour valider chaque monde à la main.
+      parentValidationEnabled: false,
+      // Jusqu'à 3 régénérations après rejet QA, sinon fallback (WORLDGEN §6 « jusqu'à N essais »).
+      maxAttempts: 3,
+      // Seuils ⚙️ des règles safe_content / style_coherence — filets à calibrer au playtest.
+      unsafeMaxScore: 0.5,
+      styleMinScore: 0.6,
     },
   },
 } as const;
@@ -718,6 +778,18 @@ function parseString(raw: string | undefined, fallback: string): string {
 }
 
 /**
+ * Parse un score dans l'**intervalle unité** `[0, 1]` (bornes incluses — contrairement à
+ * `parseRatio` qui exclut `0`). Retenu pour les **seuils de règles QA** (⚙️ WORLDGEN §6) où `0`
+ * est une borne légitime (`unsafeMaxScore = 0` = tolérance nulle ; `styleMinScore = 0` = style non
+ * gardé). Hors intervalle ou non numérique → défaut.
+ */
+function parseUnitInterval(raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+}
+
+/**
  * Parse la **stratégie de fond** ⚙️ (Stage A). Accepte l'une des valeurs de
  * `BACKGROUND_STRATEGIES` (insensible aux espaces) ; toute autre valeur → défaut (jamais de
  * stratégie invalide propagée à l'outil, qui la consomme réellement).
@@ -765,6 +837,18 @@ export function loadWorldGenConfig(env: Env): WorldGenConfig {
         d.stageA.backgroundStrategy,
       ),
       matteColor: parseString(env.WORLDGEN_STAGE_A_MATTE_COLOR, d.stageA.matteColor),
+    },
+    qa: {
+      // `parseBoolean` : `"true"`/`"false"` (insensible casse/espaces), sinon défaut.
+      parentValidationEnabled: parseBoolean(
+        env.WORLDGEN_QA_PARENT_VALIDATION,
+        d.qa.parentValidationEnabled,
+      ),
+      // `parseNonNegativeInt` : `0` légitime (aucune régénération QA → 1er rejet = fallback).
+      maxAttempts: parseNonNegativeInt(env.WORLDGEN_QA_MAX_ATTEMPTS, d.qa.maxAttempts),
+      // `parseUnitInterval` : seuils de règles dans `[0,1]` (0 = borne stricte légitime).
+      unsafeMaxScore: parseUnitInterval(env.WORLDGEN_QA_UNSAFE_MAX_SCORE, d.qa.unsafeMaxScore),
+      styleMinScore: parseUnitInterval(env.WORLDGEN_QA_STYLE_MIN_SCORE, d.qa.styleMinScore),
     },
   };
 }

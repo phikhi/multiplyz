@@ -6,12 +6,14 @@ import { eq, sql } from "drizzle-orm";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { jobs, profiles, progress, worlds } from "@/lib/db/schema";
-import { loadWorldGenConfig, type WorldGenConfig } from "@/config/server-config";
+import { loadWorldGenConfig, type QaConfig, type WorldGenConfig } from "@/config/server-config";
 import { CURATED_THEMES } from "@/config/worldgen-themes";
 import type { GeneratedWorld } from "./generate-world";
 import * as generateWorldModule from "./generate-world";
+import type { AssetInspection, WorldInspector } from "./qa";
 import {
   ACTIVE_JOB_STATUSES,
+  approveWorld,
   bufferTargetIndices,
   budgetAllowsNextWorld,
   currentMonthSpendEur,
@@ -29,16 +31,22 @@ import {
   serializeJobPayload,
   themeForWorld,
   worldExists,
+  WorldModerationError,
+  worldPassedQa,
 } from "./worker";
 
 /**
- * Tests du **worker daemon** (WORLDGEN §2/§3, story 6.4), sur **base réelle** (SQLite fichier +
- * migrations), **générateur MOCKÉ** (zéro appel réseau réel — DoD). Chaque garde est prouvée à
- * **effet observable + mutation-prouvée** (retirer/inverser la garde → rouge) :
+ * Tests du **worker daemon + QA kid-safe** (WORLDGEN §2/§3/§6, stories 6.4 + 6.5), sur **base réelle**
+ * (SQLite fichier + migrations), **générateur + inspecteur MOCKÉS** (zéro appel réseau réel — DoD).
+ * Chaque garde est prouvée à **effet observable + mutation-prouvée** (retirer/inverser la garde → rouge) :
  * - **Buffer** : avance simulée → enqueue du bon monde manquant ; géométrie INVARIANTE (#123) ;
  * - **Budget qui AGIT** : dépense simulée ≥ plafond → plus d'enqueue (rétro #155) ;
  * - **Idempotence** : re-jouer un job ne double pas un monde (#82/#144) ;
- * - **Rollback** : panne de la 2ᵉ écriture (job `done`) ⇒ monde `buffered` annulé (#122/#124) ;
+ * - **QA kid-safe** (6.5) : asset rejeté (règle échouée / inspecteur fail-closed) ⇒ régénération
+ *   jusqu'à `qa.maxAttempts` puis fallback, monde JAMAIS `active` sans QA (WORLDGEN §6) ;
+ * - **Toggle validation parent** : OFF → `active` auto après QA ; ON → reste `buffered` (approbation) ;
+ * - **`approveWorld`** : `buffered` QA-validé → `active` + `approvedBy` parent ; refuse un monde non-QA ;
+ * - **Rollback** : panne de la 2ᵉ écriture (job `done`) ⇒ statut du monde annulé (#122/#124) ;
  * - **Reprise après crash** : job `running` orphelin re-tentable (pas de perte, pas de double).
  */
 
@@ -60,9 +68,31 @@ function cfg(overrides: Partial<WorldGenConfig> = {}): WorldGenConfig {
   return { ...loadWorldGenConfig({}), ...overrides };
 }
 
-/** Deps de base : horloge figée + config par défaut (générateur injecté au cas par cas). */
+/** Config worldgen avec le bloc `qa` surchargé (toggle validation parent, `qa.maxAttempts`, seuils). */
+function cfgQa(
+  qaOverrides: Partial<QaConfig>,
+  worldgenOverrides: Partial<WorldGenConfig> = {},
+): WorldGenConfig {
+  const base = loadWorldGenConfig({});
+  return { ...base, ...worldgenOverrides, qa: { ...base.qa, ...qaOverrides } };
+}
+
+/** Inspecteur QA **qui passe** (asset propre) : injecté sur le chemin heureux (QA réussie). */
+const passInspector: WorldInspector = () => ({ detectedText: "", unsafeScore: 0, styleScore: 1 });
+
+/** Inspecteur QA **qui rejette** tout asset via une règle réelle (score de style raté). */
+const failInspector: WorldInspector = () => ({ detectedText: "", unsafeScore: 0, styleScore: 0 });
+
+/** Inspecteur QA **qui produit du texte parasite** sur tout asset (règle `no_parasitic_text`). */
+const textInspector: WorldInspector = (): AssetInspection => ({
+  detectedText: "SOLDES",
+  unsafeScore: 0,
+  styleScore: 1,
+});
+
+/** Deps de base : horloge figée + config par défaut + inspecteur QA qui PASSE (chemin heureux). */
 function baseDeps(overrides: Record<string, unknown> = {}) {
-  return { now: () => NOW, config: cfg(), ...overrides };
+  return { now: () => NOW, config: cfg(), inspect: passInspector, ...overrides };
 }
 
 /** Insère un `worlds` directement (par ex. pour simuler des mondes déjà générés / dépense). */
@@ -196,11 +226,15 @@ describe("themeForWorld / payload / monthBounds (purs)", () => {
 });
 
 describe("resolveWorkerDeps — défauts prod", () => {
-  it("câble les défauts prod (generate fn, horloge réelle, config centrale)", () => {
+  it("câble les défauts prod (generate fn, horloge réelle, config centrale, inspecteur fail-closed)", () => {
     const deps = resolveWorkerDeps();
     expect(deps.generate).toBeTypeOf("function");
     expect(deps.now()).toBeInstanceOf(Date); // horloge réelle par défaut.
     expect(deps.config.bufferAhead).toBeTypeOf("number"); // bloc worldgen central.
+    expect(deps.config.qa.maxAttempts).toBeTypeOf("number"); // bloc QA central.
+    // Inspecteur par défaut = fail-closed : lève tant qu'aucun classifieur vision réel n'est branché.
+    expect(deps.inspect).toBeTypeOf("function");
+    expect(() => deps.inspect({ ref: "world/0/teddy.png", kind: "teddy" })).toThrow();
   });
 
   it("le generate par défaut délègue à generateWorld (6.3) — zéro appel réseau ici (mocké)", async () => {
@@ -417,17 +451,18 @@ describe("processNextJob — cycle pending → running → génération → buff
     expect(generate).not.toHaveBeenCalled();
   });
 
-  it("job pending ⇒ génère (mock) ⇒ monde buffered + job done", async () => {
+  it("job pending ⇒ génère (mock) ⇒ QA passe ⇒ monde active (auto) + job done", async () => {
     const db = freshDb();
     const jobId = enqueueJob(db, 7);
     const { calls, generate } = recordingGenerate(db);
+    // baseDeps injecte `passInspector` (QA passe) + toggle validation parent par défaut OFF → active auto.
     const res = await processNextJob(db, baseDeps({ generate }));
     expect(res).toEqual({ outcome: "done", jobId, worldIndex: 7 });
     // Générateur appelé avec le thème déterministe de l'index 7 (mocké, ZÉRO appel réseau réel).
     expect(calls).toEqual([{ theme: themeForWorld(7).slug, worldIndex: 7 }]);
-    // Monde buffered + job done.
+    // QA passée + toggle OFF ⇒ monde ACTIVE + job done.
     const w = db.select().from(worlds).where(eq(worlds.index, 7)).get();
-    expect(w?.status).toBe("buffered");
+    expect(w?.status).toBe("active");
     expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("done");
   });
 
@@ -523,24 +558,25 @@ describe("processNextJob — retry puis failed après maxRetries (garde de seuil
 
 describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)", () => {
   // GARDE ROLLBACK MULTI-ÉCRITURES (effet observable, mutation-prouvé) :
-  // La transaction de finalisation protège ≥2 écritures : (1) UPDATE worlds → status='buffered'
-  // (1ʳᵉ), puis (2) UPDATE jobs → status='done' (2ᵉ, GARDÉE). On induit la panne à la SEULE 2ᵉ
-  // écriture via une contrainte CHECK sur `jobs.status` qui INTERDIT la valeur 'done' (rebuild avec
-  // `CHECK (status IN ('pending','running','failed'))`). Séquence observée :
+  // La transaction de finalisation (QA passée) protège ≥2 écritures : (1) UPDATE worlds → statut de
+  // modération ('active' auto ici), puis (2) UPDATE jobs → status='done' (2ᵉ, GARDÉE). On induit la
+  // panne à la SEULE 2ᵉ écriture via une contrainte CHECK sur `jobs.status` qui INTERDIT 'done'
+  // (rebuild `CHECK (status IN ('pending','running','failed'))`). Séquence observée :
   //   0. SELECT job (WHERE status='pending', lit id/payload/attempts) réussit ← lecture amont
   //   1. UPDATE jobs status='running' réussit (valeur autorisée par le CHECK) ← marquage (hors tx)
-  //   2. UPDATE worlds status='buffered' réussit  ← 1ʳᵉ écriture de la transaction
-  //   3. UPDATE jobs status='done' ÉCHOUE (CHECK viole 'done') ← 2ᵉ écriture GARDÉE
-  //   ⇒ la transaction ROLLBACK : le monde ne reste PAS 'buffered' (revient à 'active' pré-panne).
+  //   2. (QA passe via passInspector — hors transaction)
+  //   3. UPDATE worlds status='active' réussit  ← 1ʳᵉ écriture de la transaction
+  //   4. UPDATE jobs status='done' ÉCHOUE (CHECK viole 'done') ← 2ᵉ écriture GARDÉE
+  //   ⇒ la transaction ROLLBACK : le monde ne reste PAS 'active' (revient à 'buffered' pré-panne).
   // PREUVE : retirer le wrapper `db.transaction` de processNextJob casse PRÉCISÉMENT ce test
-  // (le monde resterait 'buffered' malgré l'échec du job). La panne frappe l'écriture GARDÉE (le
+  // (le monde resterait 'active' malgré l'échec du job). La panne frappe l'écriture GARDÉE (le
   // status='done'), jamais une lecture ni la 1ʳᵉ écriture (règle #122). Le CHECK autorise 'running'
   // → le marquage running (en amont de la transaction) n'est PAS court-circuité.
   it("ROLLBACK : panne de l'UPDATE jobs 'done' (2ᵉ écriture) ⇒ le statut du monde n'est PAS committé", async () => {
     const db = freshDb();
     const jobId = enqueueJob(db, 12);
-    // Le générateur insère le monde 12 en 'active' (état pré-finalisation distinct de 'buffered')
-    // pour que le rollback soit OBSERVABLE (le monde reste 'active', pas 'buffered').
+    // Le générateur insère le monde 12 en 'buffered' (état réel post-génération, distinct de la cible
+    // 'active') pour que le rollback soit OBSERVABLE (le monde reste 'buffered', jamais 'active').
     const generate = vi.fn(async (): Promise<GeneratedWorld> => {
       db.insert(worlds)
         .values({
@@ -551,7 +587,7 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
           assetRefs: "{}",
           prompt: "p",
           seed: "s",
-          status: "active",
+          status: "buffered",
           createdAt: NOW,
         })
         .run();
@@ -579,6 +615,7 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
         payload text NOT NULL,
         status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','running','failed')),
         attempts integer NOT NULL DEFAULT 0,
+        qa_attempts integer NOT NULL DEFAULT 0,
         last_error text,
         created_at integer NOT NULL DEFAULT (unixepoch()),
         updated_at integer NOT NULL DEFAULT (unixepoch())
@@ -590,12 +627,12 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
 
     await expect(processNextJob(db, baseDeps({ generate }))).rejects.toThrow();
 
-    // ROLLBACK PROUVÉ : le monde 12 n'est PAS passé 'buffered' (la 1ʳᵉ écriture a été annulée) →
-    // il reste 'active' (l'état posé par le générateur, avant la finalisation).
-    expect(db.select().from(worlds).where(eq(worlds.index, 12)).get()?.status).toBe("active");
+    // ROLLBACK PROUVÉ : le monde 12 n'est PAS passé 'active' (la 1ʳᵉ écriture a été annulée) →
+    // il reste 'buffered' (l'état posé par le générateur, avant la finalisation).
+    expect(db.select().from(worlds).where(eq(worlds.index, 12)).get()?.status).toBe("buffered");
   });
 
-  it("CONTRÔLE : sans panne, la finalisation écrit bien monde 'buffered' ET job 'done' (rollback dû à la seule panne)", async () => {
+  it("CONTRÔLE : sans panne, la finalisation écrit bien monde 'active' ET job 'done' (rollback dû à la seule panne)", async () => {
     const db = freshDb();
     const jobId = enqueueJob(db, 13);
     const generate = vi.fn(async (): Promise<GeneratedWorld> => {
@@ -608,7 +645,7 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
           assetRefs: "{}",
           prompt: "p",
           seed: "s",
-          status: "active",
+          status: "buffered",
           createdAt: NOW,
         })
         .run();
@@ -627,8 +664,295 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
     });
     const out = await processNextJob(db, baseDeps({ generate }));
     expect(out).toEqual({ outcome: "done", jobId, worldIndex: 13 });
-    expect(db.select().from(worlds).where(eq(worlds.index, 13)).get()?.status).toBe("buffered");
+    // QA passe (passInspector) + toggle OFF ⇒ le monde est écrit 'active' par la finalisation.
+    expect(db.select().from(worlds).where(eq(worlds.index, 13)).get()?.status).toBe("active");
     expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("done");
+  });
+});
+
+// ───────────────────────────── processNextJob : QA KID-SAFE (WORLDGEN §6, story 6.5) ─────────────────────────────
+
+describe("processNextJob — QA kid-safe : asset rejeté ⇒ régénère, monde JAMAIS active sans QA (WORLDGEN §6)", () => {
+  it("MUTATION-PROUVÉ : asset hors-charte (règle `style_coherence`) ⇒ retry, monde reste buffered (jamais active)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 70);
+    const { generate } = recordingGenerate(db);
+    // Inspecteur qui rejette via une RÈGLE réelle (style score 0) → chemin QA exercé de bout en bout.
+    const out = await processNextJob(
+      db,
+      baseDeps({ generate, inspect: failInspector, config: cfgQa({ maxAttempts: 3 }) }),
+    );
+    expect(out).toMatchObject({ outcome: "retry", jobId, worldIndex: 70, attempts: 1 });
+    const job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+    expect(job?.status).toBe("pending"); // re-tentable (régénération)
+    // Le rejet QA incrémente le compteur DÉDIÉ `qa_attempts`, JAMAIS `attempts` (générateur).
+    expect(job?.qaAttempts).toBe(1);
+    expect(job?.attempts).toBe(0);
+    expect(job?.lastError).toContain("QA kid-safe");
+    expect(job?.lastError).toContain("style_coherence");
+    // Le monde N'EST JAMAIS active tant que la QA n'a pas réussi (AC3). Retirer la garde QA de
+    // processNextJob ⇒ le monde passerait 'active' ⇒ ce test rougit.
+    expect(db.select().from(worlds).where(eq(worlds.index, 70)).get()?.status).toBe("buffered");
+  });
+
+  it("rejet par la règle `no_parasitic_text` (texte détecté) ⇒ lastError nomme la règle (ADR 0008)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 71);
+    const { generate } = recordingGenerate(db);
+    const out = await processNextJob(db, baseDeps({ generate, inspect: textInspector }));
+    expect(out).toMatchObject({ outcome: "retry", worldIndex: 71 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.lastError).toContain(
+      "no_parasitic_text",
+    );
+  });
+
+  it("MUTATION-PROUVÉ : après `qa.maxAttempts` rejets QA ⇒ job failed, monde reste sur le fallback (buffered, jamais active)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 72);
+    const { generate } = recordingGenerate(db);
+    const deps = baseDeps({ generate, inspect: failInspector, config: cfgQa({ maxAttempts: 1 }) });
+    // 1er rejet QA ⇒ attempts 1 ≤ 1 ⇒ pending (régénère).
+    let out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 1 });
+    // 2ᵉ rejet QA ⇒ attempts 2 > 1 ⇒ failed. Muter le seuil (`>`→jamais failed) ⇒ ce test rougit.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "failed", attempts: 2 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("failed");
+    // FALLBACK : le monde n'est JAMAIS devenu 'active' (reste 'buffered' → le socle pré-généré 6.6 sert).
+    expect(db.select().from(worlds).where(eq(worlds.index, 72)).get()?.status).toBe("buffered");
+  });
+
+  it("`qa.maxAttempts` = 0 ⇒ un seul rejet QA bascule directement en failed (aucune régénération)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 73);
+    const { generate } = recordingGenerate(db);
+    const out = await processNextJob(
+      db,
+      baseDeps({ generate, inspect: failInspector, config: cfgQa({ maxAttempts: 0 }) }),
+    );
+    expect(out).toMatchObject({ outcome: "failed", attempts: 1 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("failed");
+    expect(db.select().from(worlds).where(eq(worlds.index, 73)).get()?.status).toBe("buffered");
+  });
+
+  it("MUTATION-PROUVÉ : budgets DISTINCTS — k échecs générateur PUIS N rejets QA sur le MÊME job ⇒ la QA obtient ses `qa.maxAttempts` régénérations COMPLÈTES (bornes exactes, Backend #173)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 76);
+    // Générateur : ÉCHOUE au 1er appel (réseau), puis RÉUSSIT ensuite (insère le monde buffered).
+    let genCalls = 0;
+    const generate = vi.fn(async (_db: AppDatabase, theme: string, worldIndex: number) => {
+      genCalls += 1;
+      if (genCalls === 1) throw new Error("boom réseau (1er essai)");
+      db.insert(worlds)
+        .values({
+          id: `world:${worldIndex}`,
+          index: worldIndex,
+          theme,
+          palette: "{}",
+          assetRefs: "{}",
+          prompt: "p",
+          seed: `s-${worldIndex}`,
+          status: "buffered",
+          createdAt: NOW,
+        })
+        .onConflictDoUpdate({ target: worlds.id, set: { seed: `s-${worldIndex}` } })
+        .run();
+      return {
+        worldId: `world:${worldIndex}`,
+        worldIndex,
+        themeSlug: theme,
+        themeLabel: theme,
+        palette: "{}",
+        assetRefs: { background: "b", tiles: "t", teddy: "td" },
+        creatures: [],
+        seed: `s-${worldIndex}`,
+        status: "buffered" as const,
+        cost: { paidImageCalls: 3, estimatedEur: 0.11, monthlyBudgetEur: 20 },
+      };
+    });
+    // maxRetries assez haut pour survivre à l'échec réseau ; qa.maxAttempts = 2 (le budget testé).
+    const deps = baseDeps({
+      generate,
+      inspect: failInspector,
+      config: cfgQa({ maxAttempts: 2 }, { maxRetries: 3 }),
+    });
+
+    // Tick 1 : générateur ÉCHOUE ⇒ attempts(générateur)=1, qa_attempts INTACT à 0.
+    let out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 1 });
+    let job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+    expect(job?.attempts).toBe(1); // compteur générateur
+    expect(job?.qaAttempts).toBe(0); // budget QA JAMAIS entamé par l'échec réseau
+
+    // Tick 2 : génération OK, rejet QA ⇒ qa_attempts=1 ≤ 2 ⇒ retry (régénère). attempts INCHANGÉ à 1.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 1 }); // = qa_attempts
+    job = db.select().from(jobs).where(eq(jobs.id, jobId)).get();
+    expect(job?.attempts).toBe(1); // le compteur générateur ne bouge plus
+    expect(job?.qaAttempts).toBe(1);
+
+    // Tick 3 : rejet QA ⇒ qa_attempts=2 ≤ 2 ⇒ ENCORE retry. Si les compteurs FUSIONNAIENT, on aurait
+    // attempts=1(réseau)+2(QA)=3 > 2 ⇒ failed prématuré ICI ⇒ ce test rougirait. Bornes exactes prouvées.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "retry", attempts: 2 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("pending");
+
+    // Tick 4 : qa_attempts=3 > 2 ⇒ failed. La QA a bien eu ses 2 régénérations COMPLÈTES.
+    out = await processNextJob(db, deps);
+    expect(out).toMatchObject({ outcome: "failed", attempts: 3 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("failed");
+    // Le monde n'est JAMAIS devenu active (fallback).
+    expect(db.select().from(worlds).where(eq(worlds.index, 76)).get()?.status).toBe("buffered");
+  });
+
+  it("inspecteur qui LÈVE (fail-closed) ⇒ rejet QA, monde jamais active, lastError = message de l'inspecteur", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 74);
+    const { generate } = recordingGenerate(db);
+    // Un inspecteur non branché lève (comme `defaultInspector`) → fail-closed : traité comme rejet QA.
+    const throwingInspector: WorldInspector = () => {
+      throw new Error("classifieur vision indisponible");
+    };
+    const out = await processNextJob(db, baseDeps({ generate, inspect: throwingInspector }));
+    expect(out).toMatchObject({ outcome: "retry", worldIndex: 74 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.lastError).toContain(
+      "classifieur vision indisponible",
+    );
+    expect(db.select().from(worlds).where(eq(worlds.index, 74)).get()?.status).toBe("buffered");
+  });
+
+  it("inspecteur qui lève une valeur NON-Error ⇒ lastError = valeur stringifiée (garde de forme)", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 75);
+    const { generate } = recordingGenerate(db);
+    const throwingInspector: WorldInspector = () => {
+      throw "panne-vision-brute";
+    };
+    await processNextJob(
+      db,
+      baseDeps({ generate, inspect: throwingInspector, config: cfgQa({ maxAttempts: 0 }) }),
+    );
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.lastError).toBe(
+      "QA kid-safe échouée : panne-vision-brute",
+    );
+  });
+});
+
+// ───────────────────────────── processNextJob : TOGGLE VALIDATION PARENT (WORLDGEN §6, AC2) ─────────────────────────────
+
+describe("processNextJob — toggle validation parent ⚙️ AGIT sur le statut du monde QA-validé (WORLDGEN §6)", () => {
+  it("MUTATION-PROUVÉ : toggle ON ⇒ monde reste buffered (approvedBy null), jamais active auto", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 80);
+    const { generate } = recordingGenerate(db);
+    const out = await processNextJob(
+      db,
+      baseDeps({ generate, config: cfgQa({ parentValidationEnabled: true }) }),
+    );
+    expect(out).toMatchObject({ outcome: "done", worldIndex: 80 });
+    const w = db.select().from(worlds).where(eq(worlds.index, 80)).get();
+    // QA passée MAIS validation parent activée ⇒ reste 'buffered' en attente d'approbation, approvedBy null.
+    // Muter `moderatedStatusAfterQaPass` (ignorer le toggle → toujours 'active') ⇒ ce test rougit.
+    expect(w?.status).toBe("buffered");
+    expect(w?.approvedBy).toBeNull();
+    // Le job est quand même 'done' (généré + QA-validé) → preuve de QA pour l'approbation parent.
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("done");
+  });
+
+  it("le toggle AGIT : MÊME monde ⇒ 'active' (OFF) vs 'buffered' (ON) (effet observable du ⚙️)", async () => {
+    const off = freshDb();
+    const on = freshDb();
+    enqueueJob(off, 81);
+    enqueueJob(on, 81);
+    await processNextJob(
+      off,
+      baseDeps({
+        generate: recordingGenerate(off).generate,
+        config: cfgQa({ parentValidationEnabled: false }),
+      }),
+    );
+    await processNextJob(
+      on,
+      baseDeps({
+        generate: recordingGenerate(on).generate,
+        config: cfgQa({ parentValidationEnabled: true }),
+      }),
+    );
+    expect(off.select().from(worlds).where(eq(worlds.index, 81)).get()?.status).toBe("active");
+    expect(on.select().from(worlds).where(eq(worlds.index, 81)).get()?.status).toBe("buffered");
+  });
+});
+
+// ───────────────────────────── approveWorld (mécanisme validation parent, WORLDGEN §6) ─────────────────────────────
+
+/** Insère un job `generate_world` `done` pour un index (⇔ génération + QA réussies, cf. `worldPassedQa`). */
+function seedDoneJob(db: AppDatabase, worldIndex: number): void {
+  db.insert(jobs)
+    .values({
+      type: GENERATE_WORLD_JOB,
+      payload: serializeJobPayload(worldIndex),
+      status: "done",
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+    .run();
+}
+
+describe("approveWorld — transition buffered→active + approvedBy parent (mécanisme, épic #7 = UI)", () => {
+  it("worldPassedQa : vrai ssi un job `generate_world` done existe pour l'index", () => {
+    const db = freshDb();
+    expect(worldPassedQa(db, 90)).toBe(false);
+    seedDoneJob(db, 90);
+    expect(worldPassedQa(db, 90)).toBe(true);
+  });
+
+  it("approuve un monde buffered QA-validé ⇒ active + approvedBy parent (trim)", () => {
+    const db = freshDb();
+    seedWorld(db, 90); // buffered
+    seedDoneJob(db, 90); // QA passée
+    approveWorld(db, "world:90", "  maman  ");
+    const w = db.select().from(worlds).where(eq(worlds.index, 90)).get();
+    expect(w?.status).toBe("active");
+    expect(w?.approvedBy).toBe("maman"); // identité PARENT, jamais enfant ; trimée.
+  });
+
+  it("MUTATION-PROUVÉ : refuse d'approuver un monde NON QA-validé (job failed / pas de done) ⇒ jamais active (AC3)", () => {
+    const db = freshDb();
+    seedWorld(db, 91); // buffered
+    // Un job FAILED (QA rejetée N fois) — pas de job 'done' ⇒ worldPassedQa faux.
+    db.insert(jobs)
+      .values({
+        type: GENERATE_WORLD_JOB,
+        payload: serializeJobPayload(91),
+        status: "failed",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+      .run();
+    // Retirer la garde `worldPassedQa` de approveWorld ⇒ ce monde deviendrait 'active' ⇒ test rouge.
+    expect(() => approveWorld(db, "world:91", "maman")).toThrow(WorldModerationError);
+    expect(db.select().from(worlds).where(eq(worlds.index, 91)).get()?.status).toBe("buffered");
+  });
+
+  it("refuse un approbateur vide (identité parent requise)", () => {
+    const db = freshDb();
+    seedWorld(db, 92);
+    seedDoneJob(db, 92);
+    expect(() => approveWorld(db, "world:92", "   ")).toThrow(WorldModerationError);
+    expect(db.select().from(worlds).where(eq(worlds.index, 92)).get()?.status).toBe("buffered");
+  });
+
+  it("refuse un monde inconnu", () => {
+    const db = freshDb();
+    expect(() => approveWorld(db, "world:999", "maman")).toThrow(WorldModerationError);
+  });
+
+  it("refuse de ré-activer un monde déjà active (pas en attente d'approbation)", () => {
+    const db = freshDb();
+    seedWorld(db, 93);
+    seedDoneJob(db, 93);
+    approveWorld(db, "world:93", "papa"); // 1ʳᵉ approbation ⇒ active
+    expect(() => approveWorld(db, "world:93", "papa")).toThrow(WorldModerationError); // déjà active
   });
 });
 
