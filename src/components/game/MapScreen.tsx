@@ -134,13 +134,35 @@ function TypeBadge({ type }: { readonly type: NodeType }) {
   );
 }
 
-/** Rangée d'étoiles décorative (0..3) — doublée du texte via `aria-label` du parent. */
+/**
+ * Médaillon d'étoiles décoratif (0..3) — doublé du texte via `aria-label` du parent.
+ * **Absolu, hors flux** (playtest owner) : chevauche le BAS de la pastille (chip blanc),
+ * si bien qu'il (a) n'allonge pas la ligne du nœud → **pas d'espacement variable** entre
+ * les cercles (le connecteur `height:--map-node-gap` atteint alors exactement le cercle
+ * suivant, corrige « le trait s'arrête avant le 2ᵉ rond »), et (b) est **opaque et au-dessus
+ * du connecteur** (`zIndex` > trait) → le trait **passe dessous** au lieu de traverser les
+ * étoiles. Fond `--color-bg-secondary` (blanc) : les étoiles y gardent leur contraste (cf.
+ * `--map-node-star-badge-*`, tokens.css). Le cercle parent est `position:relative`.
+ */
 function StarsRow({ stars }: { readonly stars: MapStars }) {
   return (
     <span
       aria-hidden="true"
-      style={{ display: "flex", gap: "2px", justifyContent: "center" }}
       data-map-stars={stars}
+      style={{
+        position: "absolute",
+        top: "100%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        display: "flex",
+        gap: "2px",
+        padding: "1px var(--space-1)",
+        borderRadius: "var(--border-radius-full)",
+        backgroundColor: "var(--map-node-star-badge-bg)",
+        border: "1px solid var(--map-node-star-badge-border)",
+        zIndex: 2,
+        lineHeight: 1,
+      }}
     >
       {STAR_SLOTS.map((slot) => (
         <span
@@ -179,22 +201,16 @@ function NodeBadge({ node, total }: { readonly node: MapNode; readonly total: nu
     >
       {STATUS_GLYPH[node.status]}
       <TypeBadge type={node.type} />
-    </span>
-  );
-
-  const content = (
-    <span
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "var(--space-1)",
-      }}
-    >
-      {badge}
+      {/* Étoiles = chip blanc absolu chevauchant le bas du cercle (hors flux) : garde
+          l'espacement des nœuds uniforme (le connecteur atteint le cercle suivant) et
+          laisse le trait passer dessous. Le cercle est `position:relative` (ci-dessus). */}
       {node.status === "completed" && <StarsRow stars={node.stars} />}
     </span>
   );
+
+  // Les étoiles étant désormais absolues DANS le cercle, le contenu = la seule pastille
+  // (plus de colonne badge+étoiles qui allongeait le nœud et cassait le connecteur).
+  const content = badge;
 
   if (isNavigable(node.status)) {
     return (

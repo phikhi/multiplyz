@@ -305,6 +305,16 @@
      --color-text-secondary (≥5.4:1 les 2 thèmes) pour l'étoile vide. */
   --map-node-star-filled:  var(--color-text-primary);
   --map-node-star-empty:   var(--color-text-secondary);
+  /* Médaillon BLANC des étoiles (playtest owner : sortir les étoiles du flux pour
+     que le trait du chemin ne les traverse pas + les poser sur une pastille opaque
+     sous laquelle le trait passe). Fond = --color-bg-secondary (#FFFFFF light /
+     #272240 dark, comme le médaillon de type) → les étoiles y passent le contraste
+     (filled --color-text-primary ~13:1 ; empty --color-text-secondary ≥5.4:1 les 2
+     thèmes, cf. commentaire ci-dessus). Le fond de RÉFÉRENCE du contraste des
+     étoiles devient donc --color-bg-secondary (le vrai fond empilé), plus
+     --color-bg-primary (rétro #125/#126 : fond réel derrière le glyphe). */
+  --map-node-star-badge-bg:     var(--color-bg-secondary);
+  --map-node-star-badge-border: var(--map-node-type-badge-border);
 
   /* étoiles de l'écran de RÉSULTATS (fin de niveau, story #126/5.5) — même piège
      que --map-node-star-* ci-dessus : --color-star/--color-star-empty sont des
