@@ -49,3 +49,6 @@ multiplyz-ds-*.png
 *.log
 .idea/
 .vscode/
+
+# Outils owner-run non committés (génération assets, montage sign-off)
+scripts/*.local.ts
