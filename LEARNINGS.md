@@ -966,3 +966,33 @@ Aucune règle dure neuve cette rétro : les 4 leçons ci-dessus **réaffirment**
 
 ### Promotion CLAUDE.md
 **UNE promotion** cette rétro : le tell « compte agrégé de N tests rouges dans un reçu = tell fragile » (rétro #173, extension #143/#155) — revendiquer une mutation-preuve par un **cardinal** (« retrait de la règle X → 6 tests rouges ») casse au moindre test ajouté partageant le même seam muté (récidive 6.5 : reçu 9→3 puis 6→7 sans que le code soit faux). Revendiquer par **test(s) nommé(s) qui rougit(ssent)**, jamais par un total agrégé — vaut pour le reçu du build ET les titres/commentaires de tests. Les 4 autres leçons ci-dessus **réaffirment** des règles déjà promues (#126/#127/#143/#155) plutôt que d'en ajouter de nouvelles.
+
+## Rétro story #153 — 6.6 Fallback socle pré-généré (épic #6, PR #180)
+
+### 2026-07-07 — [qa] Vrai trou de couverture masqué par l'ordre d'insertion (garde `orderBy(asc(slot))`) (PR #180)
+- Problème : `resolveWorld` triait le pool par `slot` avant le modulo — cette garde était à 100 % de coverage, mais aucun test ne rougissait si on la retirait, car le seul writer (`seedSocleWorlds`) insère toujours en ordre `slot` croissant : l'ordre de scan par rowid coïncide alors avec l'ordre trié et masque le trou.
+- Leçon : QA l'a prouvé par une **sonde** (réinsertion du pool hors-ordre → rouge sans `orderBy`, vert avec) puis le fix a ajouté un test non-vacuous sur cet invariant d'ordre. Réaffirme #60/#61/#170 (100 % coverage ≠ garde prouvée, exiger un test qui rougit à la mutation) avec un angle neuf : le masquage venait d'une **coïncidence d'ordre d'insertion du seul writer** — vigilance requise dès qu'une garde d'ordre ne dépend que d'une source de données déjà triée.
+- Action : rappel (réplique #60/#61/#170) — pas de promotion neuve, la règle « test qui rougit à la mutation » est déjà dure.
+
+### 2026-07-07 — [process] Miscount vérifié par sonde autoritative, pas grep (PR #180)
+- Problème : le build ET QA ont d'abord compté `CURATED_THEMES` = 7 — le champ `slug` de l'interface gonflait le `grep` — alors que le réel est 6 (confirmé en exécutant le code). Un tell chiffré faux (indices `0,6,2,1,4,3`, hors bornes) est passé un temps avant correction en `[3,2,5,4,1,0]`.
+- Leçon : un commentaire ou un reçu citant un compte/une dérivation se vérifie en **exécutant le code** (sonde), jamais au grep seul — un grep peut compter un champ homonyme (`slug`) plutôt que les entités réelles.
+- Action : rappel — au review d'un compte/indice cité en commentaire ou reçu, faire tourner une sonde qui l'évalue réellement avant de le créditer.
+
+### 2026-07-07 — [fidélité-modèle — MAJEUR] « Déclaré ≠ rendu » à l'échelle de l'ÉPIC : le pipeline mondes IA complet reste INVISIBLE pour l'enfant (PR #180)
+- Problème : tout l'épic #6 (Nano Banana, buffer, QA kid-safe, master Teddy, socle pré-généré) est invisible en jeu — `resolveWorld` n'est câblé nulle part côté rendu, `WorldMap` n'a aucun champ theme/palette, `--world-accent` n'a aucun consommateur DOM. Chaque story a livré et prouvé son mécanisme (100 % coverage, mutation-prouvé, AC-littérales vertes), mais la **valeur produit centrale** de l'épic (`PRODUCT.md` : « thèmes IA = moteur de la boucle ») n'atteint jamais le joueur.
+- Leçon : vu **seulement** par les reviewers fidélité (game-design + PO, convergents) — les 4 reviewers ingénierie (Backend/Security/QA/gate) ont tous APPROVE le mécanisme sans voir le gap produit. Cas d'école #95/#123 (fidélité vue par game-design, pas par l'ingénierie), étendu ici à l'**échelle de l'épic entier** plutôt qu'à une story isolée.
+- Action : story de câblage consommateur **#182** créée et priorisée AVANT clôture de l'épic #6 ; runbook de validation du socle réel filé en **needs-owner #181**. **Promue en règle dure CLAUDE.md** (cf. section Promotion ci-dessous).
+
+### 2026-07-07 — [process] Owner-gate = issue FILÉE, pas corps de PR (PR #180)
+- Problème : le runbook de validation du socle réel (vérif propriétaire des mondes pré-générés) était documenté en corps de PR mais **sans** issue `needs-owner` dédiée — risque de le perdre au drain de clôture d'épic.
+- Leçon : filé en **#181** (miroir du patron #158). Réaffirme #157 : l'issue `needs-owner` est la partie qui compte pour la traçabilité backlog, pas le texte de PR (invisible une fois mergée).
+- Action : rappel — tout owner-gate identifié en review se file systématiquement en issue dédiée, jamais laissé en paragraphe de corps de PR.
+
+### 2026-07-07 — [succès] Double vérif reçu tenue (PR #180)
+- Observation : SHA vérifié `origin == headRefOid` à chaque push (`a7760ec`→`6661c54`), gates re-runnés par l'orchestrateur, 6 gardes + l'invariant `orderBy` re-mutés **indépendamment** par 2 agents dédiés.
+- Leçon : discipline « test nommé, pas cardinal » (#173) respectée par le build ; aucune fabrication détectée. Réplique robuste des règles #126/#143/#173.
+- Action : aucune promotion neuve — continuer la double vérification en routine.
+
+### Promotion CLAUDE.md
+**UNE promotion** cette rétro, à portée nouvelle (échelle épic plutôt que story) : « déclaré ≠ rendu/consommé » s'étend à la **clôture d'épic** — vérifier que sa valeur produit centrale atteint réellement l'enfant, pas seulement que chaque story a livré son mécanisme testé (extension #125/#170, cf. texte promu dans `CLAUDE.md` § Workflow/DoD). Corollaire : une story de câblage consommateur qui rend l'épic visible se planifie avant clôture, et tout owner-gate se file en issue `needs-owner`. Les 4 autres leçons ci-dessus **réaffirment** des règles déjà promues (#60/#61/#170 coverage vacuous, #157 owner-gate filé, #126/#143/#173 reçu vérifié) plutôt que d'en ajouter de nouvelles.
