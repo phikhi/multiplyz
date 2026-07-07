@@ -169,9 +169,28 @@ describe("MapScreen — connecteur du chemin (métaphore Candy Crush, WIREFRAMES
     );
     const line = document.querySelector("[data-map-connector] line");
     expect(line).not.toBeNull();
-    expect(line!.getAttribute("stroke")).toBe("var(--map-node-path-color)");
-    // strokeWidth via style (SEUL le CSS résout var(), cf. NumberLine/#110).
+    // stroke ET strokeWidth via `style` (SEUL le CSS résout var() dans tous les moteurs,
+    // cf. NumberLine/#110) — plus l'attribut `stroke` brut (corrigé avec l'occlusion #169).
+    expect((line as SVGLineElement).style.stroke).toBe("var(--map-node-path-color)");
     expect((line as SVGLineElement).style.strokeWidth).toBe("var(--map-node-path-width)");
+    expect(line!.getAttribute("stroke")).toBeNull();
+  });
+
+  it("le connecteur vit dans la GOUTTIÈRE sous la pastille (top = --map-node-size), jamais derrière le médaillon opaque (régression invisibilité #169)", async () => {
+    // Effet observable : ancré au BAS de la pastille (`--map-node-size`), le trait descend
+    // dans la gouttière ENTRE deux nœuds — il n'est donc pas recouvert par le médaillon
+    // opaque (zIndex 1). Casse si on régresse vers `calc(var(--map-node-size) / 2)` (la
+    // moitié de la pastille), qui repeignait le trait DANS le nœud, invisible (playtest
+    // owner). jsdom ne fait pas de layout → on garde la valeur de `top` (source du bug),
+    // à doubler d'une preuve visuelle E2E (capture `/carte`).
+    await renderReady(
+      map([node({ index: 0, status: "current" }), node({ index: 1, status: "locked" })]),
+    );
+    const svg = document.querySelector<SVGSVGElement>("[data-map-connector]");
+    expect(svg).not.toBeNull();
+    expect(svg!.style.top).toBe("var(--map-node-size)");
+    expect(svg!.style.top).not.toContain("/ 2");
+    expect(svg!.style.height).toBe("var(--map-node-gap)");
   });
 
   it("l'ajout des connecteurs ne change NI le nombre de nœuds NI leurs positions (invariance géométrie, rétro #123)", async () => {
