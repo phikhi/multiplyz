@@ -174,6 +174,23 @@ describe("QuestionCard — format pavé", () => {
     expect(onAnswer).not.toHaveBeenCalled();
   });
 
+  it("le bouton valider affiche un glyphe compact ✓ tout en gardant le nom accessible « Valider »", () => {
+    // Régression #164 : le texte « Valider » débordait la cellule carrée du pavé.
+    // Le glyphe visible doit rester court ; le nom accessible vient de l'aria-label.
+    render(
+      <QuestionCard
+        question={paveQuestion()}
+        questionNumber={1}
+        totalQuestions={10}
+        onAnswer={vi.fn()}
+        onDontKnow={vi.fn()}
+      />,
+    );
+    const submit = screen.getByRole("button", { name: strings.play.question.submit });
+    expect(submit).toHaveTextContent("✓");
+    expect(submit).not.toHaveTextContent(strings.play.question.submit);
+  });
+
   it("ignore l'effacement quand la saisie est vide", () => {
     render(
       <QuestionCard
