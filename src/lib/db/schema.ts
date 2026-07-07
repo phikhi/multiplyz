@@ -737,3 +737,50 @@ export const teddyReferenceAssets = sqliteTable("teddy_reference_assets", {
     .notNull()
     .default(sql`(unixepoch())`),
 });
+
+// ============================================================================
+// Socle de fallback (epic #6, story 6.6) — pool de mondes pré-générés embarqués
+// (WORLDGEN §1 « socle de ~5-8 mondes pré-générés et validés » + §7 « fallback &
+// reproductibilité »). Source de vérité SERVEUR ; **assets partagés** du foyer
+// (pas de FK profil, pas de cascade RGPD — non enfant-spécifiques, comme `worlds`).
+// ============================================================================
+
+/**
+ * **Socle de mondes de secours** (WORLDGEN §1/§7, story 6.6). Pool **fixe** de ~5-8 mondes
+ * pré-générés **embarqués** (amorcés au 1er lancement, hors réseau) : sert de **fallback** quand
+ * aucun monde généré `active` n'existe encore à un index de carte (base fraîche = démarrage
+ * instantané ; IA indispo / hors buffer = secours — WORLDGEN §7). Le résolveur (`resolveWorld`,
+ * `lib/worldgen/socle.ts`) pioche `socle[worldIndex % taille_du_pool]` — le socle est un pool
+ * **réutilisable** (non lié à une position de carte), **distinct** du `worlds` indexé par position :
+ * le worker (6.4) **ignore** cette table (il ne lit/écrit que `worlds`), donc l'amorçage du socle
+ * n'entrave **jamais** la génération paresseuse (le worker génère toujours depuis l'index 0).
+ *
+ * PK `id` **texte** (`socle:<slot>`) : déterministe → **amorçage idempotent** (`onConflictDoNothing`
+ * par id, `seedSocleWorlds`). Aucun callback `sqliteTable` d'extras (index/PK composite) qui
+ * casserait le gate 100 % fonctions (LEARNINGS #34/#46) — même patron que `worlds`/`jobs`. `slot`
+ * reste une colonne normale (ordre stable + mapping modulo) : son unicité **découle** du PK
+ * (`id = socle:<slot>`), une contrainte `.unique()` séparée serait **redondante + non-testable**
+ * (rétro #143) → non posée.
+ *
+ * Table **neuve** (jamais peuplée avant cette migration) → colonnes `NOT NULL` **sans** le piège
+ * « ADD NOT NULL sur table peuplée » (issue #105). `prompt` + `seed` sont stockés (reproductibilité
+ * à l'identique, WORLDGEN §7). `asset_refs` porte des refs **placeholder** (`placeholder://socle/…`,
+ * même signal que la légendaire 5.6) tant que le proprio n'a pas généré+validé les assets réels
+ * (**gate owner**, WORLDGEN §1 « validés » — cf. runbook `needs-owner`).
+ */
+export const socleWorlds = sqliteTable("socle_worlds", {
+  /** Clé stable (`socle:<slot>`) — déterministe, permet l'amorçage idempotent. */
+  id: text("id").primaryKey(),
+  /** Slot du monde dans le pool (0..taille-1) — ordre stable + mapping modulo du résolveur. */
+  slot: integer("slot").notNull(),
+  /** Thème du monde (label d'un thème curaté kid-safe, WORLDGEN §4.1). */
+  theme: text("theme").notNull(),
+  /** Palette dérivée (json) → pose `--world-accent` (DESIGN_TOKENS, WORLDGEN §4.2). */
+  palette: text("palette").notNull(),
+  /** Références d'assets (json : fond/tuiles/Teddy — **placeholder** jusqu'au gate owner). */
+  assetRefs: text("asset_refs").notNull(),
+  /** Prompt de génération complet (reproductibilité à l'identique, WORLDGEN §7). */
+  prompt: text("prompt").notNull(),
+  /** Seed du modèle (reproductibilité à l'identique, WORLDGEN §5/§7). */
+  seed: text("seed").notNull(),
+});

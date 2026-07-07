@@ -20,6 +20,7 @@ import {
   progress,
   progressKey,
   sessions,
+  socleWorlds,
   teddyReferenceAssets,
   wallet,
   worlds,
@@ -1218,5 +1219,61 @@ describe("schéma teddy_reference_assets (assets de référence — WORLDGEN §8
     expect(info.find((c) => c.name === "approved_by")?.notnull).toBe(0);
     expect(info.find((c) => c.name === "kind")?.notnull).toBe(1);
     expect(info.find((c) => c.name === "asset_ref")?.notnull).toBe(1);
+  });
+});
+
+// ============================================================================
+// Socle de fallback (story 6.6) — socle_worlds (pool de mondes de secours)
+// (WORLDGEN §1/§7, PLAN §Modèle de données)
+// ============================================================================
+
+describe("schéma socle_worlds (socle de secours — WORLDGEN §7, story 6.6)", () => {
+  function seedRow(db: ReturnType<typeof freshDb>, overrides: Record<string, unknown> = {}) {
+    db.insert(socleWorlds)
+      .values({
+        id: "socle:0",
+        slot: 0,
+        theme: "Océan scintillant",
+        palette: '{"slug":"ocean","accent":"#2BB7E6"}',
+        assetRefs: '{"background":"placeholder://socle/0/background"}',
+        prompt: "socle world prompt …",
+        seed: "socle-world-0",
+        ...overrides,
+      })
+      .run();
+  }
+
+  // NB : la table est **déjà amorcée** par `runMigrations` (`seedSocleWorlds`) → on écrit sur des
+  // slots hors du socle (≥ 100) pour tester le schéma sans collisionner la fixture.
+  it("insère et relit une ligne du socle (id/slot/thème/palette/refs/prompt/seed)", () => {
+    const db = freshDb();
+    seedRow(db, { id: "socle:100", slot: 100 });
+    const row = db.select().from(socleWorlds).where(eq(socleWorlds.id, "socle:100")).get();
+    expect(row).toMatchObject({
+      id: "socle:100",
+      slot: 100,
+      theme: "Océan scintillant",
+      palette: '{"slug":"ocean","accent":"#2BB7E6"}',
+      assetRefs: '{"background":"placeholder://socle/0/background"}',
+      prompt: "socle world prompt …",
+      seed: "socle-world-0",
+    });
+  });
+
+  it("contraint l'unicité de l'id (PK texte) — même id rejeté", () => {
+    const db = freshDb();
+    seedRow(db, { id: "socle:101", slot: 101 });
+    expect(() => seedRow(db, { id: "socle:101", slot: 999 })).toThrow();
+  });
+
+  // GARDE anti-drift (#91/#105) : toutes les colonnes du socle sont NOT NULL (table neuve, jamais
+  // peuplée avant 0012 → aucun piège « ADD NOT NULL sur table peuplée »). Effet observable :
+  // rendre une colonne nullable en schema.ts + rebuild → notnull=0 → rouge.
+  it("toutes les colonnes sont NOT NULL (contenu complet requis, garde PRAGMA)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(socle_worlds)`);
+    for (const name of ["id", "slot", "theme", "palette", "asset_refs", "prompt", "seed"]) {
+      expect(info.find((c) => c.name === name)?.notnull).toBe(1);
+    }
   });
 });

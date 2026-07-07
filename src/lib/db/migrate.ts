@@ -1,19 +1,26 @@
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { nameKey } from "../auth/validation";
+import { seedSocleWorlds } from "../worldgen/socle";
 import { MIGRATIONS_FOLDER } from "./config";
 import type { AppDatabase } from "./index";
 
 /**
- * Applique les migrations versionnées sur la connexion fournie, puis backfille
- * la colonne dérivée `profiles.name_key`.
+ * Applique les migrations versionnées sur la connexion fournie, puis exécute les
+ * amorçages **applicatifs idempotents** : backfill de la colonne dérivée
+ * `profiles.name_key` (#105) + amorçage du **socle de mondes de secours**
+ * (WORLDGEN §7, story 6.6 → 1er lancement instantané, hors réseau).
  *
  * Idempotent : Drizzle journalise les migrations déjà jouées
- * (`__drizzle_migrations`) → un second appel est un no-op sans erreur.
+ * (`__drizzle_migrations`) → un second appel est un no-op sans erreur ; le backfill
+ * (`WHERE name_key IS NULL`) et l'amorçage du socle (`onConflictDoNothing`) sont
+ * eux-mêmes idempotents. `seedSocleWorlds` tourne **après** `migrate` (la table
+ * `socle_worlds` existe alors).
  */
 export function runMigrations(db: AppDatabase, migrationsFolder: string = MIGRATIONS_FOLDER): void {
   migrate(db, { migrationsFolder });
   backfillNameKeys(db);
+  seedSocleWorlds(db);
 }
 
 /**
