@@ -16,6 +16,7 @@ pnpm build
 ```
 - **Vérif runtime** : lancer la skill **`next-dev-loop`** (comportement réel sur `next dev`).
 - **Captures Playwright** : générer les captures des écrans/parcours touchés (obligatoire si impact UI).
+- **⚠️ Vérif VISUELLE des pixels (BLOQUANT, rétro #170)** : générer la capture **NE SUFFIT PAS** — il faut **l'OUVRIR et la REGARDER** (`Read` l'image / montage `open`) et **confirmer que le changement est réellement visible** à l'écran, au bon endroit, non recouvert. Un test unitaire vert (token/contraste résolu, `data-*`) prouve la mécanique, **jamais** que le pixel est peint visible : un élément peut être **rendu mais invisible** (occlusion/z-index, `height:0`, hors cadre, clippé) — jsdom ne fait pas de layout, seule la **capture analysée** (ou une garde E2E de layout réel) l'attrape. Attacher une capture où le changement **n'apparaît pas** = **DoD non satisfait**. Pour un élément superposé (SVG, overlay, badge, `absolute`), ajouter en plus une **garde E2E sur la géométrie rendue réelle** (ex. `boundingClientRect` : l'élément n'est pas recouvert), car l'unit ne voit pas l'empilement.
 
 ## Ouvrir la PR
 ```bash
