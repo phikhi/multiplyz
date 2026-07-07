@@ -73,7 +73,7 @@ describe("regenerateSocleContent (reproductibilité depuis le seed — WORLDGEN 
 
   // GARDE AC #4 (mutation-prouvée) : le seed est LOAD-BEARING. Si `regenerateSocleContent`
   // ignorait le seed (ex. renvoyait toujours CURATED_THEMES[0]), ce test rougirait — les seeds
-  // des slots 0 et 1 dérivent vers des thèmes DISTINCTS (indices 0 vs 6).
+  // des slots 0 et 1 dérivent vers des thèmes DISTINCTS (indices de thème 3 vs 2, sur 6 thèmes).
   it("SEED-SENSIBLE : muter le seed change le thème dérivé (garde AC #4)", () => {
     const s0 = regenerateSocleContent(socleSeed(0));
     const s1 = regenerateSocleContent(socleSeed(1));
@@ -192,6 +192,25 @@ describe("resolveWorld (résolveur généré/socle — WORLDGEN §7, AC #1)", ()
     expect(resolveWorld(db, 0).theme).toBe(buildSocleWorld(0).theme);
     expect(resolveWorld(db, SOCLE_WORLD_COUNT).theme).toBe(buildSocleWorld(0).theme);
     expect(resolveWorld(db, SOCLE_WORLD_COUNT + 2).theme).toBe(buildSocleWorld(2).theme);
+  });
+
+  // GARDE (mutation-prouvée, trou #60/#61 démasqué par QA) : `resolveWorld` trie explicitement
+  // `.orderBy(asc(socleWorlds.slot))` AVANT `pool[index % len]` → le mapping suit le SLOT, jamais
+  // l'ordre de scan (rowid). Le seul writer `seedSocleWorlds` insère par slot croissant, donc
+  // l'ordre de scan coïncide PAR CONSTRUCTION et masquerait le trou. On ré-insère ici en ordre slot
+  // DÉCROISSANT (rowid inverse du slot) : sans le `.orderBy`, `pool[i]` viserait le slot `len-1-i`
+  // (mauvais monde pour TOUT i) → ce test rougit. Avec le `.orderBy`, la résolution reste par slot.
+  it("résout par SLOT (invariant d'ordre du pool), pas par ordre d'insertion (garde orderBy)", () => {
+    const db = freshDb();
+    const socle = buildSocle();
+    db.delete(socleWorlds).run();
+    // Ré-insertion en ordre slot DÉCROISSANT → l'ordre rowid ≠ l'ordre slot.
+    for (const row of [...socle].reverse()) {
+      db.insert(socleWorlds).values(row).run();
+    }
+    for (let i = 0; i < SOCLE_WORLD_COUNT; i += 1) {
+      expect(resolveWorld(db, i).theme).toBe(buildSocleWorld(i).theme);
+    }
   });
 
   // GARDE loud (#157) : socle jamais amorcé → échec actionnable, pas un TypeError cryptique.

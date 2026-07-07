@@ -33,8 +33,14 @@ import { deriveWorldPalette, serializePalette } from "./palette";
 /**
  * ⚙️ **Taille du socle** (WORLDGEN §1 « ~5-8 mondes »). **Consommée** sur le vrai chemin runtime :
  * `buildSocle` produit exactement ce nombre de mondes → amorcés en base → `resolveWorld` pioche
- * `worldIndex % taille_du_pool_réel`. 6 = 6 thèmes curatés **distincts** (slots 0..5 → indices de
- * thème 0,6,2,1,4,3 via la dérivation seed, cf. test), variété maximale sans répétition.
+ * `worldIndex % taille_du_pool_réel`.
+ *
+ * À 6, les slots 0..5 dérivent leur thème via `hashSeed(socleSeed(slot)) % CURATED_THEMES.length`
+ * (avec `CURATED_THEMES.length === 6`) vers les indices `[3, 2, 5, 4, 1, 0]` — soit une **bijection**
+ * (6 thèmes tous distincts) par simple **coïncidence de hash**, PAS un algorithme anti-collision.
+ * Cette variété est donc **fragile** : changer `SOCLE_WORLD_COUNT` ou le nombre/ordre de
+ * `CURATED_THEMES` peut réintroduire un doublon de thème. Le test de régression « thèmes DISTINCTS »
+ * verrouille cet invariant (il rougit si la bijection casse).
  */
 export const SOCLE_WORLD_COUNT = 6;
 

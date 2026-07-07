@@ -44,6 +44,7 @@ Projet **greenfield** : tout est à créer.
 - `progress` : profile_id, world_index (croît à l'infini), level, stars
 - `collection` : profile_id, character_id, unlocked_at
 - `worlds` : id, index, theme, palette, asset_refs (fond/tuiles), status (`buffered`|`active`), created_at — **mondes générés**, partagés entre profils
+- `socle_worlds` : id (`socle:<slot>`), slot, theme, palette, asset_refs, prompt, seed — **socle de secours** pré-généré (~5-8 mondes embarqués), pool réutilisable de fallback, distinct du `worlds` indexé par position (WORLDGEN §1/§7)
 - `characters` : id, world_id, image_ref, name, story — créatures générées par monde
 
 > Un **fact** = un calcul atomique, identifié par une clé stable (ex. `mult_6x8`, `comp10_7`, `add_4+9`, `sub_12-5`). Pas besoin de table catalogue : génération à la volée + clé.
