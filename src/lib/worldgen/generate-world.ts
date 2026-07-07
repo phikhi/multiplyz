@@ -150,6 +150,15 @@ export interface GenerateWorldDeps {
    * créature n'est pas Teddy — le master ancre UNIQUEMENT le Stage B de Teddy).
    */
   creatureStyleBible: readonly ImageRef[];
+  /**
+   * **Chargeur des octets du master** pour l'ancrage img2img de la variante Teddy (WORLDGEN §8,
+   * ADR 0009). Défaut = `masterRefBytes` = **marqueur déterministe** (le chemin encodé, PAS les
+   * octets réels) : suffisant pour les gardes de fidélité qui vérifient le FAIT que le master est
+   * passé en `refImages` (les tests mockent `generate`, ne lisent jamais le disque → 0 régression
+   * CI, où les PNG master sont gitignorés). À l'**exécution owner** (run réel, gate #181) on injecte
+   * un vrai loader disque (`readMasterBytesFromDisk`) → l'ancrage ADR 0009 devient effectif.
+   */
+  loadMasterBytes: (assetRef: string) => Buffer;
   /** Horloge serveur injectée (jamais `Date.now()` interne, LEARNINGS #46). */
   now: () => Date;
   /** Config worldgen (défaut : config centrale). Injectée en test. */
@@ -162,6 +171,7 @@ export function resolveDeps(overrides?: Partial<GenerateWorldDeps>): GenerateWor
     generate: overrides?.generate ?? ((input) => generateImage(input)),
     writeAsset: overrides?.writeAsset ?? defaultWriteAsset,
     creatureStyleBible: overrides?.creatureStyleBible ?? [],
+    loadMasterBytes: overrides?.loadMasterBytes ?? masterRefBytes,
     now: overrides?.now ?? (() => new Date()),
     config: overrides?.config ?? getWorldGenConfig(),
   };
@@ -225,7 +235,7 @@ export function deriveCreatureSplit(worldIndex: number): CreatureSplit {
 }
 
 /** Assemble le prompt du **fond de monde** (gabarit background ART §5, {base_style} résolu). */
-function buildBackgroundPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
+export function buildBackgroundPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
   const base = config.prompts.background
     .replace("{base_style}", config.prompts.style)
     .replace("{world_theme}", theme.label)
@@ -237,7 +247,7 @@ function buildBackgroundPrompt(config: WorldGenConfig, theme: CuratedTheme): str
  * Assemble le prompt des **tuiles de carte** (réutilise le gabarit background ART §5 — même
  * charte, cadrage tuile). Les tuiles doivent rester cohérentes avec le fond (ART §4).
  */
-function buildTilesPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
+export function buildTilesPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
   const base = config.prompts.background
     .replace("{base_style}", config.prompts.style)
     .replace("{world_theme}", `${theme.label} map tiles and path nodes`)
@@ -250,7 +260,7 @@ function buildTilesPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
  * résolu + accessoire du monde. **Ancré sur le master** en img2img (refImages) par l'appelant —
  * jamais les photos (WORLDGEN §8).
  */
-function buildTeddyPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
+export function buildTeddyPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
   const base = config.prompts.teddy
     .replace("{base_style}", config.prompts.style)
     .replace("{world_accessory}", theme.accessory);
@@ -367,7 +377,10 @@ export async function generateWorld(
 
   // Variante Teddy = img2img ANCRÉ SUR LE MASTER (jamais les photos — WORLDGEN §8, ADR 0009).
   const teddyPrompt = buildTeddyPrompt(config, curated);
-  const teddyMasterRef: ImageRef = { data: masterRefBytes(master.assetRef), mimeType: "image/png" };
+  const teddyMasterRef: ImageRef = {
+    data: deps.loadMasterBytes(master.assetRef),
+    mimeType: "image/png",
+  };
   const teddyBytes = await deps.generate({ prompt: teddyPrompt, refImages: [teddyMasterRef] });
   paidImageCalls += 1;
   const teddyRef = await deps.writeAsset(worldIndex, "teddy.png", teddyBytes);

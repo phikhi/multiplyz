@@ -127,6 +127,8 @@ describe("resolveDeps / defaults prod", () => {
     expect(deps.generate).toBeTypeOf("function");
     expect(deps.writeAsset).toBe(defaultWriteAsset);
     expect(deps.creatureStyleBible).toEqual([]);
+    // Défaut = marqueur déterministe (octets réels injectés à l'exécution owner, ADR 0009).
+    expect(deps.loadMasterBytes).toBe(masterRefBytes);
     expect(deps.now()).toBeInstanceOf(Date); // horloge réelle par défaut.
     expect(deps.config.monthlyBudgetEur).toBeTypeOf("number"); // bloc worldgen central.
   });
