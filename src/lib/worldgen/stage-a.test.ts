@@ -153,7 +153,7 @@ describe("runStageA (outil one-shot — master + model sheet, WORLDGEN §8)", ()
 
     // Le prompt du master doit porter le STYLE DE BASE verrouillé + la contrainte étiquette.
     const firstPrompt = generate.mock.calls[0][0].prompt as string;
-    expect(firstPrompt).toContain("flat 2D kawaii vector illustration"); // STYLE ART §5
+    expect(firstPrompt).toContain("flat 2D kawaii vector illustration"); // STYLE ART §5 (enrichi ADR 0009)
     expect(firstPrompt).toContain("blank ear tag with no text"); // ADR 0008 contrainte 2
     expect(firstPrompt).toContain("Negative:"); // NEGATIVE injecté
     // Le placeholder {base_style} est bien résolu (jamais laissé littéral).

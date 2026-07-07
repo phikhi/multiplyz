@@ -7,11 +7,11 @@
 
 ## 1. ADN visuel (verrouillé)
 
-- **Style** : illustration **vectorielle plate kawaii** (2D, formes arrondies, mignon, premium « app enfant »).
+- **Style** : illustration **kawaii douce** (2D, **flat kawaii vector conservé**) **enrichie** de **cel-shading léger** + **poils tuftés légers** sur le contour (aspect peluche) — _enrichi une fois par [ADR 0009](docs/adr/0009-style-fluffy-kawaii-unifie.md) (direction owner, #160, fidèle au master validé #158)_.
 - **Couleurs** : **pastel lumineux** en base (calme, bon pour la concentration sur 15–20 min) + **accents vifs** réservés aux récompenses/boutons/feedback positif.
 - **Mascotte signature** : **Teddy**, fil rouge présent dans tous les mondes (identité du jeu + lien affectif fort — c'est SON doudou).
 - **Créatures** : un **ADN commun** garantit la cohérence malgré la génération infinie — rondes, grands yeux brillants, formes simples, **1–2 traits distinctifs** chacune.
-- **Rendu** : aplats de couleur, **ombrage doux et minimal**, contour fin/arrondi ou sans contour, proportions **chibi** (~2 têtes de haut), expressions amicales. **Jamais** : réalisme dur, effrayant, texte dans l'image, détails fouillis.
+- **Rendu** : **cel-shading doux**, **poils tuftés légers** sur la silhouette (aspect peluche, propre — pas de taches ni de bruit), contour fin/arrondi, proportions **chibi** (~2 têtes de haut), expressions amicales. **Jamais** : réalisme dur, effrayant, texte dans l'image, détails fouillis, poils sales/tachetés.
 
 ---
 
@@ -19,7 +19,7 @@
 
 - **Concept** : version **stylisée kawaii** de **Teddy**, l'ours en peluche réel de sa fille — un **Steiff de collection des années 80**.
 - **Ancrages de ressemblance** (depuis les **photos réelles fournies par le parent**) : fourrure mohair (teinte réelle à confirmer sur photos, typiquement caramel/doré/beige), **museau brodé**, yeux ronds sombres, oreilles arrondies, bras/jambes **articulés**, **dos légèrement bombé** (classique teddy vintage), **bouton Steiff + étiquette jaune à l'oreille** (marque d'authenticité).
-- **Stylisation** : appliquer l'ADN du jeu (formes arrondies, **grands yeux brillants**, proportions chibi, aplats pastel, ombrage doux) **tout en gardant la ressemblance** avec le vrai Teddy.
+- **Stylisation** : appliquer l'ADN du jeu (formes arrondies, **grands yeux brillants**, proportions chibi, pastel, **cel-shading léger**, **poils tuftés légers**) **tout en gardant la ressemblance** avec le vrai Teddy.
 - **Cohérence inter-mondes** : Teddy reste **identique**, seuls ses **accessoires** changent selon le monde (masque de plongée → océan, casque spatial → galaxie, petite cape → monde magique, écharpe → forêt). → un seul personnage, décliné à l'infini sans perdre son identité.
 - **Génération en 2 stages** (model sheet, cf. WORLDGEN §8) : **Stage A** (1×) photos réelles → **master Teddy kawaii** + expressions (neutre/content/oups/acclame/intrépide), **validé** ; **Stage B** (par monde) → ancrer sur le **master**, **jamais les photos**. Master = aussi les **sprites de réaction** en jeu. Modèle : **Nano Banana** (consistance + img2img).
 - **Rôles** : guide l'enfant, réagit aux bonnes/mauvaises réponses, célèbre les déblocages.
@@ -53,12 +53,14 @@
 
 > En **anglais** (meilleur ancrage des modèles d'image). `{…}` = variables injectées par le générateur de monde.
 
-**STYLE DE BASE (constant, jamais modifié) :**
+**STYLE DE BASE (verrouillé — enrichi une fois par [ADR 0009](docs/adr/0009-style-fluffy-kawaii-unifie.md), #160) :**
+Générique et **partagé** par Teddy/créatures/fonds via `{base_style}`. = **tokens verbatim du master validé #158**, MOINS le **torse crème** (**spécifique Teddy** → dans le gabarit Teddy) et le fond blanc (`isolated on white background` = détail d'exécution Stage A / cutout, pas du style).
 ```
 flat 2D kawaii vector illustration, soft rounded shapes, cute chibi proportions,
-big shiny friendly eyes, gentle minimal shading, soft pastel palette with bright
-accent highlights, clean simple background, children's app art, high quality,
-consistent art style
+big shiny friendly eyes, gentle minimal cel shading, lightly fluffy fur with a few
+soft clean fur tufts along the silhouette edge, tidy smooth even fur, not blotchy,
+no random dark spots or dirty marks, soft pastel palette with bright accent highlights,
+clean simple background, children's app art, high quality, consistent art style
 ```
 
 **NEGATIVE (constant) :**
@@ -71,8 +73,9 @@ gradient noise, low quality
 **Mascotte Teddy (par monde) — avec photo de référence :**
 ```
 {base_style}, "Teddy" a cute vintage 1980s Steiff teddy bear, golden mohair fur,
-stitched snout, round dark eyes, rounded ears, classic jointed teddy with a slightly
-humped back, small yellow ear tag, wearing {world_accessory},
+soft lighter cream-colored fluffy chest and belly patch, stitched snout, round dark
+eyes, rounded ears, classic jointed teddy with a slightly humped back, small yellow
+blank ear tag with no text, wearing {world_accessory},
 faithful to the reference photos, centered, transparent background --ar 1:1
 ```
 → **Stage A** : passer les **photos réelles** pour créer le master. **Stage B** : passer le **master** (pas les photos) + l'accessoire du monde.
@@ -119,7 +122,7 @@ no characters, no text --ar 16:9
 
 | Sujet | Choix |
 |---|---|
-| Style global | **Vectoriel plat kawaii** (2D) |
+| Style global | **Kawaii doux** (2D, **flat kawaii vector** + cel-shading léger + poils tuftés légers) — enrichi [ADR 0009](docs/adr/0009-style-fluffy-kawaii-unifie.md) |
 | Couleurs | **Pastel lumineux + accents vifs**, palette dérivée **par monde** |
 | Mascotte | **Teddy** (doudou réel, Steiff 80s stylisé kawaii), fil rouge, accessoires selon le monde, **généré depuis photos réelles** |
 | Créatures | **ADN commun** : rondes, grands yeux, 1–2 traits distinctifs |
