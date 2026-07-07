@@ -224,6 +224,11 @@ describe("readMasterBytesFromDisk — lecture disque contrainte (sécurité)", (
     expect(() => readMasterBytesFromDisk("storage/other/secret.png", { cwd })).toThrow(
       WorldGenError,
     );
+    // Frère à préfixe partiel : SEUL le `+ sep` de la garde le rejette (sans lui, `startsWith(root)`
+    // laisserait passer `storage/reference-evil/`). Mutation-preuve du `+ sep` (rétro sécurité #185).
+    expect(() => readMasterBytesFromDisk("storage/reference-evil/secret.png", { cwd })).toThrow(
+      WorldGenError,
+    );
   });
 
   it("sans opts, résout depuis process.cwd() (défaut) — traversal rejeté avant toute I/O", () => {
