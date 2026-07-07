@@ -635,6 +635,52 @@ describe("loadWorldGenConfig — surcharges ⚙️ par env", () => {
       loadWorldGenConfig({ WORLDGEN_STAGE_A_BACKGROUND_STRATEGY: "   " }).stageA.backgroundStrategy,
     ).toBe(CONFIG_DEFAULTS.worldgen.stageA.backgroundStrategy);
   });
+
+  it("bloc QA ⚙️ : défauts modération kid-safe (WORLDGEN §6, story 6.5)", () => {
+    const { qa } = loadWorldGenConfig({});
+    // Validation parent OPTIONNELLE → défaut auto (ADR 0008 « aucune sur-censure »).
+    expect(qa.parentValidationEnabled).toBe(false);
+    // Jusqu'à 3 régénérations après rejet QA, sinon fallback (WORLDGEN §6 « jusqu'à N essais »).
+    expect(qa.maxAttempts).toBe(3);
+    // Seuils ⚙️ des règles safe_content / style_coherence.
+    expect(qa.unsafeMaxScore).toBe(0.5);
+    expect(qa.styleMinScore).toBe(0.6);
+  });
+
+  it("bloc QA ⚙️ : surcharge par env (toggle parent, essais, seuils)", () => {
+    const { qa } = loadWorldGenConfig({
+      WORLDGEN_QA_PARENT_VALIDATION: "true",
+      WORLDGEN_QA_MAX_ATTEMPTS: "5",
+      WORLDGEN_QA_UNSAFE_MAX_SCORE: "0.2",
+      WORLDGEN_QA_STYLE_MIN_SCORE: "0.8",
+    });
+    expect(qa.parentValidationEnabled).toBe(true);
+    expect(qa.maxAttempts).toBe(5);
+    expect(qa.unsafeMaxScore).toBe(0.2);
+    expect(qa.styleMinScore).toBe(0.8);
+  });
+
+  it("bloc QA ⚙️ : bornes légitimes (0 régénération, seuils à 0/1) acceptées, invalides → défaut", () => {
+    // maxAttempts = 0 (aucune régénération : 1er rejet QA → fallback) — parseNonNegativeInt.
+    expect(loadWorldGenConfig({ WORLDGEN_QA_MAX_ATTEMPTS: "0" }).qa.maxAttempts).toBe(0);
+    // Seuils : 0 et 1 sont des bornes légitimes ([0,1] inclusif via parseUnitInterval).
+    expect(loadWorldGenConfig({ WORLDGEN_QA_UNSAFE_MAX_SCORE: "0" }).qa.unsafeMaxScore).toBe(0);
+    expect(loadWorldGenConfig({ WORLDGEN_QA_STYLE_MIN_SCORE: "1" }).qa.styleMinScore).toBe(1);
+    // Hors [0,1] / non numérique / maxAttempts négatif → défaut.
+    expect(loadWorldGenConfig({ WORLDGEN_QA_UNSAFE_MAX_SCORE: "1.5" }).qa.unsafeMaxScore).toBe(
+      CONFIG_DEFAULTS.worldgen.qa.unsafeMaxScore,
+    );
+    expect(loadWorldGenConfig({ WORLDGEN_QA_STYLE_MIN_SCORE: "oops" }).qa.styleMinScore).toBe(
+      CONFIG_DEFAULTS.worldgen.qa.styleMinScore,
+    );
+    expect(loadWorldGenConfig({ WORLDGEN_QA_MAX_ATTEMPTS: "-1" }).qa.maxAttempts).toBe(
+      CONFIG_DEFAULTS.worldgen.qa.maxAttempts,
+    );
+    // Toggle : valeur non booléenne → défaut.
+    expect(
+      loadWorldGenConfig({ WORLDGEN_QA_PARENT_VALIDATION: "peut-être" }).qa.parentValidationEnabled,
+    ).toBe(CONFIG_DEFAULTS.worldgen.qa.parentValidationEnabled);
+  });
 });
 
 describe("getMapConfig — accès mémoïsé", () => {

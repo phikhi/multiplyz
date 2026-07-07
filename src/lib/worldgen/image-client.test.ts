@@ -24,6 +24,12 @@ function cfg(overrides: Partial<WorldGenConfig> = {}): WorldGenConfig {
       backgroundStrategy: "post-cutout",
       matteColor: "#ffffff",
     },
+    qa: {
+      parentValidationEnabled: false,
+      maxAttempts: 3,
+      unsafeMaxScore: 0.5,
+      styleMinScore: 0.6,
+    },
     ...overrides,
   };
 }
