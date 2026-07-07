@@ -417,6 +417,57 @@ export const fr = {
       GENERIC: "Une erreur est survenue. Réessayez.",
     },
   },
+  /**
+   * **Copy du générateur de mondes** (WORLDGEN §4, story 6.3, épic #6). Banques de **noms
+   * par défaut** et d'**histoires** (beats courts, COPY §4) piochées **déterministe** par seed
+   * lors de la génération d'une créature **non légendaire** (commune/rare) — la légendaire garde
+   * ses propres banques (`collection.legendaryNames`/`legendaryStories`, MAP §6). Voix douce et
+   * mignonne (COPY §5 « noms par défaut mignons ») ; l'enfant peut renommer (PRODUCT §2.3).
+   *
+   * Séparées de `collection` (qui porte les **légendaires**) : ces banques peuplent les
+   * **6-8 créatures/monde** (ECONOMY §5) — plus de noms/histoires pour éviter les collisions
+   * dans un même monde (sélection sans réutilisation, cf. `generate-world.ts`).
+   */
+  worldgen: {
+    /**
+     * **Noms par défaut** des créatures non légendaires (voix douce, COPY §5). Assez pour
+     * peupler jusqu'à 7 créatures/monde (6-8 − 1 légendaire) sans réutiliser un nom dans le
+     * même monde. Piochés **déterministe** par seed → même monde ⇒ mêmes noms.
+     */
+    creatureNames: [
+      "Bulle",
+      "Câlin",
+      "Pompon",
+      "Guimauve",
+      "Praline",
+      "Nougat",
+      "Pistache",
+      "Coquillette",
+      "Myrtille",
+      "Réglisse",
+      "Framboise",
+      "Chamallow",
+      "Croquette",
+      "Berlingot",
+      "Caramel",
+      "Noisette",
+    ],
+    /**
+     * **Histoires** par défaut des créatures non légendaires (1 phrase mignonne, beats courts
+     * COPY §4). Voix de Teddy, tutoiement, posture croissance. Piochées **déterministe** par
+     * seed (même banque, index dérivé) → même monde ⇒ mêmes histoires.
+     */
+    creatureStories: [
+      "Un petit copain tout rond qui adore les câlins — Teddy dit qu'il ronronne comme un pot de miel.",
+      "Timide au début, mais dès qu'il te connaît, il ne te lâche plus d'une semelle.",
+      "Il collectionne les jolis cailloux brillants et t'en offre un quand tu réussis.",
+      "Toujours de bonne humeur, il fait des galipettes pour te faire rire.",
+      "Il dormait bien caché dans ce monde en t'attendant, toi précisément.",
+      "Un cœur gros comme ça : il partage tout, même son goûter préféré.",
+      "Curieux de tout, il te suit partout pour découvrir de nouvelles aventures.",
+      "Un vrai petit soleil — quand il sourit, tout le monde sourit avec lui.",
+    ],
+  },
 } as const;
 
 export type Strings = typeof fr;

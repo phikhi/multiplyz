@@ -168,4 +168,22 @@ describe("strings (i18n FR)", () => {
     expect(strings.play.results.legendaryLabel).toContain("{nom}");
     expect(strings.play.results.legendaryTitle.length).toBeGreaterThan(0);
   });
+
+  it("worldgen = banques créatures déterministes non vides (noms mignons + histoires, story 6.3)", () => {
+    // Les banques peuplent les 6-8 créatures/monde (ECONOMY §5) — assez de noms pour ne pas
+    // réutiliser dans un même monde (jusqu'à 7 œufs = 6-8 − 1 légendaire).
+    expect(strings.worldgen.creatureNames.length).toBeGreaterThanOrEqual(7);
+    expect(strings.worldgen.creatureStories.length).toBeGreaterThan(0);
+    for (const name of strings.worldgen.creatureNames) {
+      expect(name.length).toBeGreaterThan(0);
+      // Voix douce : jamais de posture négative dans un nom mignon.
+      expect(name.toLowerCase()).not.toContain("faux");
+    }
+    for (const story of strings.worldgen.creatureStories) {
+      expect(story.length).toBeGreaterThan(0);
+      // Posture croissance (COPY) : pas de « faux »/« erreur » dans une histoire de créature.
+      expect(story.toLowerCase()).not.toContain("faux");
+      expect(story.toLowerCase()).not.toContain("erreur");
+    }
+  });
 });
