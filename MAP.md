@@ -21,7 +21,7 @@
 
 ## 3. Représentation (procédurale, peu de stockage)
 
-- La **géométrie de la carte** (positions des nœuds) est **générée de façon déterministe** depuis `world_index` (seed) → **rien à stocker** par nœud.
+- La **géométrie de la carte** (positions des nœuds) est **générée de façon déterministe** depuis `world_index` (seed) → **rien à stocker** par nœud. Le tracé serpente en `x` (amplitude `JITTER_X` = ⚙️ **visuel** local, cf. ADR 0010) et les nœuds sont **reliés par un trait de repérage visible** (guide wayfinding ≥3:1 WCAG 1.4.11, neutre, `aria-hidden` — l'ordre reste porté par le DOM des nœuds).
 - **Type de nœud par position** : normaux par défaut ; **trésor** ~tous les 4 nœuds ⚙️ ; **boss** en dernier ; **révision** injecté dynamiquement selon la dette (cf. §5).
 - Un **niveau** = `(world_index, level_index)` → son contenu est **composé à la volée** par le moteur (ENGINE). Pas de table de questions.
 

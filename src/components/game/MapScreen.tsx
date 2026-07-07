@@ -257,9 +257,13 @@ function horizontalOffsetPercent(x: number): number {
  * dessous). Il relie le centre horizontal du nœud courant (`0`, le `<li>` est déjà
  * translaté) à celui du précédent (delta de décalage serpentin entre les deux).
  *
- * **Décoratif pur** (`aria-hidden`, jamais navigable, jamais dans le nom accessible) —
- * faible contraste assumé (cf. `--map-node-path-color`, tokens.css) : aucune info n'y
- * est portée (états/types/étoiles sont sur le nœud). Tokens `--map-node-path-*`.
+ * **Guide de repérage visible** (`aria-hidden`, jamais navigable, jamais dans le nom
+ * accessible) : depuis l'ADR 0010 le trait est rendu visible (≥3:1 WCAG 1.4.11, cf.
+ * `--map-node-path-color` remappé sur `--color-text-secondary`, tokens.css) pour que le
+ * chemin se lise comme voulu. Il reste décoratif au sens a11y — aucune info n'y est
+ * portée (états/types/étoiles sont sur le nœud, l'ordre est porté par l'ordre DOM des
+ * nœuds) — mais son contraste résolu est désormais **testé** (MapScreen.test.tsx).
+ * Tokens `--map-node-path-*`.
  */
 function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: number }) {
   // Décalages horizontaux (%) des deux nœuds (positions 5.2, pas recalculés). Le `<li>`
