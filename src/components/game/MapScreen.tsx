@@ -283,8 +283,13 @@ function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: n
       style={{
         position: "absolute",
         left: 0,
-        // Ancré en haut du <li>, descend dans la gouttière vers le nœud précédent.
-        top: "calc(var(--map-node-size) / 2)",
+        // Ancré au BAS de la pastille (`--map-node-size`) et descend sur toute la
+        // gouttière (`--map-node-gap`) vers le nœud précédent (rendu juste en dessous).
+        // Corrige #169 : ancré à la MOITIÉ de la pastille, le trait était peint DANS la
+        // moitié basse du nœud, entièrement RECOUVERT par le médaillon opaque (zIndex 1
+        // > 0) → invisible (playtest owner). Il doit vivre dans la gouttière ENTRE les
+        // nœuds pour être visible.
+        top: "var(--map-node-size)",
         width: "100%",
         height: "var(--map-node-gap)",
         overflow: "visible",
@@ -297,11 +302,14 @@ function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: n
         y1={0}
         x2={x2}
         y2={100}
-        stroke="var(--map-node-path-color)"
-        // `strokeWidth` posé via `style` (jamais l'attribut JSX présentation) : SEUL le
-        // CSS résout `var(--…)` — un attribut SVG brut ne le ferait pas (cf. NumberLine,
-        // issue #110). Trait décoratif : `--map-node-path-width`, jamais un nombre en dur.
-        style={{ strokeWidth: "var(--map-node-path-width)" }}
+        // `stroke` ET `strokeWidth` posés via `style` (jamais l'attribut JSX de
+        // présentation) : garantit la résolution CSS de `var(--…)` dans TOUS les moteurs
+        // (cf. NumberLine, issue #110 — cohérence avec le principe énoncé, le laisser en
+        // attribut brut le contredisait). Tokens `--map-node-path-*`, jamais un littéral.
+        style={{
+          stroke: "var(--map-node-path-color)",
+          strokeWidth: "var(--map-node-path-width)",
+        }}
         strokeLinecap="round"
         vectorEffect="non-scaling-stroke"
       />
