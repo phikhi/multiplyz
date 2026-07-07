@@ -260,7 +260,7 @@
      (ADR 0010, playtest : le trait quasi-invisible + le jitter léger donnaient
      l'impression de ronds désalignés = bug d'affichage ressenti). Remappé sur
      `--color-text-secondary` → ≥3:1 sur --color-bg-primary les 2 thèmes
-     (#6C6588/#FAF7FF ≈ 5:1 light ; #B5AED0/#1C1830 ≈ 7:1 dark) conformément à
+     (#6C6588/#FAF7FF ≈ 5:1 light ; #B5AED0/#1C1830 ≈ 8:1 dark) conformément à
      WCAG 1.4.11 (élément non-texte). Choix NEUTRE délibéré (pas un token de
      statut) pour ne pas concurrencer les couleurs des états de nœud
      (vert complété / violet courant / neutre verrouillé). Reste `aria-hidden` /

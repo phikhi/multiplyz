@@ -3,7 +3,7 @@
 - **Statut** : accepted
 - **Type** : product
 - **Portée** : majeure (sign-off proprio obtenu en playtest — renverse une décision de design documentée)
-- **Liens** : playtest proprio (2026-07-07) · PR #… · specs impactées : `WIREFRAMES.md` §2 (Carte du monde), `MAP.md` §3 (géométrie déterministe) · tokens `--map-node-path-*` (`tokens.css`)
+- **Liens** : playtest proprio (2026-07-07) · PR #169 · specs impactées : `WIREFRAMES.md` §2 (Carte du monde), `MAP.md` §3 (géométrie déterministe) · tokens `--map-node-path-*` (`tokens.css`)
 
 ## Contexte
 En playtest local (`/carte`), le proprio a perçu les ronds de niveau comme **désalignés / bug d'affichage** : chaque nœud est décalé horizontalement (jitter serpentin seedé, métaphore « chemin » MAP §1 / WIREFRAMES §2) **mais** le trait qui les relie était rendu à contraste **volontairement quasi-invisible** (~1.2–1.5:1, `--map-node-path-color: var(--color-border-primary)`), documenté comme « décoratif pur, aucune info portée » (ADR implicite dans le commentaire tokens, PR #137).
@@ -15,7 +15,7 @@ Le trait EXISTAIT déjà dans le DOM (`NodeConnector`, consomme `--map-node-path
 ## Décision
 Promouvoir le trait de « décoratif quasi-invisible » à **guide de repérage (wayfinding) visible** :
 
-1. **`--map-node-path-color`** : `var(--color-border-primary)` → **`var(--color-text-secondary)`** → ≥3:1 sur `--color-bg-primary` les 2 thèmes (≈5:1 light / ≈7:1 dark), conforme **WCAG 1.4.11** (élément non-texte). Choix **neutre délibéré** (pas un token de statut) pour ne pas concurrencer les couleurs d'état de nœud (vert complété / violet courant / neutre verrouillé).
+1. **`--map-node-path-color`** : `var(--color-border-primary)` → **`var(--color-text-secondary)`** → ≥3:1 sur `--color-bg-primary` les 2 thèmes (≈5:1 light / ≈8:1 dark), conforme **WCAG 1.4.11** (élément non-texte). Choix **neutre délibéré** (pas un token de statut) pour ne pas concurrencer les couleurs d'état de nœud (vert complété / violet courant / neutre verrouillé).
 2. **`--map-node-path-width`** : `2px` → **`4px`** (présence du tracé).
 3. **`JITTER_X`** : `0.35` → **`0.5`** (`src/lib/game/map.ts`) — serpentin plus marqué (`x` couvre ~tout `[0,1]`, translateX ≈ ±50% de la pastille) sans épingler durablement les nœuds aux bords. Reste **déterministe par `world_index`** et **invariant à l'état runtime** (rétro #123) : `JITTER_X` demeure un ⚙️ **visuel local** codé en const (pas un réglage pédagogique, hors `MapConfig` — la structure/les types n'en dépendent pas).
 
