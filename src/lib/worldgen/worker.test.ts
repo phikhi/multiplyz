@@ -132,7 +132,10 @@ function recordingGenerate(db: AppDatabase) {
   const generate = vi.fn(
     async (_db: AppDatabase, theme: string, worldIndex: number): Promise<GeneratedWorld> => {
       calls.push({ theme, worldIndex });
-      // Le vrai générateur persiste le monde (upsert par PK) → on reproduit l'insert minimal.
+      // Le vrai générateur 6.3 persiste le monde par **upsert sur la PK déterministe `id`**
+      // (`onConflictDoUpdate({ target: worlds.id })`, generate-world.ts) → on reproduit fidèlement
+      // cette propriété ici : un rejeu au même `worldIndex` (même `id`) écrase la même ligne, jamais
+      // une 2ᵉ (single-row par PK). C'est ce mécanisme réel, pas un `onConflictDoNothing`.
       db.insert(worlds)
         .values({
           id: `world:${worldIndex}`,
@@ -145,7 +148,7 @@ function recordingGenerate(db: AppDatabase) {
           status: "buffered",
           createdAt: NOW,
         })
-        .onConflictDoNothing()
+        .onConflictDoUpdate({ target: worlds.id, set: { theme, seed: `s-${worldIndex}` } })
         .run();
       return {
         worldId: `world:${worldIndex}`,
@@ -246,9 +249,13 @@ describe("bufferTargetIndices — géométrie INVARIANTE (#123)", () => {
     }
   });
 
-  it("borne défensive : jamais d'index négatif", () => {
-    // currentIndex = -1, bufferAhead 2 ⇒ [0,1] (le 0 est le socle, jamais -1).
-    expect(bufferTargetIndices(-1, 2).every((i) => i >= 0)).toBe(true);
+  it("MUTATION-PROUVÉ : la borne `idx >= 0` FILTRE réellement les index négatifs (garde non-vacuous)", () => {
+    // La garde protège un appelant arbitraire (fonction pure/exportée). On l'exerce DIRECTEMENT
+    // avec un currentIndex assez négatif pour qu'au moins un offset produise un idx < 0 (filtré) ET
+    // qu'au moins un reste ≥ 0 (gardé) : currentIndex=-2, bufferAhead=3 ⇒ offsets 1,2,3 → idx
+    // -1, 0, 1 → le -1 est RETIRÉ, [0, 1] gardés. Retirer `if (idx >= 0)` (ou l'affaiblir en
+    // `>= -999`) ferait passer -1 dans le résultat ⇒ ce test rougit.
+    expect(bufferTargetIndices(-2, 3)).toEqual([0, 1]);
   });
 });
 
@@ -628,15 +635,19 @@ describe("processNextJob — ATOMICITÉ de la finalisation (rollback #122/#124)"
 // ───────────────────────────── IDEMPOTENCE de bout en bout (#82/#144) ─────────────────────────────
 
 describe("idempotence de bout en bout — rejouer un job ne double JAMAIS un monde (#82/#144)", () => {
-  it("MUTATION-PROUVÉ : deux jobs pour le MÊME index ⇒ 1 seul monde (world_index UNIQUE + onConflictDoNothing)", async () => {
+  it("deux jobs pour le MÊME index ⇒ 1 seul monde (persistance par PK déterministe, upsert 6.3)", async () => {
     const db = freshDb();
     enqueueJob(db, 20);
     enqueueJob(db, 20); // doublon (ex. crash entre marquage running et done → re-enqueue)
     const { generate } = recordingGenerate(db);
     await processNextJob(db, baseDeps({ generate }));
     await processNextJob(db, baseDeps({ generate }));
-    // Un SEUL monde à l'index 20 (le 2ᵉ insert est un no-op onConflict). Retirer la garde
-    // d'unicité/onConflict ⇒ 2ᵉ insert lève (world_index UNIQUE) ⇒ observable.
+    // Ce que 6.4 garantit : le worker ne provoque pas de double EFFET par doublon de job. L'unicité
+    // de PERSISTANCE du monde est portée par le générateur 6.3 lui-même, qui upsert par PK
+    // déterministe `id` (`world:${worldIndex}`) via `onConflictDoUpdate` (mécanisme testé
+    // séparément en 6.3, generate-world.test.ts). Le mock `recordingGenerate` reproduit cette
+    // propriété de single-row par PK (upsert idempotent) → un rejeu écrase la même ligne, jamais
+    // une 2ᵉ. Résultat observable : un SEUL monde à l'index 20.
     const rows = db.select().from(worlds).where(eq(worlds.index, 20)).all();
     expect(rows).toHaveLength(1);
   });

@@ -28,8 +28,11 @@ import { generateWorld, ESTIMATED_EUR_PER_IMAGE, type GeneratedWorld } from "./g
  * observable, mutation-prouvée).
  *
  * **Idempotence** (#82/#144) : re-jouer un job (même `world_index`) ne crée **jamais** un 2ᵉ
- * monde au même index (`worlds.world_index` UNIQUE + upsert `onConflictDoNothing` côté 6.3).
- * `ensureBuffer` n'enqueue pas deux fois le même index (monde déjà présent OU job actif en file).
+ * monde au même index. Deux couches : (1) `ensureBuffer` n'enqueue pas deux fois le même index
+ * (monde déjà présent OU job actif en file) → pas de double **appel** `generate` par doublon de
+ * job ; (2) l'unicité de **persistance** du monde est garantie par le générateur 6.3 lui-même,
+ * qui upsert par **PK déterministe** `id` (`world:${worldIndex}`) via `onConflictDoUpdate` (testé
+ * séparément en 6.3) — un rejeu écrase la même ligne, jamais une 2ᵉ.
  *
  * **SERVER-ONLY** (importe la couche DB + le générateur). `now`/générateur **injectés** (horloge
  * serveur + zéro I/O réseau en test, LEARNINGS #46).
@@ -430,13 +433,11 @@ export async function processNextJob(
  */
 export function recoverStaleJobs(db: AppDatabase, overrides?: Partial<WorkerDeps>): number {
   const deps = resolveWorkerDeps(overrides);
-  const now = deps.now();
-  const result = db
+  return db
     .update(jobs)
-    .set({ status: "pending", updatedAt: now })
+    .set({ status: "pending", updatedAt: deps.now() })
     .where(eq(jobs.status, "running"))
-    .run();
-  return result.changes;
+    .run().changes;
 }
 
 /** Résultat d'un tick de daemon : la reprise (au 1er tick) + le buffer + le traitement du job. */
