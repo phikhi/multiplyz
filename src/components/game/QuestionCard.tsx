@@ -68,6 +68,9 @@ const keypadKeyStyle = {
 } as const;
 
 const BACKSPACE_GLYPH = "⌫";
+// Glyphe du bouton Valider : "Valider" débordait la cellule carrée du pavé (#164 playtest).
+// Le nom accessible reste « Valider » via aria-label (strings centralisées, tests inchangés).
+const SUBMIT_GLYPH = "✓";
 const KEYPAD_DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"] as const;
 const ZERO = "0";
 
@@ -143,6 +146,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
         <button
           type="button"
           className="mz-focusable"
+          aria-label={strings.play.question.submit}
           onClick={submit}
           disabled={digits.length === 0}
           style={{
@@ -153,7 +157,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
             cursor: digits.length === 0 ? "not-allowed" : "pointer",
           }}
         >
-          {strings.play.question.submit}
+          {SUBMIT_GLYPH}
         </button>
       </div>
     </div>
