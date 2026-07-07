@@ -419,20 +419,26 @@ export const CONFIG_DEFAULTS = {
     retryBackoffMs: 500,
     // Prompts de base verrouillés — copie VERBATIM de la charte ART §5 (jamais en dur ailleurs).
     prompts: {
+      // STYLE DE BASE (ART §5) — révisé une fois par ADR 0009 (direction owner, issue #160) :
+      // kawaii doux + cel-shading léger + poils tuftés légers (ex-« flat vector / minimal
+      // shading » abandonné). GÉNÉRIQUE : partagé par teddy/creature/background via {base_style} ;
+      // le torse crème est spécifique Teddy → dans `teddy`, pas ici.
       style:
-        "flat 2D kawaii vector illustration, soft rounded shapes, cute chibi proportions, " +
-        "big shiny friendly eyes, gentle minimal shading, soft pastel palette with bright " +
-        "accent highlights, clean simple background, children's app art, high quality, " +
-        "consistent art style",
+        "flat 2D kawaii character illustration, soft rounded shapes, cute chibi proportions, " +
+        "big shiny friendly eyes, gentle soft cel shading, lightly fluffy fur with soft clean " +
+        "fur tufts along the silhouette edge, tidy even fur, not blotchy, no random dark spots, " +
+        "soft pastel palette with bright accent highlights, clean simple background, " +
+        "children's app art, high quality, consistent art style",
       negative:
         "photorealistic, 3d render, realistic, scary, creepy, dark, gore, text, letters, " +
         "watermark, signature, extra limbs, deformed, busy cluttered details, harsh shadows, " +
         "gradient noise, low quality",
       teddy:
         '{base_style}, "Teddy" a cute vintage 1980s Steiff teddy bear, golden mohair fur, ' +
-        "stitched snout, round dark eyes, rounded ears, classic jointed teddy with a slightly " +
-        "humped back, small yellow blank ear tag with no text, wearing {world_accessory}, " +
-        "faithful to the reference photos, centered, transparent background --ar 1:1",
+        "lighter cream-colored chest and belly patch, stitched snout, round dark eyes, rounded " +
+        "ears, classic jointed teddy with a slightly humped back, small yellow blank ear tag " +
+        "with no text, wearing {world_accessory}, faithful to the reference photos, centered, " +
+        "transparent background --ar 1:1",
       creature:
         "{base_style}, a cute round collectible creature: {creature_concept}, " +
         "1-2 distinctive features: {features}, color palette: {world_palette}, " +
