@@ -176,12 +176,13 @@ function RenameForm({
           {strings.collection.renameError}
         </p>
       )}
-      <div style={{ display: "flex", gap: "var(--space-2)" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
         <button
           type="submit"
           className="mz-focusable"
           disabled={state === "saving"}
           style={{
+            flex: "1 1 auto",
             minHeight: "var(--tap-target-min)",
             padding: "var(--space-2) var(--space-4)",
             fontFamily: "var(--font-family-display)",
@@ -201,6 +202,7 @@ function RenameForm({
           className="mz-focusable"
           onClick={onCancel}
           style={{
+            flex: "1 1 auto",
             minHeight: "var(--tap-target-min)",
             padding: "var(--space-2) var(--space-4)",
             fontFamily: "var(--font-family-display)",
