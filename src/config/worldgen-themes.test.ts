@@ -46,6 +46,18 @@ describe("worldgen-themes — pool curaté", () => {
       expect(slugs.has(expected)).toBe(true);
     }
   });
+
+  it("chaque thème a une légendaire DÉDIÉE, distincte de tout concept œufs (récompense boss, ECONOMY §5/§8)", () => {
+    for (const theme of CURATED_THEMES) {
+      // Concept + traits non vides (kid-safe, ADN commun ART §1).
+      expect(theme.legendaryConcept.concept.length).toBeGreaterThan(0);
+      expect(theme.legendaryConcept.features.length).toBeGreaterThan(0);
+      // DISTINCT de chaque concept d'œufs → la légendaire ne se confond jamais avec une commune
+      // (garde de fidélité : la récompense du boss est spéciale, jamais un doublon d'œuf).
+      const eggConcepts = new Set(theme.creatureConcepts.map((c) => c.concept));
+      expect(eggConcepts.has(theme.legendaryConcept.concept)).toBe(false);
+    }
+  });
 });
 
 describe("worldgen-themes — normalizeThemeText", () => {

@@ -404,14 +404,12 @@ export async function generateWorld(
     });
   }
 
-  // Légendaire (boss only) : art RÉEL généré + câblé (remplace le placeholder épic #5).
+  // Légendaire (boss only) : art RÉEL généré + câblé (remplace le placeholder épic #5). Elle utilise
+  // le **concept DÉDIÉ** du thème (`legendaryConcept`), DISTINCT de tout concept œufs du monde — la
+  // récompense du boss doit paraître spéciale, jamais se confondre avec une commune tirable d'un œuf
+  // (ECONOMY §5/§8, COPY §3, MAP §6). Même charte ART §5, mais concept impressionnant/majestueux.
   const legendary = legendaryForWorld(worldIndex);
-  const legendaryPrompt = buildCreaturePrompt(
-    config,
-    // La légendaire reste une créature du monde (même charte) — concept dédié en fin de banque.
-    curated.creatureConcepts[conceptBase % curated.creatureConcepts.length],
-    curated.accent,
-  );
+  const legendaryPrompt = buildCreaturePrompt(config, curated.legendaryConcept, curated.accent);
   // La légendaire est une créature → même règle d'ancrage (bible optionnelle, JAMAIS le master).
   const legendaryBytes = await deps.generate({
     prompt: legendaryPrompt,

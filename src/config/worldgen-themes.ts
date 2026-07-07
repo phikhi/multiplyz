@@ -37,6 +37,15 @@ export interface CuratedTheme {
   readonly accessory: string;
   /** Banque de concepts de créatures (`{creature_concept}: {features}`, gabarit créature ART §5). */
   readonly creatureConcepts: readonly CreatureConcept[];
+  /**
+   * Concept **dédié de la légendaire** du monde (récompense du boss, ECONOMY §5/§8, COPY §3,
+   * MAP §6) — **distinct** de tout `creatureConcepts` du monde : la créature garantie au boss doit
+   * paraître **spéciale** (impressionnante mais toujours ronde/kawaii, ADR 0009 ; 1-2 traits
+   * distinctifs, ART §1) et **jamais** se confondre avec une commune que l'enfant peut déjà avoir
+   * tirée d'un œuf. Séparé de `creatureConcepts` comme `legendaryNames`/`legendaryStories` le sont
+   * de `creatureNames`/`creatureStories`. Kid-safe (variante majestueuse/lumineuse de la faune du monde).
+   */
+  readonly legendaryConcept: CreatureConcept;
 }
 
 /** Un concept de créature du monde : description + traits distinctifs (ADN commun ART §1). */
@@ -72,6 +81,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       { concept: "a tiny happy crab", features: "round claws, bubble trail" },
       { concept: "a gentle whale calf", features: "a heart-shaped water spout, chubby fins" },
     ],
+    legendaryConcept: {
+      concept: "a majestic round baby sea serpent with a gentle smile",
+      features: "a glowing pearl crown, shimmering aurora fins",
+    },
   },
   {
     slug: "forest",
@@ -88,6 +101,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       { concept: "a gentle little bunny", features: "clover in the paws, floppy ears" },
       { concept: "a tiny glowing firefly", features: "warm lantern belly, dotty wings" },
     ],
+    legendaryConcept: {
+      concept: "a majestic round ancient forest guardian spirit with a kind face",
+      features: "a glowing flower crown, luminous leaf-and-vine mane",
+    },
   },
   {
     slug: "magic",
@@ -107,6 +124,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       },
       { concept: "a tiny star sprite", features: "five-point body, soft glowing trail" },
     ],
+    legendaryConcept: {
+      concept: "a majestic round celestial rainbow serpent-dragon with a serene smile",
+      features: "a radiant jeweled crown, glowing prismatic wings",
+    },
   },
   {
     slug: "galaxy",
@@ -123,6 +144,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       { concept: "a gentle star jelly", features: "constellation dots, glowing dome" },
       { concept: "a tiny satellite pup", features: "dish-shaped ears, blinking light nose" },
     ],
+    legendaryConcept: {
+      concept: "a majestic round cosmic galaxy whale with a peaceful smile",
+      features: "a glowing starlit crown, swirling nebula body with twinkling stars",
+    },
   },
   {
     slug: "candy",
@@ -139,6 +164,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       { concept: "a gentle cotton-candy lamb", features: "fluffy pink wool, sugar-cloud tail" },
       { concept: "a tiny caramel bear cub", features: "shiny glaze coat, swirl belly" },
     ],
+    legendaryConcept: {
+      concept: "a majestic round royal gingerbread dragon with a sweet smile",
+      features: "a glowing candy crown, shimmering icing-and-gumdrop wings",
+    },
   },
   {
     slug: "snow",
@@ -155,6 +184,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       { concept: "a gentle baby reindeer", features: "tiny snow antlers, red round nose" },
       { concept: "a tiny frost fox", features: "sparkly white tail, ice-blue eyes" },
     ],
+    legendaryConcept: {
+      concept: "a majestic round winter ice guardian bear with a warm smile",
+      features: "a glowing crystal crown, shimmering aurora-frost mane",
+    },
   },
 ] as const;
 

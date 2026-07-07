@@ -7,6 +7,7 @@ import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { characters, worlds } from "@/lib/db/schema";
 import { loadWorldGenConfig } from "@/config/server-config";
+import { CURATED_THEMES } from "@/config/worldgen-themes";
 import { strings } from "@/strings";
 import {
   approveAsset,
@@ -252,6 +253,36 @@ describe("generateWorld — fidélité d'ancrage (ADR 0009)", () => {
       expect(c.refImages ?? []).toHaveLength(0);
       // Et surtout : le prompt créature ne mentionne pas Teddy/Steiff.
       expect(c.prompt).not.toMatch(/Teddy|Steiff/);
+    }
+  });
+
+  it("la légendaire du boss a un concept DISTINCT de toute créature œufs (récompense spéciale, ECONOMY §5/§8)", async () => {
+    // Extrait le `{creature_concept}` d'un prompt créature (gabarit ART §5 : « collectible creature: <concept>, 1-2 distinctive »).
+    const conceptOf = (prompt: string): string | null => {
+      const m = /collectible creature: (.+?), 1-2 distinctive/.exec(prompt);
+      return m ? m[1] : null;
+    };
+    // Balaye TOUS les thèmes curatés (surfaces disjointes) sur plusieurs world_index.
+    for (let i = 0; i < CURATED_THEMES.length; i += 1) {
+      const theme = CURATED_THEMES[i];
+      // Un index dont `findCuratedTheme` résout ce thème : on passe le slug directement.
+      const fresh = freshDb();
+      seedApprovedMaster(fresh);
+      const { calls, generate } = recordingGenerate();
+      await generateWorld(fresh, theme.slug, i, [], baseDeps({ generate }));
+
+      const creatureConcepts = calls
+        .map((c) => conceptOf(c.prompt))
+        .filter((x): x is string => x !== null);
+      // Le DERNIER concept créature = la légendaire (générée après le pool d'œufs) ; les précédents = œufs.
+      const legendaryConcept = creatureConcepts[creatureConcepts.length - 1];
+      const eggConcepts = creatureConcepts.slice(0, -1);
+      expect(eggConcepts.length).toBeGreaterThan(0);
+      // Effet observable : le concept de la légendaire n'apparaît dans AUCUN concept d'œufs du monde.
+      // Muter `curated.legendaryConcept` → `creatureConcepts[conceptBase % len]` (collision slot-0)
+      // rend `legendaryConcept === eggConcepts[0]` → ce test rouge.
+      expect(eggConcepts).not.toContain(legendaryConcept);
+      expect(legendaryConcept).toBe(theme.legendaryConcept.concept);
     }
   });
 

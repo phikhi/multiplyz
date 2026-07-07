@@ -173,7 +173,10 @@ describe("strings (i18n FR)", () => {
     // Les banques peuplent les 6-8 créatures/monde (ECONOMY §5) — assez de noms pour ne pas
     // réutiliser dans un même monde (jusqu'à 7 œufs = 6-8 − 1 légendaire).
     expect(strings.worldgen.creatureNames.length).toBeGreaterThanOrEqual(7);
-    expect(strings.worldgen.creatureStories.length).toBeGreaterThan(0);
+    // Banque d'histoires alignée sur celle des noms (≥ 7) : jusqu'à 7 œufs/monde sans réutiliser
+    // une histoire (JSDoc `worldgen.creatureStories`). La banque a 8 aujourd'hui → reste verte ;
+    // un futur élagage < 7 serait désormais attrapé (parité avec la garde des noms, flag backend).
+    expect(strings.worldgen.creatureStories.length).toBeGreaterThanOrEqual(7);
     for (const name of strings.worldgen.creatureNames) {
       expect(name.length).toBeGreaterThan(0);
       // Voix douce : jamais de posture négative dans un nom mignon.
