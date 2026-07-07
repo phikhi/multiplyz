@@ -349,6 +349,22 @@ describe("MapScreen — contraste WCAG résolu (piège #94/#104, feed-forward br
     },
   );
 
+  // Le connecteur du chemin (trait entre nœuds) est rendu SUR le fond de PAGE
+  // (--color-bg-primary), dans la gouttière derrière les pastilles. Depuis l'ADR 0010
+  // il est un GUIDE VISIBLE : sa couleur résolue doit passer ≥3:1 (WCAG 1.4.11, élément
+  // non-texte) dans les 2 thèmes. Effet observable : casse si --map-node-path-color est
+  // remappé sur un token quasi-invisible (ex. l'ancien --color-border-primary ≈ 1.3:1)
+  // ou si --color-text-secondary régresse — c'est la garde que revendique le commentaire
+  // du token (tell commentaire↔code, CLAUDE.md).
+  it.each(["light", "dark"] as const)(
+    "%s : trait du chemin (--map-node-path-color) ≥ 3:1 sur le fond de page (guide visible, ADR 0010)",
+    (theme) => {
+      const path = resolveTokenColor(theme, "--map-node-path-color");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(path, bg)).toBeGreaterThanOrEqual(3);
+    },
+  );
+
   it("nœud RENDU verrouillé/terminé (fond neutre/pastel) : la couleur EFFECTIVE du glyphe n'est jamais --color-text-inverse (piège #94/#104 récurrent)", async () => {
     // Garde anti-régression sur le DOM RÉEL (pas une comparaison de littéraux) :
     // inspecte `style.color` du badge tel qu'effectivement rendu par le composant.

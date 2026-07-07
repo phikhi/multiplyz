@@ -198,9 +198,13 @@ function makeSeededRandom(seed: number): () => number {
  * chemin monte régulièrement en `y` (progression), et `x` serpente ±`JITTER_X` autour
  * du centre pour un tracé « Candy Crush » organique mais **déterministe**. ⚙️ visuel
  * local (pas un réglage pédagogique) — la structure/les types ne dépendent pas de sa
- * valeur, seule l'esthétique du tracé.
+ * valeur, seule l'esthétique du tracé. Remonté 0.35 → 0.5 (ADR 0010, playtest) pour un
+ * serpentin plus marqué : `x` couvre ~tout `[0, 1]` (translateX ≈ ±50% de la pastille)
+ * sans jamais épingler durablement les nœuds aux bords (0.5 n'atteint le clamp qu'aux
+ * extrêmes rand=0/1, mesure nulle) — combiné au trait désormais visible, le tracé se
+ * lit comme un chemin voulu et non comme des ronds désalignés.
  */
-const JITTER_X = 0.35;
+const JITTER_X = 0.5;
 
 /**
  * Positions **déterministes** des `count` nœuds d'un monde (MAP §3). Le chemin progresse

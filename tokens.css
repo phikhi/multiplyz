@@ -256,17 +256,21 @@
   --map-node-size:            var(--space-8); /* 64px — pastille de nœud, ≥ tap-target-min */
   --map-node-gap:             var(--space-6); /* espacement vertical du chemin */
   /* Connecteur du chemin (trait reliant deux nœuds consécutifs, métaphore Candy
-     Crush, WIREFRAMES §2). GUIDE VISUEL DÉCORATIF À FAIBLE CONTRASTE ASSUMÉ
-     (~1.2–1.5:1 sur --color-bg-primary les 2 thèmes) : il ne porte AUCUNE info
-     (états/types/étoiles sont tous convoyés par le glyphe + le texte accessible
-     du nœud). Il est `aria-hidden`, jamais navigable, jamais dans le nom
-     accessible. Ce n'est donc PAS un scaffold porteur d'info au sens rétro
-     #94/#104 : aucun test de contraste ≥4.5:1 n'est revendiqué (le sur-revendiquer
-     serait malhonnête — cf. CLAUDE.md). Si un jour ce trait devait porter du sens,
-     il faudrait le remapper sur un token qui passe ≥3:1 (WCAG 1.4.11) + ajouter la
-     garde résolue correspondante. */
-  --map-node-path-color:      var(--color-border-primary);
-  --map-node-path-width:      2px;
+     Crush, WIREFRAMES §2). GUIDE VISUEL DE REPÉRAGE (wayfinding) rendu VISIBLE
+     (ADR 0010, playtest : le trait quasi-invisible + le jitter léger donnaient
+     l'impression de ronds désalignés = bug d'affichage ressenti). Remappé sur
+     `--color-text-secondary` → ≥3:1 sur --color-bg-primary les 2 thèmes
+     (#6C6588/#FAF7FF ≈ 5:1 light ; #B5AED0/#1C1830 ≈ 7:1 dark) conformément à
+     WCAG 1.4.11 (élément non-texte). Choix NEUTRE délibéré (pas un token de
+     statut) pour ne pas concurrencer les couleurs des états de nœud
+     (vert complété / violet courant / neutre verrouillé). Reste `aria-hidden` /
+     jamais navigable : l'ORDRE du chemin est déjà porté par l'ordre DOM des
+     nœuds + leurs noms accessibles → le trait n'ajoute aucune info nouvelle pour
+     un lecteur d'écran. Garde de contraste RÉSOLUE ≥3:1 (2 thèmes) exigée
+     (MapScreen.test.tsx) — le token porte désormais une intention visuelle
+     revendiquée, donc testée (cf. CLAUDE.md, tell commentaire↔code). */
+  --map-node-path-color:      var(--color-text-secondary);
+  --map-node-path-width:      4px;
   /* verrouillé : fond neutre en retrait, glyphe cadenas = texte fort sur cette
      surface neutre (--color-text-primary, ≥10.8:1 les 2 thèmes — jamais
      --color-text-inverse, fond non accent). */

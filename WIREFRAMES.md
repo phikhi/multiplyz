@@ -57,6 +57,7 @@
 └──────────────────────────────────┘
 ```
 - **Nœuds** : `◉` prochain/à jouer · `●` fait (montre les ⭐ gagnées) · `🔒` verrouillé · `⭐BOSS` = boss du monde.
+- **Trait du chemin** (`──`) : guide de repérage **visible** reliant chaque nœud à son précédent (≥3:1 WCAG 1.4.11, neutre pour ne pas concurrencer les couleurs d'état, `aria-hidden`) — ADR 0010. Le serpentin (décalage horizontal) est **assumé** (métaphore Candy Crush, déterministe), pas un désalignement.
 - **Top bar** : pièces 🪙, éclats ✨, ⚙️ réglages, 👤 profil. **Icônes flottantes** bas : Collection, Boutique (= hub).
 - Tap nœud → **carte d'intro** (Teddy lance la quête, beat court zappable) → écran 3.
 - Fin du monde → transition vers **monde suivant** (généré). Scroll infini.
