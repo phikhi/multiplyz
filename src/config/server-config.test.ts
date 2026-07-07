@@ -533,10 +533,10 @@ describe("loadWorldGenConfig — défauts ⚙️ (WORLDGEN §2/§3/§5, ADR 0008
 
   it("prompts de base = charte ART §5 (STYLE constant, NEGATIVE avec « text », gabarits variabilisés)", () => {
     const { prompts } = loadWorldGenConfig({});
-    // STYLE de base : kawaii doux + cel-shading + poils tuftés légers (ART §5, révisé ADR 0009 / #160).
-    expect(prompts.style).toContain("flat 2D kawaii character illustration");
-    expect(prompts.style).toContain("soft cel shading");
-    expect(prompts.style).toContain("fluffy fur");
+    // STYLE de base : flat kawaii 2D + cel-shading léger + poils tuftés légers (ART §5, enrichi ADR 0009 / #160).
+    expect(prompts.style).toContain("flat 2D kawaii vector illustration");
+    expect(prompts.style).toContain("cel shading");
+    expect(prompts.style).toContain("lightly fluffy fur");
     expect(prompts.style).toContain("consistent art style");
     // GÉNÉRIQUE : le torse crème est spécifique Teddy → jamais dans le style de base partagé.
     expect(prompts.style).not.toContain("cream");
@@ -545,7 +545,7 @@ describe("loadWorldGenConfig — défauts ⚙️ (WORLDGEN §2/§3/§5, ADR 0008
     // Teddy : étiquette VIERGE sans texte (ADR 0008 contrainte 2) + variables injectées.
     expect(prompts.teddy).toContain("blank ear tag with no text");
     // Torse crème = spécifique Teddy (dans le template Teddy, pas le style de base — ADR 0009).
-    expect(prompts.teddy).toContain("cream-colored chest and belly patch");
+    expect(prompts.teddy).toContain("cream-colored fluffy chest and belly patch");
     expect(prompts.teddy).toContain("{base_style}");
     expect(prompts.teddy).toContain("{world_accessory}");
     // Créature + fond : gabarits variabilisés (variables ART §5).
