@@ -670,6 +670,27 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       .replace("{total}", total)} — ${strings.map.type.boss}`;
     await expect(page.getByRole("img", { name: bossName })).toBeVisible();
 
+    // Régression invisibilité #169 (playtest owner) : le trait du chemin doit être VISIBLE,
+    // pas peint derrière le médaillon opaque. Garde sur la GÉOMÉTRIE RENDUE RÉELLE (jsdom ne
+    // fait pas de layout ; ici Playwright le fait) : le connecteur doit vivre dans la
+    // gouttière SOUS la pastille (son sommet ≥ le bas du médaillon), donc jamais recouvert.
+    // Casse si on régresse vers `top: calc(--map-node-size / 2)` (le trait dans le nœud).
+    const connectorOcclusion = await page.evaluate(() => {
+      const svg = document.querySelector("[data-map-connector]");
+      if (svg === null) return null;
+      const li = svg.closest("li");
+      const badge = li?.querySelector("[data-map-node-status]");
+      if (badge == null) return null;
+      const s = svg.getBoundingClientRect();
+      const b = badge.getBoundingClientRect();
+      return { svgTop: s.top, svgHeight: s.height, badgeBottom: b.bottom };
+    });
+    expect(connectorOcclusion).not.toBeNull();
+    // Le connecteur commence AU BAS de la pastille (à ~1px près) et a une hauteur non nulle
+    // (il occupe la gouttière) → il n'est pas noyé dans le médaillon.
+    expect(connectorOcclusion!.svgTop).toBeGreaterThanOrEqual(connectorOcclusion!.badgeBottom - 1);
+    expect(connectorOcclusion!.svgHeight).toBeGreaterThan(0);
+
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
