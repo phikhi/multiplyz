@@ -620,9 +620,10 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await enterPin(page, "1234");
     await expect(page).toHaveURL(/\/jouer$/);
 
-    // Story #189 : le chemin fond-image réel (`background !== null`) est réveillé AU BOOT du serveur
-    // (`e2e/seed-world-background.ts` dans la commande webServer) — le socle[0] pointe une fixture PNG
-    // committée, donc `resolveWorld(0)` sert un fond réel → scrim + tint per-monde exercés ci-dessous.
+    // Story #189/#190 : les chemins assets réels (`background/tiles/teddy !== null`) sont réveillés
+    // AU BOOT du serveur (`e2e/seed-world-assets.ts` dans la commande webServer) — le socle[0] pointe
+    // des fixtures PNG committées, donc `resolveWorld(0)` sert des assets réels → scrim + tint (#189)
+    // ET bande de décor + avatar Teddy per-monde (#190) exercés ci-dessous.
     await page.goto("/carte");
     await page.waitForLoadState("networkidle");
 
@@ -804,11 +805,75 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // Le tint de <main> dérive de l'accent DU MONDE → distinct du tint neutre de `:root` (per-monde réel).
     expect(tint!.mainTint).not.toBe(tint!.neutralTint);
 
+    // ── Richesse visuelle per-monde (story #190) — URL CÂBLÉE + GÉOMÉTRIE NON-OCCLUSION (vrai layout) ──
+    // ⚠️ Ces asserts prouvent le CÂBLAGE (URL de l'asset émise) + la GÉOMÉTRIE de boîte (visibilité,
+    // non-occlusion) — PAS les pixels peints : `getComputedStyle().backgroundImage` renvoie la chaîne
+    // URL même si le PNG ne décode pas. La **vraie preuve pixel #170** = la **capture Playwright
+    // OUVERTE et regardée** en review (`docs/captures/190-carte-richesse.png` + capture réelle locale).
+    // Ici Playwright fait le layout (jsdom non) → on garde ce que jsdom ne peut pas : la géométrie.
+    const richness = await page.evaluate(() => {
+      const tiles = document.querySelector("[data-world-tiles]");
+      const teddy = document.querySelector("[data-world-teddy]");
+      const currentLink = document.querySelector('a[data-map-node-status="current"]');
+      const currentLi = currentLink?.closest("li");
+      const medallion = currentLink?.querySelector("[data-map-medallion]");
+      // Nœud AMONT (visuellement AU-DESSUS du courant) : le chemin est en `column-reverse` (départ
+      // en bas, boss en haut) → le nœud rendu au-dessus est le `<li>` SUIVANT dans l'ordre DOM.
+      const upstreamLi = currentLi?.nextElementSibling;
+      const upstreamMed = upstreamLi?.querySelector("[data-map-medallion]");
+      if (tiles === null || teddy === null || medallion == null) return null;
+      const tilesRect = tiles.getBoundingClientRect();
+      const teddyRect = teddy.getBoundingClientRect();
+      const medRect = medallion.getBoundingClientRect();
+      return {
+        tilesBg: getComputedStyle(tiles).backgroundImage,
+        tilesW: tilesRect.width,
+        tilesH: tilesRect.height,
+        tilesTop: tilesRect.top,
+        teddyBg: getComputedStyle(teddy).backgroundImage,
+        teddyW: teddyRect.width,
+        teddyH: teddyRect.height,
+        teddyTop: teddyRect.top,
+        teddyBottom: teddyRect.bottom,
+        // Le nœud COURANT ne porte qu'UN avatar Teddy (marqueur unique « tu es ici »).
+        teddyCount: document.querySelectorAll("[data-world-teddy]").length,
+        medCenterY: medRect.top + medRect.height / 2,
+        // Bas du médaillon AMONT (ou `null` si le courant est le nœud le plus haut — pas d'amont).
+        upstreamMedBottom: upstreamMed == null ? null : upstreamMed.getBoundingClientRect().bottom,
+      };
+    });
+    expect(richness).not.toBeNull();
+    // (a) BANDE DE DÉCOR : émet l'URL de l'image de tuiles du monde (câblage), visible, dans le cadre.
+    expect(richness!.tilesBg).toContain("world/e2e/tiles.png");
+    expect(richness!.tilesW).toBeGreaterThan(0);
+    expect(richness!.tilesH).toBeGreaterThan(0);
+    expect(richness!.tilesTop).toBeGreaterThanOrEqual(0);
+    // (b) AVATAR TEDDY per-monde : émet l'URL de l'image Teddy du monde (câblage), un SEUL marqueur.
+    expect(richness!.teddyBg).toContain("world/e2e/teddy.png");
+    expect(richness!.teddyCount).toBe(1);
+    // (c) VISIBLE + DANS LE CADRE : dimensions non nulles, sommet ≥ 0 (jamais clippé hors du haut).
+    expect(richness!.teddyW).toBeGreaterThan(0);
+    expect(richness!.teddyH).toBeGreaterThan(0);
+    expect(richness!.teddyTop).toBeGreaterThanOrEqual(0);
+    // (d) NON-OCCLUSION AVAL (#170) : l'avatar FLOTTE au-dessus du médaillon COURANT — son bas reste
+    // au-dessus du CENTRE de la pastille, donc il ne recouvre jamais le glyphe de statut centré (▶).
+    // Casse si on régresse la position (ex. Teddy centré SUR la pastille, recouvrant le glyphe).
+    expect(richness!.teddyBottom).toBeLessThanOrEqual(richness!.medCenterY);
+    // (e) NON-OCCLUSION AMONT (robustesse #170, Frontend) : l'avatar ne DÉBORDE pas sur le nœud
+    // du DESSUS — son sommet reste SOUS le bas du médaillon amont. Aux tokens actuels la marge est
+    // large ; cet assert rougirait si un futur resserrement de `--map-node-gap` ou agrandissement de
+    // `--map-node-teddy-size` faisait chevaucher l'avatar sur la pastille amont.
+    expect(richness!.upstreamMedBottom).not.toBeNull();
+    expect(richness!.teddyTop).toBeGreaterThanOrEqual(richness!.upstreamMedBottom!);
+
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
     // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
     await page.screenshot({ path: "docs/captures/182-carte-theme.png", fullPage: true });
     // Capture dédiée story #189 (fond-image réel + scrim titre + tint per-monde) — OUVERTE en review.
     await page.screenshot({ path: "docs/captures/189-carte-scrim.png", fullPage: true });
+    // Capture dédiée story #190 (bande de décor tuiles + avatar Teddy per-monde) — OUVERTE + pixels
+    // analysés en review (garde-fou #170 : générer ne suffit pas, on regarde que c'est visible).
+    await page.screenshot({ path: "docs/captures/190-carte-richesse.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
     // cliquer le nœud courant ramène bien à l'écran de jeu.

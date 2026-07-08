@@ -316,6 +316,32 @@
   --map-node-star-badge-bg:     var(--color-bg-secondary);
   --map-node-star-badge-border: var(--map-node-type-badge-border);
 
+  /* ---------- RICHESSE VISUELLE PER-MONDE (tuiles + Teddy, story #190) ----------
+     WORLDGEN §4 : chaque monde porte des « tuiles de carte » (décor) + une variante
+     Teddy per-monde (ancrée img2img sur le master figé #158, ADR 0009). Ces deux
+     assets sont RENDUS sur la carte (déclaré ≠ consommé, #125) UNIQUEMENT quand le
+     monde résolu fournit une ref validée (`isRenderableAssetRef`) ; sinon l'élément
+     n'est pas rendu (repli propre, aucun `<img>`/`background-image` vers une URL non
+     validée — même garde de sécurité que le fond, story 6.7). */
+  /* Bande de décor thématisée (tuiles du monde) : élément DÉCORATIF (aria-hidden)
+     rendu SOUS le bandeau d'accent et AU-DESSUS du chemin — jamais derrière un glyphe
+     ni le connecteur (zéro régression contraste #104/#125/#170 : aucun texte ni trait
+     n'est empilé dessus, le fond de référence des glyphes de nœud reste inchangé).
+     Repli teinté `--world-bg-tint` per-monde sous l'image (hérité de <main>, fix #184). */
+  --map-tiles-height:  var(--space-9); /* 96px — hauteur de la bande de décor */
+  --map-tiles-radius:  var(--card-radius);
+  /* Avatar Teddy per-monde : marqueur « tu es ici » posé AU-DESSUS du médaillon du
+     nœud COURANT (mascotte-guide, MAP §1 point de reprise). Décoratif (aria-hidden :
+     le nœud porte déjà son nom accessible complet → pas de double annonce). Élément
+     SUPERPOSÉ/positionné → garde DOUBLÉE pixels + géométrie (non-occlusion #170) : il
+     flotte au-dessus de la pastille, ne recouvre jamais le glyphe de statut centré.
+     Taille = 32px (PAS 48px) : l'avatar (32) + son léger chevauchement bas (--space-2,
+     8px, cf. `CurrentNodeTeddy`) doit tenir dans la GOUTTIÈRE inter-nœuds
+     (--map-node-gap, 32px) SANS déborder sur le médaillon AMONT — un avatar de 48px
+     débordait de 6px sur le nœud du dessus (révélé par la garde E2E `teddyTop ≥ bas du
+     médaillon amont`, #170). À 32px : marge 8px côté amont ET 24px côté glyphe courant. */
+  --map-node-teddy-size:  var(--space-6); /* 32px — avatar Teddy sur le nœud courant */
+
   /* étoiles de l'écran de RÉSULTATS (fin de niveau, story #126/5.5) — même piège
      que --map-node-star-* ci-dessus : --color-star/--color-star-empty sont des
      accents décoratifs qui échouent le contraste sur le fond de page neutre

@@ -27,6 +27,15 @@ import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
  * CI/hors-ligne), `<main>` garde son fond neutre et le titre son fond de page (pas de scrim, pas de
  * régression #125). Le thème est un attribut **non-clé** : il ne touche jamais la géométrie (#123).
  *
+ * **Richesse visuelle per-monde (story #190)** : au-delà de l'accent/titre/fond, deux assets du
+ * monde résolu (WORLDGEN §4) atteignent l'écran carte quand ils sont **validés** (`isRenderableAssetRef`,
+ * même garde que le fond) — sinon rendu **propre** sans eux (déclaré ≠ consommé, #125/#180) : (a) une
+ * **bande de décor thématisée** (`theme.tiles`, `WorldTilesBand`) rendue **en flux** entre l'accent et
+ * le chemin (jamais sous un glyphe → zéro régression contraste #104/#170), (b) une **variante Teddy
+ * per-monde** (`theme.teddy`, `CurrentNodeTeddy`, ancrée master figé #158/ADR 0009) posée en avatar
+ * « tu es ici » **superposé** au médaillon du nœud courant → garde DOUBLÉE pixels + géométrie E2E
+ * (non-occlusion #170), sans jamais recouvrir le glyphe de statut.
+ *
  * **Navigation nœud → niveau** (`(app)/jouer`) : le nœud **courant** (point de
  * reprise, MAP §1) et tout nœud **terminé** (rejoue, progression monotone) sont des
  * liens vers `/jouer` — le moteur serveur sert toujours le contenu pertinent du
@@ -206,12 +215,64 @@ function StarsRow({ stars }: { readonly stars: MapStars }) {
   );
 }
 
+/**
+ * **Avatar Teddy per-monde** posé sur le nœud **courant** (mascotte-guide « tu es ici », MAP §1
+ * point de reprise). Rendu **uniquement** quand le monde résolu fournit une variante Teddy validée
+ * (`theme.teddy !== null`, ancrée img2img sur le master figé #158, ADR 0009, WORLDGEN §4/§8). La
+ * richesse per-monde **atteint réellement l'enfant** sur le chemin (déclaré ≠ consommé, #125/#180).
+ *
+ * **Décoratif** (`aria-hidden`, `background-image`, jamais un `<img>` non validé) : le nœud porte
+ * déjà son nom accessible complet → Teddy n'ajoute aucune info (pas de double annonce a11y).
+ *
+ * **Superposé / anti-occlusion (#170)** : `position:absolute` **hors flux** (n'altère NI le nombre
+ * de nœuds NI leurs positions → invariance de géométrie #123) dans le médaillon `position:relative`.
+ * Il **flotte AU-DESSUS** de la pastille (`bottom:100%` + léger chevauchement décoratif du haut) →
+ * son bas reste **au-dessus du glyphe de statut centré**, jamais recouvrant (`zIndex` > connecteur).
+ * Garde DOUBLÉE (jsdom ne fait aucun layout) : preuve pixel (capture réelle ouverte) + preuve
+ * **géométrie E2E** (`e2e/auth.spec.ts` : avatar visible, dans le cadre, bas ≤ centre du médaillon).
+ */
+function CurrentNodeTeddy({ src }: { readonly src: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-world-teddy=""
+      style={{
+        position: "absolute",
+        // Flotte au-dessus de la pastille ; léger chevauchement décoratif du haut du médaillon
+        // (--space-2) → l'avatar « coiffe » le nœud sans jamais recouvrir le glyphe centré.
+        bottom: "100%",
+        marginBottom: "calc(var(--space-2) * -1)",
+        left: "50%",
+        transform: "translateX(-50%)",
+        width: "var(--map-node-teddy-size)",
+        height: "var(--map-node-teddy-size)",
+        backgroundImage: `url("${src}")`,
+        backgroundSize: "contain",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        pointerEvents: "none",
+        zIndex: 3,
+      }}
+    />
+  );
+}
+
 /** Une pastille de nœud du chemin (verrouillé / courant / terminé), doublée d'un texte. */
-function NodeBadge({ node, total }: { readonly node: MapNode; readonly total: number }) {
+function NodeBadge({
+  node,
+  total,
+  teddyUrl,
+}: {
+  readonly node: MapNode;
+  readonly total: number;
+  /** URL validée de la variante Teddy per-monde, ou `null` (aucun avatar). Rendu sur le nœud courant. */
+  readonly teddyUrl: string | null;
+}) {
   const accessibleName = nodeAccessibleName(node, total);
   const badge = (
     <span
       aria-hidden="true"
+      data-map-medallion=""
       style={{
         position: "relative",
         display: "flex",
@@ -232,6 +293,9 @@ function NodeBadge({ node, total }: { readonly node: MapNode; readonly total: nu
           l'espacement des nœuds uniforme (le connecteur atteint le cercle suivant) et
           laisse le trait passer dessous. Le cercle est `position:relative` (ci-dessus). */}
       {node.status === "completed" && <StarsRow stars={node.stars} />}
+      {/* Avatar Teddy per-monde sur le nœud COURANT (marqueur « tu es ici ») — rendu seulement si
+          le monde fournit une variante Teddy validée. Superposé, flotte au-dessus, jamais occlusif. */}
+      {node.status === "current" && teddyUrl !== null && <CurrentNodeTeddy src={teddyUrl} />}
     </span>
   );
 
@@ -365,7 +429,14 @@ function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: n
  * relatif (serpentin). Aucun recalcul de géométrie : les positions viennent telles
  * quelles de `WorldMap.nodes` (invariance géométrique, CLAUDE.md/rétro #123). Un
  * connecteur décoratif relie chaque nœud à son précédent (métaphore Candy Crush). */
-function NodePath({ map }: { readonly map: WorldMap }) {
+function NodePath({
+  map,
+  teddyUrl,
+}: {
+  readonly map: WorldMap;
+  /** Variante Teddy per-monde validée (ou `null`) — posée sur le nœud courant (marqueur « tu es ici »). */
+  readonly teddyUrl: string | null;
+}) {
   const total = map.nodes.length;
   return (
     <ol
@@ -400,7 +471,7 @@ function NodePath({ map }: { readonly map: WorldMap }) {
             {previous !== undefined && (
               <NodeConnector fromX={node.position.x} toX={previous.position.x} />
             )}
-            <NodeBadge node={node} total={total} />
+            <NodeBadge node={node} total={total} teddyUrl={teddyUrl} />
           </li>
         );
       })}
@@ -478,6 +549,39 @@ function WorldAccentBar() {
         height: "var(--space-2)",
         backgroundColor: "var(--world-accent)",
         borderRadius: "var(--border-radius-full)",
+      }}
+    />
+  );
+}
+
+/**
+ * **Bande de décor thématisée du monde** (« tuiles de carte », WORLDGEN §4, story #190) — élément
+ * **décoratif** (`aria-hidden`) rendu **uniquement** quand le monde résolu fournit des tuiles
+ * validées (`theme.tiles !== null`, chemin Nginx passé par `isRenderableAssetRef`). C'est la
+ * richesse visuelle per-monde qui **atteint l'enfant** sur l'écran carte (déclaré ≠ consommé,
+ * #125/#180) : son image change avec le monde (généré/socle).
+ *
+ * **Zéro régression contraste (#104/#125/#170)** : la bande est rendue **entre** le bandeau d'accent
+ * et le chemin, **en flux** — aucun glyphe de nœud, aucun titre, aucun trait de connecteur n'est
+ * empilé **par-dessus** elle, donc le **fond de référence de contraste** des glyphes de nœud (leur
+ * médaillon opaque) reste **inchangé**. Repli teinté `--world-bg-tint` **per-monde** sous l'image
+ * (hérité de `<main>` qui le re-déclare, fix #184) : jamais un `<img>` vers une URL non validée.
+ */
+function WorldTilesBand({ src }: { readonly src: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-world-tiles=""
+      style={{
+        width: "100%",
+        maxWidth: "var(--max-width-play)",
+        height: "var(--map-tiles-height)",
+        backgroundColor: "var(--world-bg-tint)",
+        backgroundImage: `url("${src}")`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        borderRadius: "var(--map-tiles-radius)",
       }}
     />
   );
@@ -668,7 +772,11 @@ export function MapScreen() {
           />
           {/* Bandeau d'accent : consommateur direct de `--world-accent` (pixel per-monde visible). */}
           <WorldAccentBar />
-          <NodePath map={screen.map} />
+          {/* Bande de décor thématisée (tuiles du monde) — rendue seulement si le monde fournit des
+              tuiles validées (WORLDGEN §4, #190). Décor per-monde visible, jamais sous un glyphe. */}
+          {screen.map.theme.tiles !== null && <WorldTilesBand src={screen.map.theme.tiles} />}
+          {/* Chemin des nœuds + variante Teddy per-monde sur le nœud courant (marqueur « tu es ici »). */}
+          <NodePath map={screen.map} teddyUrl={screen.map.theme.teddy} />
           {/* Hub (WIREFRAMES §2) : accès à la Collection (Pokédex) depuis la carte. */}
           <Link
             href="/collection"

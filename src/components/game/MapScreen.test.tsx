@@ -41,13 +41,15 @@ function node(overrides: Partial<MapNode> = {}): MapNode {
   };
 }
 
-/** Thème per-monde par défaut (océan) — surchargeable par test (accent/slug/label/fond). */
+/** Thème per-monde par défaut (océan) — surchargeable par test (accent/slug/label/fond/tuiles/Teddy). */
 function theme(overrides: Partial<WorldTheme> = {}): WorldTheme {
   return {
     slug: "ocean",
     accent: "#2BB7E6",
     label: "Océan scintillant",
     background: null,
+    tiles: null,
+    teddy: null,
     ...overrides,
   };
 }
@@ -282,6 +284,89 @@ describe("MapScreen — tint de fond per-monde (fix #184, story #189)", () => {
     render(<MapScreen />);
     await waitFor(() => screen.getByText(strings.map.worldUnavailable));
     expect(mainEl().style.getPropertyValue("--world-bg-tint")).toBe("");
+  });
+});
+
+describe("MapScreen — bande de décor thématisée (tuiles per-monde, story #190)", () => {
+  it("tuiles validées → bande de décor RENDUE + CONSOMME theme.tiles (URL) + repli --world-bg-tint, décorative (aria-hidden)", async () => {
+    // Effet observable (#125/#180) : la ref `tiles` du monde résolu ATTEINT le DOM — pas juste
+    // déclarée. Rougit si la bande n'est pas rendue (chemin `tiles !== null`) ou n'émet pas l'URL.
+    await renderReady(
+      map([node({ status: "current" })], 0, { tiles: "/generated/socle/0/tiles.png" }),
+    );
+    const band = document.querySelector<HTMLElement>("[data-world-tiles]");
+    expect(band).not.toBeNull();
+    expect(band).toHaveAttribute("aria-hidden", "true");
+    // Image du monde en couverture + repli teinté per-monde dessous (jamais une couleur en dur).
+    expect(band!.style.backgroundImage).toContain("/generated/socle/0/tiles.png");
+    expect(band!.style.backgroundColor).toBe("var(--world-bg-tint)");
+    // Dimension = token de bande (jamais une valeur en dur).
+    expect(band!.style.height).toBe("var(--map-tiles-height)");
+  });
+
+  it("pas de tuiles (tiles null) → AUCUNE bande de décor (repli propre, pas de fetch non validé)", async () => {
+    // Effet observable : la bande n'apparaît QUE sur le chemin `tiles !== null`. Rougit si elle est
+    // rendue inconditionnellement (elle émettrait un background-image vers une URL absente/`null`).
+    await renderReady(map([node({ status: "current" })], 0, { tiles: null }));
+    expect(document.querySelector("[data-world-tiles]")).toBeNull();
+  });
+});
+
+describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190, ADR 0009)", () => {
+  it("Teddy validé → avatar RENDU sur le nœud COURANT, CONSOMME theme.teddy (URL), superposé (absolu), décoratif (aria-hidden)", async () => {
+    // Effet observable (#125/#180) : la variante Teddy du monde ATTEINT le nœud courant. Rougit si
+    // l'avatar n'est pas rendu (chemin `teddy !== null` sur un nœud courant) ou n'émet pas l'URL.
+    await renderReady(
+      map([node({ status: "current" })], 0, { teddy: "/generated/socle/0/teddy.png" }),
+    );
+    const teddy = document.querySelector<HTMLElement>("[data-world-teddy]");
+    expect(teddy).not.toBeNull();
+    expect(teddy).toHaveAttribute("aria-hidden", "true");
+    expect(teddy!.style.backgroundImage).toContain("/generated/socle/0/teddy.png");
+    // Superposé (hors flux) → n'altère pas la géométrie (#123) ; taille = token (jamais en dur).
+    expect(teddy!.style.position).toBe("absolute");
+    expect(teddy!.style.width).toBe("var(--map-node-teddy-size)");
+    // Anti-occlusion (#170) : flotte AU-DESSUS de la pastille (bottom:100%) — jamais sur le glyphe.
+    expect(teddy!.style.bottom).toBe("100%");
+    // zIndex > connecteur (0) : l'avatar passe au-dessus du trait, jamais recouvert par lui.
+    expect(Number(teddy!.style.zIndex)).toBeGreaterThan(0);
+    // L'avatar est bien un enfant du médaillon du nœud COURANT (le marqueur « tu es ici »).
+    expect(teddy!.closest('[data-map-node-status="current"]')).not.toBeNull();
+  });
+
+  it("un SEUL avatar Teddy, uniquement sur le nœud courant (pas sur verrouillé/terminé) — marqueur unique", async () => {
+    // Effet observable : Teddy marque LE point de reprise (MAP §1), pas chaque nœud. Rougit si
+    // l'avatar était rendu sur tous les nœuds (encombrement) ou sur le mauvais statut.
+    await renderReady(
+      map(
+        [
+          node({ index: 0, status: "completed", stars: 2 }),
+          node({ index: 1, status: "current" }),
+          node({ index: 2, status: "locked" }),
+        ],
+        0,
+        { teddy: "/generated/socle/0/teddy.png" },
+      ),
+    );
+    const teddies = document.querySelectorAll("[data-world-teddy]");
+    expect(teddies).toHaveLength(1);
+    expect(teddies[0].closest('[data-map-node-status="current"]')).not.toBeNull();
+  });
+
+  it("pas de Teddy (teddy null) → AUCUN avatar sur le nœud courant (repli propre, pas de fetch non validé)", async () => {
+    // Effet observable : l'avatar n'apparaît QUE sur le chemin `teddy !== null`. Rougit si rendu
+    // inconditionnellement (il émettrait un background-image vers une URL absente/`null`).
+    await renderReady(map([node({ status: "current" })], 0, { teddy: null }));
+    expect(document.querySelector("[data-world-teddy]")).toBeNull();
+  });
+
+  it("Teddy présent mais AUCUN nœud courant (tous terminés) → aucun avatar (gaté sur le statut courant)", async () => {
+    // Effet observable : l'avatar est gaté sur le STATUT courant, pas seulement sur `teddy !== null`.
+    // Rougit si l'avatar se posait sur un nœud terminé/verrouillé quand il n'y a pas de courant.
+    await renderReady(
+      map([node({ status: "completed", stars: 3 })], 0, { teddy: "/generated/socle/0/teddy.png" }),
+    );
+    expect(document.querySelector("[data-world-teddy]")).toBeNull();
   });
 });
 

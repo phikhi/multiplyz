@@ -30,7 +30,14 @@ const loadCurrentWorldMapMock = vi.mocked(loadCurrentWorldMap);
 const FAKE_MAP: CurrentWorldMap = {
   worldIndex: 0,
   nodes: [{ index: 0, position: { x: 0.5, y: 0 }, type: "normal", status: "current", stars: 0 }],
-  theme: { slug: "ocean", accent: "#2BB7E6", label: "Océan scintillant", background: null },
+  theme: {
+    slug: "ocean",
+    accent: "#2BB7E6",
+    label: "Océan scintillant",
+    background: null,
+    tiles: null,
+    teddy: null,
+  },
 };
 
 beforeEach(() => {
