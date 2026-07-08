@@ -21,6 +21,12 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // Restaure tous les `vi.spyOn` à leur implémentation d'origine **avant chaque test** (#193) :
+    // règle la classe entière des fuites de spy inter-tests (un `spy.mockRestore()` non gardé posé
+    // après une assertion qui lève ne s'exécute jamais → le spy fuit dans le test suivant et DÉPLACE
+    // l'échec observé — rétro #186). Avec ce filet global, l'échec d'une mutation atterrit toujours à
+    // l'assertion nommée, sans `try/finally` manuel autour de chaque `spyOn`.
+    restoreMocks: true,
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov", "json-summary"],
