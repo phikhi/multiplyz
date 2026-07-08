@@ -34,6 +34,7 @@ import {
   monthBounds,
   parseWorldIndex,
   processNextJob,
+  purgeFailedWorldAssets,
   recoverStaleJobs,
   resolveWorkerDeps,
   runWorkerTick,
@@ -988,6 +989,19 @@ function seedDoneJob(db: AppDatabase, worldIndex: number): void {
     .run();
 }
 
+/** Insère un job `generate_world` `failed` pour un index (⇔ rejet définitif : gen ou QA épuisée). */
+function seedFailedJob(db: AppDatabase, worldIndex: number): void {
+  db.insert(jobs)
+    .values({
+      type: GENERATE_WORLD_JOB,
+      payload: serializeJobPayload(worldIndex),
+      status: "failed",
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+    .run();
+}
+
 describe("approveWorld — transition buffered→active + approvedBy parent (mécanisme, épic #7 = UI)", () => {
   it("worldPassedQa : vrai ssi un job `generate_world` done existe pour l'index", () => {
     const db = freshDb();
@@ -1153,5 +1167,120 @@ describe("constantes exportées", () => {
     expect(hasActiveJobForWorld(db, 0)).toBe(false);
     enqueueJob(db, 0);
     expect(hasActiveJobForWorld(db, 0)).toBe(true);
+  });
+});
+
+// ───────── filtre SQL json_extract par worldIndex (#177) — un job d'un AUTRE index ne matche pas ─────────
+
+describe("filtre SQL json_extract('$.worldIndex') (#177) — équivalence + isolation par index", () => {
+  it("MUTATION-PROUVÉ : hasActiveJobForWorld(0) est FAUX quand SEUL l'index 1 a un job actif", () => {
+    const db = freshDb();
+    enqueueJob(db, 1); // job `pending` d'un AUTRE worldIndex (1), aucun pour 0.
+    // Si le filtre `json_extract(payload,'$.worldIndex') = ?` est retiré (n'importe quel job actif
+    // matche), cette assertion rougirait à `true`. Le filtre par index la garde `false`.
+    expect(hasActiveJobForWorld(db, 0)).toBe(false);
+    expect(hasActiveJobForWorld(db, 1)).toBe(true); // sanity : l'index réel matche bien.
+  });
+
+  it("MUTATION-PROUVÉ : worldPassedQa(5) est FAUX quand SEUL l'index 6 a un job done", () => {
+    const db = freshDb();
+    seedDoneJob(db, 6); // job `done` d'un AUTRE worldIndex (6), aucun pour 5.
+    // Si le filtre `json_extract` est retiré (n'importe quel job done matche), worldPassedQa(5)
+    // rougirait à `true`. Le filtre par index la garde `false`.
+    expect(worldPassedQa(db, 5)).toBe(false);
+    expect(worldPassedQa(db, 6)).toBe(true); // sanity : l'index réel matche bien.
+  });
+
+  it("payload illisible (json corrompu) → json_extract NULL → non compté (équivalence parseWorldIndex)", () => {
+    const db = freshDb();
+    db.insert(jobs)
+      .values({
+        type: GENERATE_WORLD_JOB,
+        payload: "{pas du json}",
+        status: "pending",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+      .run();
+    // Un payload illisible n'a pas d'index ciblable → jamais compté comme couvrant un monde.
+    expect(hasActiveJobForWorld(db, 0)).toBe(false);
+  });
+});
+
+// ───────── purge des assets de mondes définitivement rejetés (#176b) ─────────
+
+describe("purgeFailedWorldAssets (#176b) — purge idempotente des assets de mondes `failed`", () => {
+  /** Purge en enregistrant les index ciblés par le remover (aucune I/O disque réelle en CI). */
+  function purgeRecording(db: AppDatabase): Promise<{ purged: number; removed: number[] }> {
+    const removed: number[] = [];
+    return purgeFailedWorldAssets(db, {
+      removeWorldAssets: (idx) => {
+        removed.push(idx);
+        return Promise.resolve();
+      },
+    }).then((purged) => ({ purged, removed }));
+  }
+
+  it("MUTATION-PROUVÉ : purge SEULEMENT le monde `failed`, laisse `buffered`(QA-ok)/`active` INTACTS", async () => {
+    const db = freshDb();
+    // Index 5 : job FAILED, aucun job non-failed → rejet définitif → assets À PURGER.
+    seedFailedJob(db, 5);
+    // Index 3 : monde `buffered` LÉGITIME (QA passée, en attente d'approbation parent) → job `done`.
+    seedWorld(db, 3);
+    seedDoneJob(db, 3);
+    // Index 7 : monde `active` (approuvé) → job `done` + status active.
+    seedWorld(db, 7);
+    seedDoneJob(db, 7);
+    approveWorld(db, "world:7", "maman"); // buffered → active.
+
+    const { purged, removed } = await purgeRecording(db);
+    // Effet observable : SEUL l'index 5 est purgé. Retirer la GARDE de correction
+    // `hasNonFailedJobForWorld` ferait purger 3 et 7 (ils ont un job `done`) → cette assertion rougit.
+    // (Le filtre de SCOPE `status = 'failed'` est outcome-équivalent à cette garde → le retirer laisse
+    // les tests VERTS : c'est un narrowing d'efficacité, PAS une garde mutation-prouvée — honnête #143.)
+    expect(removed).toEqual([5]);
+    expect(purged).toBe(1);
+  });
+
+  it("MUTATION-PROUVÉ : un index qui a REPRIS (failed + done) n'est PAS purgé (exclusion `done`)", async () => {
+    const db = freshDb();
+    // Index 8 : un 1er job a échoué puis un 2ᵉ a RÉUSSI (done) → le monde n'est pas un rejet définitif.
+    seedFailedJob(db, 8);
+    seedDoneJob(db, 8);
+    const { removed } = await purgeRecording(db);
+    // Sans l'exclusion `hasNonFailedJobForWorld`, l'index 8 (job failed présent) serait purgé → rouge.
+    expect(removed).toEqual([]);
+  });
+
+  it("idempotente : re-jouer re-cible le même monde `failed` (la purge ne mute pas la DB)", async () => {
+    const db = freshDb();
+    seedFailedJob(db, 5);
+    expect((await purgeRecording(db)).removed).toEqual([5]);
+    // 2ᵉ passe : le job `failed` persiste (pas de purge de la file en v1) → re-ciblé ; remover
+    // idempotent côté FS (dossier déjà absent = no-op). Aucune erreur, même cible.
+    expect((await purgeRecording(db)).removed).toEqual([5]);
+  });
+
+  it("ignore un job `failed` au payload illisible (aucun index ciblable)", async () => {
+    const db = freshDb();
+    db.insert(jobs)
+      .values({
+        type: GENERATE_WORLD_JOB,
+        payload: "{corrompu",
+        status: "failed",
+        createdAt: NOW,
+        updatedAt: NOW,
+      })
+      .run();
+    const { purged, removed } = await purgeRecording(db);
+    expect(removed).toEqual([]);
+    expect(purged).toBe(0);
+  });
+
+  it("remover PAR DÉFAUT = marqueur inerte (aucune I/O disque committée ; réel injecté owner, #184)", async () => {
+    const db = freshDb();
+    seedFailedJob(db, 5);
+    // Défaut committé (`defaultRemoveWorldAssets`) : no-op sûr → compte le monde ciblé sans I/O.
+    await expect(purgeFailedWorldAssets(db)).resolves.toBe(1);
   });
 });
