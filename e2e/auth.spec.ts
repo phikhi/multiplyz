@@ -866,6 +866,70 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(richness!.upstreamMedBottom).not.toBeNull();
     expect(richness!.teddyTop).toBeGreaterThanOrEqual(richness!.upstreamMedBottom!);
 
+    // ── Contraste des glyphes de bas d'écran sur photo (story #202) — RENDU + GÉOMÉTRIE vrai layout ──
+    // Sur la photo IA arbitraire, deux éléments étaient peints SANS fond opaque (contraste ~1.21:1 sur
+    // la fixture rayée, #170) : le bouton « Changer de joueur » (ghost) et le trait du chemin (peint
+    // dans la gouttière de <main>, backmost). #202 pose un scrim/casing opaque `--world-surface` sous
+    // chacun. jsdom ne fait pas de layout → ici on vérifie en vrai navigateur que (a) le scrim de footer
+    // ENVELOPPE le bouton (couvre son rect, fond opaque résolu) et le bouton reste visible, (b) la casing
+    // du trait est peinte, plus large que le trait, avec la MÊME géométrie (gouttière) → aucune occlusion
+    // nouvelle, fond de référence du trait = un token opaque, pas la photo.
+    const footer = await page.evaluate(() => {
+      const scrim = document.querySelector("[data-world-footer-scrim]");
+      const button = scrim?.querySelector("button");
+      const casing = document.querySelector("[data-map-connector-casing]");
+      const line = document.querySelector(
+        "[data-map-connector] line:not([data-map-connector-casing])",
+      );
+      const casingSvg = casing?.closest("svg");
+      const casingBadge = casingSvg?.closest("li")?.querySelector("[data-map-node-status]");
+      if (
+        scrim == null ||
+        button == null ||
+        casing == null ||
+        line == null ||
+        casingBadge == null
+      ) {
+        return null;
+      }
+      const s = scrim.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      const casingRect = casing.getBoundingClientRect();
+      const svgRect = casingSvg!.getBoundingClientRect();
+      const badgeRect = casingBadge.getBoundingClientRect();
+      const px = (v: string) => Number.parseFloat(v);
+      return {
+        // (a) scrim de footer : fond opaque résolu (non transparent) + enveloppe le bouton + bouton visible.
+        scrimBg: getComputedStyle(scrim).backgroundColor,
+        scrimCoversButton:
+          s.top <= b.top + 1 &&
+          s.bottom >= b.bottom - 1 &&
+          s.left <= b.left + 1 &&
+          s.right >= b.right - 1,
+        buttonVisible: b.width > 0 && b.height > 0,
+        // (b) casing du trait : plus large que le trait coloré + couleur ≠ celle du trait + opaque.
+        casingWidth: px(getComputedStyle(casing).strokeWidth),
+        lineWidth: px(getComputedStyle(line).strokeWidth),
+        casingStroke: getComputedStyle(casing).stroke,
+        lineStroke: getComputedStyle(line).stroke,
+        // Non-occlusion : le SVG (casing incluse) vit dans la gouttière SOUS la pastille (sommet ≥ bas
+        // du médaillon), donc ni recouvert par le nœud ni recouvrant un glyphe (même invariant que #169).
+        casingInGutter: svgRect.top >= badgeRect.bottom - 1 && casingRect.height > 0,
+      };
+    });
+    expect(footer).not.toBeNull();
+    // (a) le scrim de footer est opaque (jamais transparent → contraste garanti) et enveloppe le bouton.
+    expect(footer!.scrimBg).not.toBe("rgba(0, 0, 0, 0)");
+    expect(footer!.scrimBg).not.toBe("transparent");
+    expect(footer!.scrimCoversButton).toBe(true);
+    expect(footer!.buttonVisible).toBe(true);
+    // (b) la casing est PLUS LARGE que le trait (halo visible de part et d'autre) et d'une couleur
+    // DISTINCTE (opaque `--world-surface` vs `--map-node-path-color`) → le fond de référence du trait
+    // n'est plus la photo. Non-occlusion : la casing partage la gouttière du connecteur (sous la pastille).
+    expect(footer!.casingWidth).toBeGreaterThan(footer!.lineWidth);
+    expect(footer!.casingStroke).not.toBe(footer!.lineStroke);
+    expect(footer!.casingInGutter).toBe(true);
+
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
     // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
     await page.screenshot({ path: "docs/captures/182-carte-theme.png", fullPage: true });
@@ -874,6 +938,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // Capture dédiée story #190 (bande de décor tuiles + avatar Teddy per-monde) — OUVERTE + pixels
     // analysés en review (garde-fou #170 : générer ne suffit pas, on regarde que c'est visible).
     await page.screenshot({ path: "docs/captures/190-carte-richesse.png", fullPage: true });
+    // Capture dédiée story #202 (scrim opaque du bouton « Changer de joueur » + casing du trait sur
+    // photo) — OUVERTE + pixels analysés en review (garde-fou #170 : glyphes lisibles sur la photo).
+    await page.screenshot({ path: "docs/captures/202-carte-footer-contraste.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
     // cliquer le nœud courant ramène bien à l'écran de jeu.
@@ -959,5 +1026,82 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(await fresh.textContent()).not.toBe(recoveryCode); // ancien code consommé
 
     await page.screenshot({ path: "docs/captures/33-recuperation.png", fullPage: true });
+  });
+
+  test("carte SANS photo (repli socle placeholder) → tint per-monde PEINT comme fond réel, sans scrim/casing (story #199, capture)", async ({
+    page,
+  }) => {
+    // Story #199 : dans l'état SANS fond-image (repli socle/CI/hors-ligne), le tint per-monde doit être
+    // un FOND RÉEL visible (identité du monde vécue sans photo), pas un fond neutre. On force cet état en
+    // repointant le socle[0] sur des refs PLACEHOLDER (non rendables) → `resolveWorld(0)` renvoie
+    // background/tiles/teddy = null tout en gardant palette+label (accent per-monde). Placé en DERNIER
+    // test de la séquence sérialisée → la mutation DB n'impacte aucun test amont (base wipée à froid au
+    // prochain run, cf. global-setup).
+    //
+    // ⚠️ PAS de connexion SQLite directe par chemin (`new Database("data/e2e.sqlite")`) : investigation
+    // 6.11 a montré qu'un environnement `next dev`/Turbopack peut désynchroniser l'accès à
+    // `socle_worlds` peu après le boot (mécanisme NATIF hors Node — tracé par monkey-patch de
+    // `node:fs`, AUCUN appel applicatif `unlink`/`rm` — cf. corps de PR pour le détail de
+    // l'investigation). Une connexion fraîche ouverte par CHEMIN devient alors un NO-OP silencieux sur
+    // un fichier fantôme. On passe donc par la route de test dédiée (`/api/test-only/socle-reset`, 404
+    // en production) qui réutilise `getDb()` : LA MÊME connexion que le reste de l'app — supprime la
+    // classe entière de risque liée à une connexion SQLite ouverte hors du process serveur, même si le
+    // symptôme observé localement (cf. PR) déborde de ce seul risque.
+    const resetRes = await page.request.post("/api/test-only/socle-reset", { data: { slot: 0 } });
+    expect(resetRes.ok()).toBe(true);
+
+    // Connexion enfant (PIN enfant 1234 inchangé — la récupération n'a touché QUE le PIN parent).
+    await page.goto("/");
+
+    await page.getByRole("button", { name: profileLabel }).click();
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+
+    await page.goto("/carte");
+    await page.waitForLoadState("networkidle");
+    const heading = page.getByRole("heading", { level: 1 });
+    await expect(heading).toBeVisible();
+    expect(((await heading.textContent()) ?? "").trim()).toMatch(/^Monde 1 · .+/u);
+
+    // #199 en vrai navigateur (jsdom ne résout ni `color-mix` ni layout) : le tint per-monde est PEINT
+    // comme fond réel de <main> et n'est PAS neutre. On compare le `backgroundColor` calculé de <main>
+    // (tint dérivé de l'accent DU MONDE, #184) au fond de page NEUTRE `--color-bg-primary` résolu sur un
+    // élément hors <main> → ils DIFFÈRENT (le fond n'est plus neutre). Et aucune image n'est peinte.
+    const tintState = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      if (main === null) return null;
+      const probe = document.createElement("div");
+      probe.style.backgroundColor = "var(--color-bg-primary)"; // fond de page neutre
+      document.body.appendChild(probe);
+      const neutralBg = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return {
+        mainBg: getComputedStyle(main).backgroundColor,
+        mainBgImage: getComputedStyle(main).backgroundImage,
+        neutralBg,
+        // Aucun scrim/casing/tuiles/teddy dans l'état sans-photo (repli propre, #199).
+        hasScrim: document.querySelector("[data-world-scrim]") !== null,
+        hasFooterScrim: document.querySelector("[data-world-footer-scrim]") !== null,
+        hasCasing: document.querySelector("[data-map-connector-casing]") !== null,
+        hasTiles: document.querySelector("[data-world-tiles]") !== null,
+        hasTeddy: document.querySelector("[data-world-teddy]") !== null,
+      };
+    });
+    expect(tintState).not.toBeNull();
+    // Le tint per-monde EST peint (fond ≠ neutre) et aucune photo n'est rendue.
+    expect(tintState!.mainBgImage).toBe("none");
+    expect(tintState!.mainBg).not.toBe(tintState!.neutralBg);
+    expect(tintState!.mainBg).not.toBe("rgba(0, 0, 0, 0)"); // ni transparent
+    // Repli PROPRE : aucun scrim/casing (contraste analytique suffit sur le tint borné, #202) ni
+    // asset per-monde (pas de fetch non validé) dans l'état sans-photo.
+    expect(tintState!.hasScrim).toBe(false);
+    expect(tintState!.hasFooterScrim).toBe(false);
+    expect(tintState!.hasCasing).toBe(false);
+    expect(tintState!.hasTiles).toBe(false);
+    expect(tintState!.hasTeddy).toBe(false);
+
+    // Capture dédiée story #199 (tint per-monde comme fond réel dans l'état sans-image) — OUVERTE +
+    // pixels analysés en review (garde-fou #170 : le tint doit être VISIBLE, pas neutre).
+    await page.screenshot({ path: "docs/captures/199-carte-tint-sans-image.png", fullPage: true });
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contrastRatio,
+  mixSrgb,
   rawTokenValue,
   relativeLuminance,
   resolveChain,
@@ -82,5 +83,17 @@ describe("test-support/tokens-css — helper partagé de résolution tokens.css"
     expect(relativeLuminance("#FFFFFF")).toBe(1);
     expect(contrastRatio("#000000", "#FFFFFF")).toBeCloseTo(21, 0);
     expect(contrastRatio("#7A5AF8", "#7A5AF8")).toBeCloseTo(1, 5);
+  });
+
+  it("mixSrgb réplique color-mix(in srgb, a X%, b) : bornes 0%/100% + point milieu, composante par composante", () => {
+    // Fraction 0 → 100 % de b (le second) ; fraction 1 → 100 % de a (le premier) — sémantique CSS
+    // `color-mix(in srgb, a <fraction>%, b)`. Effet observable : rougit si l'interpolation est
+    // inversée ou faite en espace linéaire (le résultat 8-bit ne correspondrait plus).
+    expect(mixSrgb("#FF0000", "#00FF00", 0)).toBe("#00ff00");
+    expect(mixSrgb("#FF0000", "#00FF00", 1)).toBe("#ff0000");
+    // 10 % rouge + 90 % blanc = (255, 0.9·255, 0.9·255) = (255, 229.5→230, 230) → #ffe6e6.
+    expect(mixSrgb("#FF0000", "#FFFFFF", 0.1)).toBe("#ffe6e6");
+    // 50 % noir + 50 % blanc = (128, 128, 128) arrondi → #808080.
+    expect(mixSrgb("#000000", "#FFFFFF", 0.5)).toBe("#808080");
   });
 });
