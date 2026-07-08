@@ -28,12 +28,7 @@ export default defineConfig({
     // même contexte (cwd + DATABASE_PATH) que le serveur → les chemins `background/tiles/teddy
     // !== null` (scrim + tint + bande de décor + avatar Teddy per-monde) sont exercés en vrai
     // navigateur, sans dépendre des assets gitignorés.
-    // `next dev` DIRECT (pas `pnpm dev`, qui ré-exécute son propre `db:migrate` interne) : le
-    // `db:migrate` explicite ci-dessus a déjà migré la base avant `seed-world-assets` → le 2ᵉ appel
-    // implicite de `pnpm dev` est une redondance pure (investigation 6.11 : ce doublon N'EST PAS la
-    // cause d'une désynchronisation `socle_worlds` observée sporadiquement en local — testé et écarté,
-    // cf. corps de PR — mais reste un appel migrate inutile à retirer).
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && next dev --port ${PORT}`,
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
