@@ -25,24 +25,22 @@ describe("getInitialTheme", () => {
 
   it("retourne 'dark' via matchMedia quand pas de valeur stockée", () => {
     delete document.documentElement.dataset.theme;
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: vi.fn().mockReturnValue({
-        matches: true,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
-    expect(getInitialTheme()).toBe("dark");
-    // Restore stub par défaut (matches: false)
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      value: vi.fn().mockReturnValue({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
+    // Surcharge locale (matches:true) du stub global (vitest.setup.ts, matches:false). On restaure
+    // l'original en `finally` (rétro #186/#193) : la restauration doit TOUJOURS s'exécuter, même si
+    // l'assertion lève, sinon le stub `matches:true` fuit dans les tests suivants (les tests 48 +
+    // <ThemeToggle> dépendent du défaut `matches:false`). `restoreMocks:true` ne suffit pas ici : ce
+    // n'est pas un `vi.spyOn` (raw assignment) → seule cette restauration explicite rétablit l'original.
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }) as unknown as typeof window.matchMedia;
+    try {
+      expect(getInitialTheme()).toBe("dark");
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it("retourne 'light' via matchMedia quand pas de valeur stockée et pas dark", () => {

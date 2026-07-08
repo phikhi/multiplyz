@@ -103,7 +103,9 @@ no characters, no text --ar 16:9
 3. **Style bible d'ancrage** : générer aussi ~3 créatures + 1 fond de référence validés → images de référence pour les générations suivantes.
 4. **Seed / modèle figés** par batch quand le modèle le permet → moins de dérive.
 5. **Seules les variables changent** : `{world_theme}`, `{world_palette}`, `{creature_concept}`, `{features}`, `{world_accessory}`. Le reste est constant.
-6. **QA + modération kid-safe** avant d'enregistrer en DB : rejeter (et régénérer) tout asset effrayant/incohérent/avec texte.
+6. **QA + modération kid-safe** avant qu'un monde ne devienne **jouable** : rejeter (et régénérer) tout asset effrayant/incohérent/avec texte.
+   - **Ordre réel = write-then-gate** (impl épic #6, réconcilié #176) : les octets rendus sont d'abord **persistés** (fichiers servables + ligne `worlds` posée en `buffered` par le générateur), **puis** la QA s'exécute sur le **pixel rendu** (indispensable pour l'inspecter), **puis** la **visibilité** est gardée par le statut — un monde n'atteint `active` (jouable) **qu'après** QA réussie (+ approbation parent si le toggle ⚙️ est activé). Un rejet définitif laisse le monde **jamais `active`** (job `failed`, monde sur le **fallback** §6.7). Rien n'est exposé à l'enfant tant que la carte ne sert que les mondes `active`.
+   - **Purge des rejets** : une purge idempotente (`purgeFailedWorldAssets`, #176) cible les assets servables d'un monde **définitivement rejeté** (job `failed`, aucun retry ni succès), en laissant **intacts** les mondes `buffered` (QA passée, en attente d'approbation) et `active`. Statut honnête (discipline #165) : purge **implémentée + mutation-prouvée + injectable**, mais **invocation périodique non encore câblée** (`runWorkerTick` ne l'appelle pas ; il manque le call-site + le remover réel injecté à l'exécution owner, comme `writeAsset`) → **effet « pas d'accumulation disque » non encore réalisé en prod** ; câblage suivi par l'issue **#207**.
 7. **Fallback** : un jeu de mondes **pré-générés validés** si la génération échoue, est indispo, ou hors-ligne.
 
 ---

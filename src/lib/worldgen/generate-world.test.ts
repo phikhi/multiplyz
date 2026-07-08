@@ -141,7 +141,8 @@ describe("resolveDeps / defaults prod", () => {
     const out = await generate({ prompt: "p" });
     expect(spy).toHaveBeenCalledWith({ prompt: "p" });
     expect(out.toString()).toBe("FROM_CLIENT");
-    spy.mockRestore();
+    // Pas de `spy.mockRestore()` manuel (fuite si l'assertion ci-dessus lève, rétro #186/#193) :
+    // `restoreMocks: true` (vitest.config) restaure le spy avant le test suivant.
   });
 
   it("defaultWriteAsset renvoie une réf d'URL déterministe world/<index>/<name>", async () => {

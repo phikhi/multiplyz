@@ -1,5 +1,5 @@
 import "server-only";
-import { and, count, eq, gte, lt, inArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, lt, inArray, sql, type SQL } from "drizzle-orm";
 import { getWorldGenConfig, type WorldGenConfig } from "@/config/server-config";
 import { CURATED_THEMES, type CuratedTheme } from "@/config/worldgen-themes";
 import type { AppDatabase } from "@/lib/db";
@@ -196,16 +196,41 @@ export function worldExists(db: AppDatabase, worldIndex: number): boolean {
 }
 
 /**
+ * **`world_index` encodé dans `jobs.payload`, extrait en SQL** (#177) — `json_extract(payload,
+ * '$.worldIndex')` (clé posée par `serializeJobPayload`), **gardé par `json_valid`** : un payload
+ * **malformé** (json corrompu) donne `NULL` (via le `CASE`) au lieu de faire **lever** `json_extract`
+ * (« malformed JSON »). Cette garde préserve l'**équivalence** avec le filtre mémoire historique
+ * (`parseWorldIndex` **tolérait** le json illisible en renvoyant `null` → non compté). Un payload
+ * valide mais **sans** `worldIndex` → `json_extract` renvoie `NULL` → non compté (idem `parseWorldIndex`).
+ */
+function payloadWorldIndexSql(): SQL {
+  return sql`CASE WHEN json_valid(${jobs.payload}) THEN json_extract(${jobs.payload}, '$.worldIndex') END`;
+}
+
+/**
  * Un job **actif** (`pending`/`running`) couvre-t-il déjà ce `world_index` ? (anti-doublon
  * d'enqueue, idempotence #82). Le `world_index` est encodé dans le `payload` json du job.
+ *
+ * **Filtre poussé en SQL** (#177) : `payloadWorldIndexSql() = ?` — SQLite lit l'index directement
+ * dans le json du `payload`, au lieu de scanner **toutes** les lignes actives puis de filtrer en
+ * mémoire (`parseWorldIndex`). Le `count` agrégé renvoie toujours une ligne (jamais NULL) → `> 0` =
+ * un job actif couvre déjà cet index. Comportement **identique** à l'ancien scan mémoire (y compris
+ * la tolérance au json malformé, cf. `payloadWorldIndexSql`).
  */
 export function hasActiveJobForWorld(db: AppDatabase, worldIndex: number): boolean {
-  const rows = db
-    .select({ payload: jobs.payload })
-    .from(jobs)
-    .where(and(eq(jobs.type, GENERATE_WORLD_JOB), inArray(jobs.status, [...ACTIVE_JOB_STATUSES])))
-    .all();
-  return rows.some((r) => parseWorldIndex(r.payload) === worldIndex);
+  return (
+    db
+      .select({ n: count() })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.type, GENERATE_WORLD_JOB),
+          inArray(jobs.status, [...ACTIVE_JOB_STATUSES]),
+          sql`${payloadWorldIndexSql()} = ${worldIndex}`,
+        ),
+      )
+      .get()!.n > 0
+  );
 }
 
 /** Charge utile d'un job `generate_world` : l'index du monde à générer (WORLDGEN §3). */
@@ -605,14 +630,25 @@ export class WorldModerationError extends Error {
  * NB (v1) : s'appuie sur la **persistance du job** (aucune purge de la file en v1 — single-tenant,
  * pas de cron, cf. `AuthConfig.gcSessionsOnLogin`). Si une purge de jobs arrive un jour, matérialiser
  * la preuve QA autrement (ex. colonne `worlds`) — hors scope 6.5.
+ *
+ * **Filtre poussé en SQL** (#177) : `payloadWorldIndexSql() = ?` — même patron que
+ * `hasActiveJobForWorld` : SQLite filtre l'index dans le json du `payload` (jamais de scan pleine-table
+ * + filtre mémoire `parseWorldIndex`). Un job `done` d'un **autre** index ne matche donc jamais.
  */
 export function worldPassedQa(db: AppDatabase, worldIndex: number): boolean {
-  const rows = db
-    .select({ payload: jobs.payload })
-    .from(jobs)
-    .where(and(eq(jobs.type, GENERATE_WORLD_JOB), eq(jobs.status, "done")))
-    .all();
-  return rows.some((r) => parseWorldIndex(r.payload) === worldIndex);
+  return (
+    db
+      .select({ n: count() })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.type, GENERATE_WORLD_JOB),
+          eq(jobs.status, "done"),
+          sql`${payloadWorldIndexSql()} = ${worldIndex}`,
+        ),
+      )
+      .get()!.n > 0
+  );
 }
 
 /**
@@ -658,4 +694,127 @@ export function approveWorld(db: AppDatabase, worldId: string, approvedBy: strin
     );
   }
   db.update(worlds).set({ status: "active", approvedBy: who }).where(eq(worlds.id, worldId)).run();
+}
+
+// ============================================================================
+// Purge des assets de mondes définitivement rejetés (WORLDGEN §6, ART §6, #176)
+// ============================================================================
+
+/**
+ * Dépendance **injectable** de la purge (rétro #184 : point d'injection RÉEL, pas un stub appelé en
+ * dur). `removeWorldAssets(worldIndex)` supprime **les fichiers servables** accumulés sous
+ * `world/<index>/…` (fond/tuiles/Teddy/créatures) pour un monde définitivement rejeté. Le **stockage
+ * réel** (disque VPS servi par Nginx, WORLDGEN §5) est **injecté à l'exécution owner** — symétrique du
+ * `writeAsset` du générateur (`defaultWriteAsset` pose la convention d'URL sans toucher au disque). En
+ * test, on injecte un FAKE qui enregistre les index ciblés (aucune I/O disque réelle en CI).
+ */
+export interface PurgeFailedWorldsDeps {
+  /**
+   * Supprime **idempotemment** tous les assets servables `world/<index>/…` (idempotent côté FS).
+   *
+   * **Contrat d'appel (#184)** : `worldIndex` doit être un **entier non-négatif**, contraint par
+   * l'appelant — le remover ne reçoit **jamais** une valeur non validée. `purgeFailedWorldAssets`
+   * garde ce contrat en runtime (`Number.isInteger(idx) && idx >= 0`) avant tout appel, car
+   * `json_extract` peut sortir une string/négatif/fractionnaire malgré le type TS `number`. Même
+   * doctrine que `readMasterBytesFromDisk` : valider la forme reçue avant de toucher au FS.
+   */
+  removeWorldAssets: (worldIndex: number) => Promise<void>;
+}
+
+/**
+ * **Remover par défaut committé = marqueur INERTE** (aucune I/O disque en CI, 0 régression). Comme
+ * `defaultWriteAsset`, la suppression réelle des octets sur disque est **fournie à l'exécution owner**
+ * (le daemon/hygiène owner injecte un remover qui `rm -rf world/<index>/` sous la racine servable).
+ * Le défaut ne fait donc **rien** d'observable côté disque — il rend le mécanisme **branchable** sans
+ * exécuter d'I/O par accident (rétro #184 : défaut committé inerte/sûr). Sans paramètre (l'index est
+ * ignoré par le no-op) : assignable au type `removeWorldAssets: (worldIndex) => …` (arité tolérée).
+ */
+export function defaultRemoveWorldAssets(): Promise<void> {
+  return Promise.resolve();
+}
+
+/**
+ * Un index a-t-il un job `generate_world` **non-`failed`** (pending / running / **done**) ? Sert
+ * d'**exclusion** à la purge : un index qui a repris (retry en file) OU **réussi** (`done` ⟹ QA
+ * passée ⟹ éligible/déjà `active`) n'est **pas** un rejet définitif — ses assets restent. Filtre
+ * `json_extract` en SQL (#177). Un monde devenu `active` a **forcément** un job `done` (posé dans la
+ * même transaction de finalisation que `status = active`) → cet unique prédicat couvre déjà les
+ * mondes `active` (pas de garde `status = 'active'` redondante — rétro #143).
+ */
+function hasNonFailedJobForWorld(db: AppDatabase, worldIndex: number): boolean {
+  return (
+    db
+      .select({ n: count() })
+      .from(jobs)
+      .where(
+        and(
+          eq(jobs.type, GENERATE_WORLD_JOB),
+          inArray(jobs.status, ["pending", "running", "done"]),
+          sql`${payloadWorldIndexSql()} = ${worldIndex}`,
+        ),
+      )
+      .get()!.n > 0
+  );
+}
+
+/**
+ * **Purge idempotente des assets de mondes définitivement rejetés** (#176, hygiène disque, ART §6).
+ *
+ * ART §6 assume un **write-then-gate** (les octets rendus sont persistés PUIS la visibilité est gardée
+ * par le statut ; il faut le pixel rendu pour l'inspecter en QA — cf. ART §6). Un monde **rejeté
+ * définitivement** laisse donc des **fichiers servables orphelins** sur disque : c'est ce que cette
+ * purge supprime.
+ *
+ * **« Monde failed » sans statut `failed`** (le contrat `worlds.status` ne connaît que `buffered` /
+ * `active`, aucun changement de data model ici) : un monde est **définitivement rejeté** ⟺ il a un job
+ * `generate_world` **`failed`** (générateur épuisé après `maxRetries`, OU QA épuisée après
+ * `qa.maxAttempts`) **et aucun** job non-`failed` pour le même index (pas de retry en file, jamais
+ * réussi).
+ *
+ * **Scope vs GARDE (honnêteté #143)** : le filtre `status = 'failed'` de la 1ʳᵉ requête est le **SCOPE**
+ * (l'ensemble candidat = « les mondes qui ont échoué » ; efficacité : ne scanne que ces lignes) —
+ * **pas** une garde de correction mutation-prouvée (le retirer laisse les tests **verts** : il est
+ * outcome-équivalent à l'exclusion ci-dessous, car un index n'ayant QUE des jobs `failed` est de toute
+ * façon retenu). La **GARDE de correction** — celle à effet observable, **mutation-prouvée** — est
+ * `hasNonFailedJobForWorld` : elle **exclut** un index qui a **repris** (job `pending`/`running` en
+ * file) OU **réussi** (job `done` ⟹ éventuellement `active`). La retirer ferait purger un monde
+ * repris/réussi → **test rouge** (`un index qui a REPRIS (failed + done) n'est PAS purgé`). Un monde
+ * **`buffered` légitime** (QA passée, attente d'approbation) et un monde **`active`** ont tous deux un
+ * job `done` → **exclus** (intacts).
+ *
+ * **Idempotente** : la purge **ne mute jamais la DB** (lecture seule + effet de bord FS injecté). La
+ * re-jouer re-cible le même monde rejeté (le job `failed` persiste — pas de purge de la file en v1,
+ * cf. `worldPassedQa`) et `removeWorldAssets` est idempotent côté FS (supprimer un dossier absent =
+ * no-op). Aucune écriture DB ⇒ **aucun état partiel à annuler** ⇒ **pas de transaction** (un test de
+ * rollback serait vacuous, interdit — rétro #124).
+ *
+ * @returns le nombre de mondes dont les assets ont été purgés.
+ */
+export async function purgeFailedWorldAssets(
+  db: AppDatabase,
+  overrides?: Partial<PurgeFailedWorldsDeps>,
+): Promise<number> {
+  const removeWorldAssets = overrides?.removeWorldAssets ?? defaultRemoveWorldAssets;
+  // SCOPE candidat : index DISTINCTS ayant un job `failed` (extraction `json_extract` en SQL, #177 ;
+  // efficacité, PAS la garde de correction — cf. JSDoc). `NULL` = payload illisible → ignoré.
+  const failedRows = db
+    .selectDistinct({ idx: sql<number | null>`${payloadWorldIndexSql()}` })
+    .from(jobs)
+    .where(and(eq(jobs.type, GENERATE_WORLD_JOB), eq(jobs.status, "failed")))
+    .all();
+
+  let purged = 0;
+  for (const { idx } of failedRows) {
+    if (idx === null) continue; // payload illisible → pas d'index à purger.
+    // Garde runtime (#184) : le type `sql<number | null>` est une **assertion TS**, pas une borne
+    // runtime — `json_extract` peut renvoyer une string (`{"worldIndex":"../../../etc"}`), un négatif
+    // ou un fractionnaire. Un payload malformé/négatif/fractionnaire est **ignoré**, jamais passé au
+    // remover (symétrique de `readMasterBytesFromDisk`/`parseWorldIndex` qui valident la forme reçue).
+    if (!Number.isInteger(idx) || idx < 0) continue;
+    // Exclusion : un retry en file OU un succès (`done`, ⟹ éventuellement `active`) protège les assets.
+    if (hasNonFailedJobForWorld(db, idx)) continue;
+    await removeWorldAssets(idx);
+    purged += 1;
+  }
+  return purged;
 }

@@ -589,6 +589,19 @@ describe("loadWorldGenConfig — surcharges ⚙️ par env", () => {
     );
   });
 
+  it("retryBackoffMs : borne `parsePositiveInt` — `0` / négatif → défaut (backoff nul n'a pas de sens, #165)", () => {
+    // Bornes de validation du ⚙️ `retryBackoffMs` (posé + validé ; consommé par le backoff de
+    // `generateImage`, testé sur fetch mocké — cf. image-client.test.ts ; réseau réel owner-gated).
+    // `parsePositiveInt` : un backoff `0` (la BORNE de positivité) OU négatif retombe au défaut.
+    // Si le parse était relâché en `parseNonNegativeInt`, la casse `0` rougirait ici.
+    expect(loadWorldGenConfig({ WORLDGEN_RETRY_BACKOFF_MS: "0" }).retryBackoffMs).toBe(
+      CONFIG_DEFAULTS.worldgen.retryBackoffMs,
+    );
+    expect(loadWorldGenConfig({ WORLDGEN_RETRY_BACKOFF_MS: "-250" }).retryBackoffMs).toBe(
+      CONFIG_DEFAULTS.worldgen.retryBackoffMs,
+    );
+  });
+
   it("surcharge un prompt de base (calibrage playtest ⚙️) sans toucher les autres", () => {
     const { prompts } = loadWorldGenConfig({ WORLDGEN_PROMPT_STYLE: "custom kawaii style" });
     expect(prompts.style).toBe("custom kawaii style");
