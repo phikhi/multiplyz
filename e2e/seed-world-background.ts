@@ -35,6 +35,10 @@ try {
     tiles: "world/e2e/tiles.png",
     teddy: "world/e2e/teddy.png",
   });
+  // `slot = 0` ↔ monde résolu pour un profil frais : `resolveWorld(0)` sert `pool[0 % length]` avec
+  // `pool` trié `orderBy(asc(socle_worlds.slot))` (cf. `src/lib/worldgen/socle.ts`) → `pool[0]` = le
+  // slot MINIMAL. Couplage implicite à garder en sync : si l'indexation des slots socle changeait
+  // (slot min ≠ 0), ce `WHERE slot = 0` ne pointerait plus le monde de départ → cibler le slot min.
   const info = db.prepare("UPDATE socle_worlds SET asset_refs = ? WHERE slot = 0").run(assetRefs);
   console.log(`[seed-world-bg] ${databasePath} slot 0 → fixture (changes=${info.changes})`);
 } finally {

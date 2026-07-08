@@ -440,6 +440,10 @@ function worldMainStyle(base: CSSProperties, theme: WorldTheme | null): CSSPrope
   const themed: CSSProperties = {
     ...base,
     ["--world-accent" as string]: theme.accent,
+    // ⚠️ Garder cette formule en SYNC avec `tokens.css` (`--world-bg-tint`, même ratio 10%) : la
+    // re-déclaration inline est un contournement #184 (`color-mix` à `:root` ne se re-dérive PAS
+    // sous une surcharge descendante de `--world-accent`), donc la formule est volontairement
+    // DUPLIQUÉE ici — un changement du wash dans `tokens.css` doit être répercuté à cette ligne.
     ["--world-bg-tint" as string]:
       "color-mix(in srgb, var(--world-accent) 10%, var(--color-bg-secondary))",
   };
@@ -482,7 +486,8 @@ function WorldAccentBar() {
 /**
  * **Titre du monde + scrim de contraste** (story #189). Quand un **fond-image réel** du monde est
  * rendu (`hasBackground`, i.e. `theme.background !== null`), le titre est posé sur une **carte scrim
- * OPAQUE** consommant `--world-surface` (token per-monde, DESIGN_TOKENS §per-monde — jusqu'ici
+ * OPAQUE** consommant `--world-surface` (surface **du thème** light/dark, déclarée au §per-monde de
+ * DESIGN_TOKENS mais **CONSTANTE entre mondes** — seul `--world-accent` varie ; jusqu'ici
  * **ORPHELIN**, aucun consommateur DOM = piège #125) : elle garantit le contraste du titre
  * (`--color-text-primary` ≥4.5:1 sur `--world-surface`, résolu + testé) **INDÉPENDAMMENT** de la
  * photo IA arbitraire — une photo claire ne peut plus noyer le titre. **Opaque** (jamais
@@ -513,8 +518,9 @@ function ThemedTitle({
       style={{
         display: "flex",
         justifyContent: "center",
-        // Scrim OPAQUE = surface per-monde du thème courant (consomme `--world-surface`, #125) :
-        // garantit le contraste du titre quelle que soit la photo IA (jamais semi-transparent, #170).
+        // Scrim OPAQUE = surface **du thème** (light/dark, constante entre mondes ; consomme
+        // `--world-surface`, #125) : garantit le contraste du titre quelle que soit la photo IA
+        // (jamais semi-transparent, #170). Seul `--world-accent`/`--world-bg-tint` varient par monde.
         backgroundColor: "var(--world-surface)",
         padding: "var(--space-3) var(--space-5)",
         borderRadius: "var(--card-radius)",

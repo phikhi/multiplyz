@@ -229,9 +229,14 @@ describe("MapScreen — scrim de contraste du titre (--world-surface, story #189
     expect(scrim).not.toBeNull();
     expect(scrim!.style.backgroundColor).toBe("var(--world-surface)");
     // Le titre est un ENFANT EN FLUX du scrim → peint AU-DESSUS du fond de carte, jamais occulté (#170).
-    const heading = scrim!.querySelector("h1");
+    const heading = scrim!.querySelector<HTMLElement>("h1");
     expect(heading).not.toBeNull();
     expect(heading!.textContent).toContain("Océan scintillant");
+    // LIEN glyphe RENDU ↔ token testé (#104/#125) : la couleur EFFECTIVEMENT posée sur le titre est
+    // bien `--color-text-primary` — le MÊME token dont la garde de contraste plancher ci-dessous
+    // prouve le ≥4.5:1 sur `--world-surface`. Sans cette assertion, un swap de `TITLE_TEXT_STYLE.color`
+    // vers un autre token ne rougirait pas (la garde de contraste le résout par NOM, pas sur le rendu).
+    expect(heading!.style.color).toBe("var(--color-text-primary)");
   });
 
   it("pas de fond réel (background null) → AUCUN scrim : le titre garde le fond de page neutre (pas de régression #125)", async () => {
