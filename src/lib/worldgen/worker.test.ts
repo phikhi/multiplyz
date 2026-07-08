@@ -280,13 +280,18 @@ describe("resolveWorkerDeps — défauts prod", () => {
       .spyOn(generateWorldModule, "generateWorld")
       .mockResolvedValue({ worldIndex: 3 } as unknown as GeneratedWorld);
     const { generate } = resolveWorkerDeps();
-    await generate(db, "ocean", 3, []);
-    // Le worker passe `{ loadMasterBytes: readMasterBytesFromDisk }` en 5ᵉ arg → l'ancrage img2img
-    // devient effectif en prod. Rougit si le thunk omet l'injection (retomberait sur le marqueur).
-    expect(spy).toHaveBeenCalledWith(db, "ocean", 3, [], {
-      loadMasterBytes: readMasterBytesFromDisk,
-    });
-    spy.mockRestore();
+    // `try/finally` : si l'assertion échoue (mutation), `mockRestore` DOIT quand même s'exécuter,
+    // sinon le spy `generateWorld` fuit dans le test suivant (QA #192). La preuve reste au bon endroit.
+    try {
+      await generate(db, "ocean", 3, []);
+      // Le worker passe `{ loadMasterBytes: readMasterBytesFromDisk }` en 5ᵉ arg → l'ancrage img2img
+      // devient effectif en prod. Rougit si le thunk omet l'injection (retomberait sur le marqueur).
+      expect(spy).toHaveBeenCalledWith(db, "ocean", 3, [], {
+        loadMasterBytes: readMasterBytesFromDisk,
+      });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("le generate prod ancre la variante Teddy sur les octets du master via loadMasterBytes (threadé jusqu'à generateWorld, pas le marqueur — #186)", async () => {
@@ -304,28 +309,33 @@ describe("resolveWorkerDeps — défauts prod", () => {
       return Promise.resolve(Buffer.from("fake-image"));
     });
 
-    // `generate` NON surchargé → thunk par défaut → vraie `generateWorld`. Seul `loadMasterBytes`
-    // est surchargé (le worker doit le THREADER jusqu'aux deps de `generateWorld`).
-    const { generate } = resolveWorkerDeps({
-      loadMasterBytes: (ref) => {
-        seenRefs.push(ref);
-        return sentinel;
-      },
-    });
-    await generate(db, themeForWorld(0).slug, 0, []);
+    // `try/finally` : `mockRestore` du spy `generateImage` s'exécute même si une assertion échoue
+    // (mutation) → jamais de fuite du spy dans le test suivant (QA #192).
+    try {
+      // `generate` NON surchargé → thunk par défaut → vraie `generateWorld`. Seul `loadMasterBytes`
+      // est surchargé (le worker doit le THREADER jusqu'aux deps de `generateWorld`).
+      const { generate } = resolveWorkerDeps({
+        loadMasterBytes: (ref) => {
+          seenRefs.push(ref);
+          return sentinel;
+        },
+      });
+      await generate(db, themeForWorld(0).slug, 0, []);
 
-    // La variante Teddy est le SEUL appel image portant `refImages` (créatures = texte seul, ADR 0009).
-    const teddyCall = captured.find((c) => c.refImages !== undefined);
-    expect(teddyCall?.refImages).toHaveLength(1);
-    expect(teddyCall?.refImages?.[0].mimeType).toBe("image/png");
-    // Les octets ancrés = ceux chargés par le `loadMasterBytes` du worker (sentinel), PAS le marqueur
-    // `Buffer.from(assetRef)` : mutation-preuve — si le thunk omet `{ loadMasterBytes }`, `generateWorld`
-    // retombe sur `masterRefBytes(master.assetRef)` → `data` = les octets du CHEMIN → ces deux assertions rougissent.
-    expect(teddyCall?.refImages?.[0].data).toEqual(sentinel);
-    expect(teddyCall?.refImages?.[0].data).not.toEqual(Buffer.from(MASTER_REF, "utf8"));
-    // Le loader du worker a bien reçu la réf du master approuvé (jamais les photos, WORLDGEN §8).
-    expect(seenRefs).toEqual([MASTER_REF]);
-    spy.mockRestore();
+      // La variante Teddy est le SEUL appel image portant `refImages` (créatures = texte seul, ADR 0009).
+      const teddyCall = captured.find((c) => c.refImages !== undefined);
+      expect(teddyCall?.refImages).toHaveLength(1);
+      expect(teddyCall?.refImages?.[0].mimeType).toBe("image/png");
+      // Les octets ancrés = ceux chargés par le `loadMasterBytes` du worker (sentinel), PAS le marqueur
+      // `Buffer.from(assetRef)` : mutation-preuve — si le thunk omet `{ loadMasterBytes }`, `generateWorld`
+      // retombe sur `masterRefBytes(master.assetRef)` → `data` = les octets du CHEMIN → ces deux assertions rougissent.
+      expect(teddyCall?.refImages?.[0].data).toEqual(sentinel);
+      expect(teddyCall?.refImages?.[0].data).not.toEqual(Buffer.from(MASTER_REF, "utf8"));
+      // Le loader du worker a bien reçu la réf du master approuvé (jamais les photos, WORLDGEN §8).
+      expect(seenRefs).toEqual([MASTER_REF]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
