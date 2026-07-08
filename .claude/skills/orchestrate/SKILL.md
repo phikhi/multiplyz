@@ -54,7 +54,7 @@ Rapporter le tri (bref). Ne pas absorber une issue hors-scope dans une story (an
 ## 5. Boucle d'exécution (par story) — build DÉLÉGUÉ
 Le thread orchestrateur **ne construit pas lui-même** (contexte plat, cf. §7). Par story :
 1. **Déléguer le build à un subagent isolé** (`isolation: worktree` ; modèle selon risque, §7). Brief : « implémenter la story #X (critères + DoD) en suivant le workflow multiplyz (`story-start` → build 100 % logique critique → gates lint/type/coverage/build/e2e + captures → `open-pr`) ; **escalader tout drift** à l'orchestrateur ; **ne rien merger** ». Reçu **compact** attendu : n° de PR, résultats de gates, fichiers touchés, captures, **flag drift éventuel**.
-2. **Reviewers indépendants** (subagents, scope + PO, en // ; modèle/fan-out selon §7) → verdicts.
+2. **Reviewers indépendants** (subagents, scope + PO, en // ; modèle/fan-out selon §7) → verdicts. **Front livré → VÉRIF VISUELLE des pixels (garde-fou dur, CLAUDE.md #170)** : l'orchestrateur **et** le reviewer Frontend **ouvrent la capture et regardent** que le changement est réellement visible (bon endroit, non recouvert) ; tout élément superposé (SVG/overlay/badge/`absolute`) exige **en plus** une **garde E2E de non-occlusion** (`boundingClientRect`). Panel de tests/reviews vert sur un front **jamais rendu visible** = **DoD non satisfait**.
 3. **Fixes de consensus in-contract** : renvoyer au **subagent de build** (via SendMessage — il a encore son worktree) « applique : … ». **Pas** dans le thread principal.
 4. **Merge** (ADR 0003 : reviews+PO ✅ + CI verte + à jour) → **`retro`** → `LEARNINGS` → **checkpoint statut** (mémoire).
 
@@ -64,7 +64,8 @@ Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les m
 1. Re-trier **toutes** les `discovered` restantes (grille §2).
 2. Les `backlog-hygiène` du scope de l'épic (durcissement / sécu / data non-bloquants — ex. #50/#82/#37/#44) → **regroupées en UNE story de durcissement** (`hardening`), passée par la boucle normale (§5) **avant** de démarrer l'épic suivant. Ne jamais clore un épic en laissant sa dette sécu/data en suspens.
 3. Les `parké-playtest` et `gate-déploiement` restent sous leur milestone (non drainées ici, mais **visibles et assignées**).
-4. Puis **clôturer l'épic** et revenir à l'étape 3.
+4. **Avant de clore** : vérifier que la **VALEUR PRODUIT CENTRALE de l'épic atteint réellement l'enfant bout-en-bout** (câblage consommateur fait), pas seulement que chaque story a livré son mécanisme testé (CLAUDE.md #180) — gap vu par les reviewers **fidélité** (game-design + PO), jamais par l'ingénierie qui approuve le mécanisme. Une **story de câblage consommateur** manquante se planifie **avant** la clôture (pas en backlog-hygiène) ; tout owner-gate se **file en issue `needs-owner`**.
+5. Puis **clôturer l'épic** et revenir à l'étape 3.
 
 ## 6. Escalade — SEULEMENT le drift
 S'arrêter et demander le sign-off du propriétaire **uniquement** si une décision **modifierait une décision verrouillée** : modèle de données PLAN · pédagogie ENGINE · économie · sécurité · scope d'épic. **Sinon, jamais.** (ADR 0004.) Le subagent de build **escalade le drift** à l'orchestrateur (il ne tranche pas). Présenter le choix de drift clairement + option recommandée, attendre l'arbitrage.
