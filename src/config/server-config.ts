@@ -355,7 +355,21 @@ export interface WorldGenConfig {
    * tentative (0 = aucun retry). Défaut `3`.
    */
   maxRetries: number;
-  /** Délai de base du backoff entre deux essais (ms) — croissance linéaire × n° d'essai. Défaut `500`. */
+  /**
+   * ⚙️ Délai de base du backoff (ms) entre deux essais du retry transitoire — croissance **linéaire**
+   * (`retryBackoffMs × n° d'essai`). Défaut `500`.
+   *
+   * **État de consommation (honnête, #165/#155)** : ce ⚙️ **est consommé** par la boucle de retry de
+   * `generateImage` (`lib/worldgen/image-client.ts` : `sleep(retryBackoffMs × attempt)` sur 429/500/503).
+   * Son effet sur le **timing du backoff** est **unit-testé** avec un `fetch` **mocké** (statuts
+   * transitoires simulés) + un `sleep` **espionné** (`image-client.test.ts`) — **aucun appel réseau
+   * réel** en CI. Ce qui reste **owner-gated** : l'exercice contre un **vrai endpoint** flaky (Gemini
+   * live, clé owner) n'est **jamais** joué en CI (le worker ne tourne pas contre le réseau réel ici).
+   * Donc : « backoff **posé + validé + testé sur fetch mocké** ; calibrage sur endpoint réel à
+   * l'intégration réseau owner » — **jamais** « prouvé contre le réseau réel ».
+   *
+   * **Validé** : `parsePositiveInt` (un backoff `0`/négatif n'a pas de sens → retombe au défaut).
+   */
   retryBackoffMs: number;
   /** Prompts de base verrouillés (charte ART §5). Constantes ⚙️ (cf. `WorldGenPrompts`). */
   prompts: WorldGenPrompts;
