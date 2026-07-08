@@ -1234,10 +1234,13 @@ describe("purgeFailedWorldAssets (#176b) — purge idempotente des assets de mon
     approveWorld(db, "world:7", "maman"); // buffered → active.
 
     const { purged, removed } = await purgeRecording(db);
-    // Effet observable : SEUL l'index 5 est purgé. Retirer la GARDE de correction
-    // `hasNonFailedJobForWorld` ferait purger 3 et 7 (ils ont un job `done`) → cette assertion rougit.
-    // (Le filtre de SCOPE `status = 'failed'` est outcome-équivalent à cette garde → le retirer laisse
-    // les tests VERTS : c'est un narrowing d'efficacité, PAS une garde mutation-prouvée — honnête #143.)
+    // Effet observable : SEUL l'index 5 est purgé. Ce test prouve le **pipeline + SCOPE** (les mondes
+    // non-`failed` — 3 `buffered` et 7 `active` — ne sont JAMAIS purgés), mais il reste **VERT sans
+    // l'exclusion `hasNonFailedJobForWorld`** : 3 et 7 n'ont **pas** de job `failed`, donc ils ne sont
+    // même pas dans `failedRows` (filtre de SCOPE `status = 'failed'`) → l'exclusion ne les évalue
+    // jamais. Il ne prouve donc PAS `hasNonFailedJobForWorld` (honnête #143 : le SCOPE est un narrowing
+    // outcome-équivalent, pas la garde mutation-prouvée). La preuve de l'exclusion est le test « REPRIS »
+    // ci-dessous — seul cas où le scope ne suffit pas (index à la fois `failed` ET `done`).
     expect(removed).toEqual([5]);
     expect(purged).toBe(1);
   });
@@ -1245,10 +1248,13 @@ describe("purgeFailedWorldAssets (#176b) — purge idempotente des assets de mon
   it("MUTATION-PROUVÉ : un index qui a REPRIS (failed + done) n'est PAS purgé (exclusion `done`)", async () => {
     const db = freshDb();
     // Index 8 : un 1er job a échoué puis un 2ᵉ a RÉUSSI (done) → le monde n'est pas un rejet définitif.
+    // C'est le SEUL cas où le scope `status = 'failed'` ne suffit PAS (l'index 8 EST dans `failedRows`
+    // via son job `failed`) : seule l'exclusion `hasNonFailedJobForWorld` (qui voit le job `done`) le
+    // protège. Neutraliser cette exclusion fait purger l'index 8 → `expected [ 8 ] to deeply equal []`
+    // → CE test rougit (vérifié par mutation ; le test « SEUL le monde failed » ci-dessus reste vert).
     seedFailedJob(db, 8);
     seedDoneJob(db, 8);
     const { removed } = await purgeRecording(db);
-    // Sans l'exclusion `hasNonFailedJobForWorld`, l'index 8 (job failed présent) serait purgé → rouge.
     expect(removed).toEqual([]);
   });
 

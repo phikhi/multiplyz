@@ -36,6 +36,8 @@
 5. **Stocker** assets + métadonnées + **prompt + seed** (reproductibilité).
 6. Statut `active` (après validation parent si activée).
 
+> **Ordre d'exécution réel = write-then-gate** (cf. [ART §6](./ART.md#6-stratégie-de-cohérence-le-plus-important), réconcilié #176) : les étapes 4/5 décrivent l'**intention pédagogique** (valider avant d'exposer), pas l'ordre d'écriture DB — à l'implémentation, les assets sont **écrits d'abord** (fichiers servables + ligne `worlds` en `buffered`), **puis** la QA s'exécute sur le pixel rendu, **puis** la **visibilité** est gardée par le statut (`active` seulement après QA réussie).
+
 ## 5. Modèle d'image & stockage
 
 - **Modèle** : **Nano Banana (Gemini 2.5 Flash Image)** — **consistance de personnage** + **img2img** + fusion multi-références (idéal pour Teddy). **Confirmé par spike** (ADR 0008, 2026-07-06 — cf. `docs/spike/nano-banana/`) : qualité kawaii flat-vector excellente, consistance Stage A→B excellente, **~0,039 $/image** (~0,45 $/monde), aucune sur-censure. Clé **API Gemini** (`GEMINI_API_KEY`). Modèle ⚙️ (`IMAGE_MODEL` override) — chemin d'upgrade vers `gemini-3-*-image` ouvert sans lock-in. **Contraintes actées** (spike) : retry transitoire (500/503/429), prompt « blank ear tag, no text », pas d'alpha fiable (fond blanc → détourage/carte pleine ⚙️).
