@@ -17,10 +17,12 @@ import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
  * composant ne fait qu'AFFICHER `WorldMap.nodes`, jamais recalculer positions/count).
  *
  * **Thématisation per-monde (story 6.7)** : `<main>` porte `data-world=<slug>` +
- * `--world-accent` (DESIGN_TOKENS §per-monde — la SEULE variable qu'un monde surcharge)
- * et le **fond du monde** (fond teinté `--world-bg-tint` dérivé de l'accent, + image Nginx
- * **validée** si un asset réel existe). Le titre est **thématisé** (« Monde 3 · Forêt ») et
- * un **bandeau d'accent** consomme `--world-accent` en pixel visible. Le thème est un
+ * `--world-accent` (DESIGN_TOKENS §per-monde — la SEULE variable qu'un monde surcharge).
+ * L'observable per-monde vient d'un **titre thématisé** (« Monde 3 · Forêt ») + d'un **bandeau
+ * d'accent** consommant `--world-accent` en pixel visible. Le **fond-image du monde** (Nginx
+ * **validé**) n'est rendu que si un asset réel existe (chemin **dormant** avant l'owner-run #181) ;
+ * la **dérivation per-monde du tint de fond + le scrim de contraste sont différés à l'issue #189**
+ * (cf. `worldMainStyle` — le repli `--world-bg-tint` est aujourd'hui NEUTRE). Le thème est un
  * attribut **non-clé** : il ne touche jamais la géométrie (rétro #123).
  *
  * **Navigation nœud → niveau** (`(app)/jouer`) : le nœud **courant** (point de
@@ -390,29 +392,37 @@ function NodePath({ map }: { readonly map: WorldMap }) {
 }
 
 /**
- * **Style thématisé du conteneur carte** (câblage carte↔monde, story 6.7). Pose toujours
- * `--world-accent` (DESIGN_TOKENS §per-monde : la SEULE variable qu'un monde surcharge — le tint
- * `--world-bg-tint` s'en dérive côté CSS, theme-safe) sur `<main>` → tous les descendants (bandeau
- * d'accent…) en héritent.
+ * **Style thématisé du conteneur carte** (câblage carte↔monde, story 6.7). Pose `--world-accent`
+ * sur `<main>` (DESIGN_TOKENS §per-monde : la SEULE variable qu'un monde surcharge) → tous les
+ * descendants (bandeau d'accent…) en héritent. En story 6.7, l'observable per-monde vient de
+ * `--world-accent` (bandeau d'accent + titre thématisé), pas d'une teinte de fond.
  *
  * **Fond du monde** : rendu comme `background` de `<main>` **uniquement** quand un **asset réel
  * validé** existe (`theme.background !== null`, chemin Nginx passé par `isRenderableAssetRef`) →
- * image en couverture, avec le fond teinté `--world-bg-tint` en **repli** dessous. Sans asset réel
- * (placeholder du gate owner → `null`, cas CI/hors-ligne), `<main>` **garde son fond neutre**
- * (`bg-bg`) : le titre et le trait du chemin conservent leur **fond de référence de contraste
- * inchangé** (pas de régression #125), et le thème per-monde reste porté par le **bandeau d'accent**
- * (pixel plein `--world-accent`) + le **titre thématisé**. Le fond étant le `background` de `<main>`
- * (backmost), il ne peut **jamais** recouvrir les nœuds (anti-occlusion #170).
+ * image en couverture, avec `--world-bg-tint` en **repli** dessous. Sans asset réel (placeholder du
+ * gate owner → `null`, cas CI/hors-ligne), `<main>` **garde son fond neutre** (`bg-bg`) : le titre
+ * et le trait du chemin conservent leur **fond de référence de contraste inchangé** (pas de
+ * régression #125). Le fond étant le `background` de `<main>` (backmost), il ne peut **jamais**
+ * recouvrir les nœuds (anti-occlusion #170).
+ *
+ * **NB honnête (tell commentaire↔code)** : `--world-bg-tint` est aujourd'hui **NEUTRE, non
+ * per-monde** — il est déclaré à `:root` (`color-mix(--world-accent 10%, …)`) et n'est **pas**
+ * re-dérivé par monde ici. La **dérivation per-monde du tint**, le **compositing du fond-image
+ * réel** et le **scrim de contraste du titre** sont **différés à l'issue #189** (design en aveugle
+ * sans les vrais assets = anti #170). Ce repli teinté ne s'active de toute façon que sur le chemin
+ * **dormant** `background !== null` (aucun asset réel avant l'owner-run #181).
  */
 function worldMainStyle(base: CSSProperties, theme: WorldTheme | null): CSSProperties {
   if (theme === null) {
     return base;
   }
-  // Un monde ne pose qu'`--world-accent` (DESIGN_TOKENS §per-monde) ; le reste se dérive en CSS.
+  // Un monde ne pose qu'`--world-accent` (DESIGN_TOKENS §per-monde) ; l'observable per-monde 6.7
+  // (bandeau d'accent + titre) en découle. Le tint/fond-image sont un chemin dormant (cf. NB).
   const themed: CSSProperties = { ...base, ["--world-accent" as string]: theme.accent };
   if (theme.background !== null) {
-    // Asset réel validé (Nginx) : image en couverture, fond teinté `--world-bg-tint` en repli
-    // dessous (theme-safe). Jamais rendu vers une URL non validée (garde `isRenderableAssetRef`).
+    // Chemin DORMANT (aucun asset réel avant l'owner-run #181) : asset validé (Nginx) → image en
+    // couverture, `--world-bg-tint` (aujourd'hui NEUTRE, non per-monde — cf. NB, différé #189) en
+    // repli dessous. Jamais rendu vers une URL non validée (garde `isRenderableAssetRef`).
     themed.backgroundColor = "var(--world-bg-tint)";
     themed.backgroundImage = `url("${theme.background}")`;
     themed.backgroundSize = "cover";
