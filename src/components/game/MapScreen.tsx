@@ -1,19 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { strings } from "@/strings";
 import { LogoutButton } from "@/components/LogoutButton";
 import { currentMapAction } from "@/app/(app)/carte/actions";
 import type { MapNode, MapStars, NodeType, WorldMap } from "@/lib/game/map";
+import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
 
 /**
- * **Écran carte** — chemin de nœuds du monde courant (story #125, WIREFRAMES §2,
+ * **Écran carte** — chemin de nœuds du monde courant (story #125/6.7, WIREFRAMES §2,
  * PRODUCT §2.1, MAP §1/§2/§4/§5). Consomme la carte **déjà composée côté serveur**
- * (5.2 géométrie + 5.3 progression + moteur 3.4 dette de révision, via
- * `currentMapAction` → `loadCurrentWorldMap`) — **aucune régénération de géométrie**
- * ici (invariance de géométrie à l'état runtime, CLAUDE.md/rétro #123 : ce composant
- * ne fait qu'AFFICHER `WorldMap.nodes`, jamais recalculer positions/count).
+ * (5.2 géométrie + 5.3 progression + moteur 3.4 dette de révision + **thème per-monde**
+ * 6.6/6.7, via `currentMapAction` → `loadCurrentWorldMap`) — **aucune régénération de
+ * géométrie** ici (invariance de géométrie à l'état runtime, CLAUDE.md/rétro #123 : ce
+ * composant ne fait qu'AFFICHER `WorldMap.nodes`, jamais recalculer positions/count).
+ *
+ * **Thématisation per-monde (story 6.7)** : `<main>` porte `data-world=<slug>` +
+ * `--world-accent` (DESIGN_TOKENS §per-monde — la SEULE variable qu'un monde surcharge)
+ * et le **fond du monde** (fond teinté `--world-bg-tint` dérivé de l'accent, + image Nginx
+ * **validée** si un asset réel existe). Le titre est **thématisé** (« Monde 3 · Forêt ») et
+ * un **bandeau d'accent** consomme `--world-accent` en pixel visible. Le thème est un
+ * attribut **non-clé** : il ne touche jamais la géométrie (rétro #123).
  *
  * **Navigation nœud → niveau** (`(app)/jouer`) : le nœud **courant** (point de
  * reprise, MAP §1) et tout nœud **terminé** (rejoue, progression monotone) sont des
@@ -381,22 +389,86 @@ function NodePath({ map }: { readonly map: WorldMap }) {
   );
 }
 
+/**
+ * **Style thématisé du conteneur carte** (câblage carte↔monde, story 6.7). Pose toujours
+ * `--world-accent` (DESIGN_TOKENS §per-monde : la SEULE variable qu'un monde surcharge — le tint
+ * `--world-bg-tint` s'en dérive côté CSS, theme-safe) sur `<main>` → tous les descendants (bandeau
+ * d'accent…) en héritent.
+ *
+ * **Fond du monde** : rendu comme `background` de `<main>` **uniquement** quand un **asset réel
+ * validé** existe (`theme.background !== null`, chemin Nginx passé par `isRenderableAssetRef`) →
+ * image en couverture, avec le fond teinté `--world-bg-tint` en **repli** dessous. Sans asset réel
+ * (placeholder du gate owner → `null`, cas CI/hors-ligne), `<main>` **garde son fond neutre**
+ * (`bg-bg`) : le titre et le trait du chemin conservent leur **fond de référence de contraste
+ * inchangé** (pas de régression #125), et le thème per-monde reste porté par le **bandeau d'accent**
+ * (pixel plein `--world-accent`) + le **titre thématisé**. Le fond étant le `background` de `<main>`
+ * (backmost), il ne peut **jamais** recouvrir les nœuds (anti-occlusion #170).
+ */
+function worldMainStyle(base: CSSProperties, theme: WorldTheme | null): CSSProperties {
+  if (theme === null) {
+    return base;
+  }
+  // Un monde ne pose qu'`--world-accent` (DESIGN_TOKENS §per-monde) ; le reste se dérive en CSS.
+  const themed: CSSProperties = { ...base, ["--world-accent" as string]: theme.accent };
+  if (theme.background !== null) {
+    // Asset réel validé (Nginx) : image en couverture, fond teinté `--world-bg-tint` en repli
+    // dessous (theme-safe). Jamais rendu vers une URL non validée (garde `isRenderableAssetRef`).
+    themed.backgroundColor = "var(--world-bg-tint)";
+    themed.backgroundImage = `url("${theme.background}")`;
+    themed.backgroundSize = "cover";
+    themed.backgroundPosition = "center";
+    themed.backgroundRepeat = "no-repeat";
+  }
+  return themed;
+}
+
+/**
+ * **Bandeau d'accent du monde** (décoratif, `aria-hidden`) — consommateur **direct** de
+ * `--world-accent` (fond plein), rendu SOUS le titre. C'est le pixel per-monde le plus lisible :
+ * sa couleur change avec le monde (généré/socle), en flux (jamais recouvert), doublé du titre
+ * thématisé et du fond teinté. DESIGN_TOKENS §per-monde : `--world-accent` sert aux éléments
+ * **thématiques** (fond de carte, barre), jamais aux actions (qui restent `--color-accent-primary`).
+ */
+function WorldAccentBar() {
+  return (
+    <div
+      aria-hidden="true"
+      data-world-accent-bar=""
+      style={{
+        width: "100%",
+        maxWidth: "var(--max-width-play)",
+        height: "var(--space-2)",
+        backgroundColor: "var(--world-accent)",
+        borderRadius: "var(--border-radius-full)",
+      }}
+    />
+  );
+}
+
 type ScreenState =
   | { readonly kind: "loading" }
   | { readonly kind: "error" }
-  | { readonly kind: "ready"; readonly map: WorldMap };
+  | { readonly kind: "unavailable" }
+  | { readonly kind: "ready"; readonly map: CurrentWorldMap };
 
 /** Orchestrateur client de l'écran carte — charge la carte composée serveur au montage. */
 export function MapScreen() {
   const [screen, setScreen] = useState<ScreenState>({ kind: "loading" });
 
   const fetchMap = useCallback(async () => {
-    const result = await currentMapAction();
-    if (result.map === null) {
+    try {
+      const result = await currentMapAction();
+      if (result.status === "ready") {
+        setScreen({ kind: "ready", map: result.map });
+        return;
+      }
+      // Monde de secours indispo (socle non amorcé) → message doux Teddy (jamais l'erreur brute) ;
+      // non authentifié / autre → message générique de repli.
+      setScreen({ kind: result.status === "unavailable" ? "unavailable" : "error" });
+    } catch {
+      // Toute erreur serveur non interceptée (invariant) → repli générique, jamais l'erreur brute.
       setScreen({ kind: "error" });
-      return;
     }
-    setScreen({ kind: "ready", map: result.map });
   }, []);
 
   const retry = useCallback(() => {
@@ -418,17 +490,23 @@ export function MapScreen() {
     };
   }, [fetchMap]);
 
+  // Thème per-monde (câblage carte↔monde, story 6.7) — disponible seulement une fois la carte
+  // chargée. `data-world` + `--world-accent` + fond du monde posés sur `<main>` (backmost).
+  const theme = screen.kind === "ready" ? screen.map.theme : null;
+  const baseMainStyle: CSSProperties = {
+    minHeight: "100dvh",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "var(--space-6)",
+    padding: "var(--space-6)",
+  };
+
   return (
     <main
       className="bg-bg text-text"
-      style={{
-        minHeight: "100dvh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "var(--space-6)",
-        padding: "var(--space-6)",
-      }}
+      data-world={theme?.slug}
+      style={worldMainStyle(baseMainStyle, theme)}
     >
       {screen.kind === "loading" && (
         <h1
@@ -482,6 +560,45 @@ export function MapScreen() {
         </>
       )}
 
+      {screen.kind === "unavailable" && (
+        <>
+          {/* Socle de secours indispo → message DOUX voix de Teddy (COPY §90/91), jamais l'erreur
+              brute. `role="status"` : annoncé (a11y), même patron que le chargement. */}
+          <h1
+            role="status"
+            style={{
+              fontFamily: "var(--font-family-display)",
+              fontSize: "var(--font-size-xl)",
+              fontWeight: "var(--font-weight-bold)",
+              color: "var(--color-text-primary)",
+              margin: 0,
+              textAlign: "center",
+            }}
+          >
+            {strings.map.worldUnavailable}
+          </h1>
+          <button
+            type="button"
+            className="mz-focusable"
+            onClick={retry}
+            style={{
+              minHeight: "var(--tap-target-min)",
+              padding: "var(--space-3) var(--space-6)",
+              fontFamily: "var(--font-family-display)",
+              fontSize: "var(--font-size-md)",
+              fontWeight: "var(--font-weight-bold)",
+              color: "var(--color-text-inverse)",
+              backgroundColor: "var(--color-accent-primary)",
+              border: "none",
+              borderRadius: "var(--border-radius-full)",
+              cursor: "pointer",
+            }}
+          >
+            {strings.map.loadErrorRetry}
+          </button>
+        </>
+      )}
+
       {screen.kind === "ready" && (
         <>
           <h1
@@ -494,8 +611,15 @@ export function MapScreen() {
               textAlign: "center",
             }}
           >
-            {fill(strings.map.title, { n: String(screen.map.worldIndex + 1) })}
+            {/* Titre THÉMATISÉ (WIREFRAMES §2 « Monde 3 · La Forêt ») : le thème per-monde
+                (généré/socle) atteint l'enfant dans le titre — texte, jamais occulté (#180). */}
+            {fill(strings.map.titleThemed, {
+              n: String(screen.map.worldIndex + 1),
+              theme: screen.map.theme.label,
+            })}
           </h1>
+          {/* Bandeau d'accent : consommateur direct de `--world-accent` (pixel per-monde visible). */}
+          <WorldAccentBar />
           <NodePath map={screen.map} />
           {/* Hub (WIREFRAMES §2) : accès à la Collection (Pokédex) depuis la carte. */}
           <Link

@@ -64,3 +64,34 @@ export function deriveWorldPalette(slug: string, accent: string): WorldPalette {
 export function serializePalette(palette: WorldPalette): string {
   return JSON.stringify(palette);
 }
+
+/**
+ * **Désérialise** une palette depuis la colonne texte `worlds.palette` / `socle_worlds.palette`
+ * (JSON produit par `serializePalette`) en **revalidant sa forme** avant de la rendre au front
+ * (câblage carte↔monde, story 6.7). La palette vient de la **DB** (source de vérité serveur),
+ * mais on garde la **forme** par défense en profondeur : un JSON mal formé, un `slug` non-string
+ * ou un `accent` non-hex **lève** (`PaletteError`, échec loud au seam) plutôt que de poser un
+ * `--world-accent` invalide (variable CSS silencieusement ignorée → monde sans teinte). Pure.
+ *
+ * @throws {PaletteError} si le JSON est invalide, la forme incorrecte, ou l'accent non-hex.
+ */
+export function deserializePalette(json: string): WorldPalette {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new PaletteError(`Palette illisible : JSON invalide (${json}).`);
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new PaletteError(`Palette invalide : objet attendu (${json}).`);
+  }
+  const { slug, accent } = parsed as Record<string, unknown>;
+  if (typeof slug !== "string" || slug.length === 0) {
+    throw new PaletteError(`Palette invalide : "slug" manquant ou non-texte (${json}).`);
+  }
+  if (typeof accent !== "string") {
+    throw new PaletteError(`Palette invalide : "accent" manquant ou non-texte (${json}).`);
+  }
+  // Réutilise la même garde de forme que la dérivation (accent hex `#RGB`/`#RRGGBB`).
+  return deriveWorldPalette(slug, accent);
+}

@@ -6,6 +6,8 @@ import { CONFIG_DEFAULTS, type EngineConfig, type MapConfig } from "@/config/ser
 import { generateFacts } from "@/lib/engine/facts";
 import { upsertMastery } from "@/lib/engine/persistence";
 import type { MasteryState } from "@/lib/engine/mastery";
+import { buildSocleWorld } from "@/lib/worldgen/socle";
+import { deserializePalette } from "@/lib/worldgen/palette";
 import { recordStars } from "./progress";
 import { loadCurrentWorldMap, toMapBuildConfig } from "./current-map";
 
@@ -131,5 +133,43 @@ describe("loadCurrentWorldMap — étoiles reportées (MAP §4, jamais une barri
     const map = loadCurrentWorldMap(db, profileId, MAP, ENGINE, NOW);
     expect(map.nodes[0].stars).toBe(2);
     expect(map.nodes[0].status).toBe("completed");
+  });
+});
+
+describe("loadCurrentWorldMap — thème per-monde câblé BOUT-EN-BOUT (story 6.7, WORLDGEN §7)", () => {
+  it("profil neuf → le thème du SOCLE de secours atteint la carte (fallback servi à l'enfant)", () => {
+    // `runMigrations` a amorcé le socle (aucun monde généré `active`) → resolveWorld(0) retombe
+    // sur socle[0]. Effet observable BOUT-EN-BOUT (pas juste `resolveWorld` appelé) : la palette
+    // réelle du socle atteint la donnée carte → `--world-accent` côté front.
+    const world0 = loadCurrentWorldMap(db, profileId, MAP, ENGINE, NOW);
+    expect(world0.theme.label).toBe(buildSocleWorld(0).theme);
+    expect(world0.theme.accent).toBe(deserializePalette(buildSocleWorld(0).palette).accent);
+    expect(world0.theme.slug).toBe(deserializePalette(buildSocleWorld(0).palette).slug);
+    // Assets socle = placeholder (gate owner) → pas de fond réel rendable (fond teinté côté front).
+    expect(world0.theme.background).toBeNull();
+  });
+
+  it("le thème est un attribut NON-CLÉ : il n'altère NI le nombre de nœuds NI leurs positions (invariance #123)", () => {
+    // Même monde, dette élevée (overlay révision) : la géométrie (compte + positions) est
+    // IDENTIQUE à dette nulle — seul le thème/attributs non-clés varient. Casse si le thème
+    // rétroagissait sur la géométrie.
+    const clean = loadCurrentWorldMap(db, profileId, MAP, ENGINE, NOW);
+    for (let i = 0; i < ENGINE.revisionDebtThreshold + 1; i += 1) markDue(i);
+    const withDebt = loadCurrentWorldMap(db, profileId, MAP, ENGINE, NOW);
+    expect(withDebt.nodes).toHaveLength(clean.nodes.length);
+    expect(withDebt.nodes.map((n) => n.position)).toEqual(clean.nodes.map((n) => n.position));
+    // Le thème reste attaché dans les deux cas (même monde → même thème).
+    expect(withDebt.theme.accent).toBe(clean.theme.accent);
+  });
+
+  it("le thème VARIE par monde (effet observable end-to-end, #180) : monde 0 ≠ monde 1", () => {
+    const world0 = loadCurrentWorldMap(db, profileId, MAP, ENGINE, NOW);
+    // Complète tout le monde 0 (boss inclus) → la carte bascule sur le monde 1 (socle[1]).
+    for (let i = 0; i < NODE_COUNT; i += 1) complete(0, i);
+    const world1 = loadCurrentWorldMap(db, profileId, MAP, ENGINE, NOW);
+    expect(world1.worldIndex).toBe(1);
+    expect(world1.theme.accent).toBe(deserializePalette(buildSocleWorld(1).palette).accent);
+    // Effet observable : l'accent per-monde change réellement d'un monde à l'autre.
+    expect(world1.theme.accent).not.toBe(world0.theme.accent);
   });
 });

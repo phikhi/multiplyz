@@ -24,7 +24,9 @@ import type { AppDatabase } from "@/lib/db";
 import type { EngineConfig, MapConfig } from "@/config/server-config";
 import { loadScope } from "@/lib/engine/persistence";
 import { computeRevisionDebt } from "@/lib/engine/level";
-import { buildMap, type MapBuildConfig, type WorldMap } from "./map";
+import { resolveWorld } from "@/lib/worldgen/socle";
+import { buildMap, type MapBuildConfig } from "./map";
+import { buildWorldTheme, type CurrentWorldMap } from "./world-theme";
 import { getUnlockedWorldCount, loadWorldProgress } from "./unlock";
 
 /**
@@ -39,8 +41,16 @@ export function toMapBuildConfig(map: MapConfig, engine: EngineConfig): MapBuild
 
 /**
  * **Carte du monde courant** du profil (déblocage linéaire, MAP §1/§6) : compose la
- * géométrie (5.2), la progression du monde (5.3) et la dette de révision (moteur 3.4)
- * en une `WorldMap` prête pour l'écran carte. Lecture seule (aucune écriture).
+ * géométrie (5.2), la progression du monde (5.3), la dette de révision (moteur 3.4) et
+ * le **thème per-monde** (résolu via `resolveWorld`, 6.6 — WORLDGEN §7) en une
+ * `CurrentWorldMap` prête pour l'écran carte. Lecture seule (aucune écriture).
+ *
+ * **Câblage carte↔monde (story 6.7)** : c'est ici que le thème du monde (généré `active`
+ * SINON socle de secours) **atteint la carte** — `resolveWorld(worldIndex)` donne palette +
+ * refs d'assets, `buildWorldTheme` les **valide** en un `WorldTheme` (accent hex, fond Nginx
+ * validé) que le front pose en `--world-accent` (DESIGN_TOKENS §per-monde). Le thème est un
+ * attribut **non-clé** : il ne change NI le nombre de nœuds NI leurs positions (invariance de
+ * géométrie à l'état runtime, rétro #123 — la géométrie reste dérivée du seul `worldIndex`).
  *
  * @param db connexion applicative (source de vérité serveur).
  * @param profileId profil **de la session** (jamais un profil client).
@@ -48,6 +58,7 @@ export function toMapBuildConfig(map: MapConfig, engine: EngineConfig): MapBuild
  * @param engineConfig `⚙️` moteur (`EngineConfig`, fournit `revisionDebtThreshold` et
  *   les seuils DUE consommés par `computeRevisionDebt`).
  * @param now instant serveur injecté (epoch ms, jamais un `Date.now()` interne).
+ * @throws {SocleUnavailableError} si le socle de secours n'est pas amorcé (résolveur 6.6).
  */
 export function loadCurrentWorldMap(
   db: AppDatabase,
@@ -55,7 +66,7 @@ export function loadCurrentWorldMap(
   mapConfig: MapConfig,
   engineConfig: EngineConfig,
   now: number,
-): WorldMap {
+): CurrentWorldMap {
   // Déblocage linéaire (MAP §1/§6) : le monde affiché est le dernier débloqué — le
   // seul qui ait encore des nœuds non terminés (les précédents sont 100 % complétés,
   // le boss ayant ouvert celui-ci). `getUnlockedWorldCount` renvoie toujours ≥ 1.
@@ -70,5 +81,12 @@ export function loadCurrentWorldMap(
   const debt = computeRevisionDebt(scope, engineConfig, now);
 
   const config = toMapBuildConfig(mapConfig, engineConfig);
-  return buildMap(worldIndex, { progress, debt }, config);
+  const map = buildMap(worldIndex, { progress, debt }, config);
+
+  // Thème per-monde (6.6/6.7) : monde généré `active` s'il existe à cet index, SINON socle de
+  // secours (WORLDGEN §7). Validé (accent hex, fond Nginx) avant d'atteindre le front. Le thème
+  // n'entre JAMAIS dans le calcul de la géométrie (map ci-dessus déjà figée) → invariance #123.
+  const resolved = resolveWorld(db, worldIndex);
+  const theme = buildWorldTheme(resolved);
+  return { ...map, theme };
 }

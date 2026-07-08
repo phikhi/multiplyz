@@ -198,6 +198,14 @@ export class SocleUnavailableError extends Error {
   }
 }
 
+/** Index de carte invalide (< 0 ou non entier) — invariant serveur violé (échec loud, jamais silencieux). */
+export class WorldIndexError extends RangeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorldIndexError";
+  }
+}
+
 /**
  * **Résout le monde** à afficher pour un index de carte (WORLDGEN §7, story 6.6) :
  *
@@ -214,9 +222,20 @@ export class SocleUnavailableError extends Error {
  *
  * Lecture DB pure (aucun réseau, aucune génération). `worldIndex ≥ 0` (position de carte, MAP §1).
  *
+ * **Garde `worldIndex < 0`** (story 6.7) : un index négatif (ou non entier) est un **invariant
+ * serveur violé** — sans garde, `worlds.index = -1` ne matche rien PUIS `pool[-1 % len]` (négatif)
+ * renvoie `undefined` → `{ …undefined }` = thème/palette/refs silencieusement `undefined` (monde
+ * cassé, câblage carte invisible). On **lève** plutôt (échec loud + actionnable), avant toute lecture.
+ *
+ * @throws {WorldIndexError} si `worldIndex` est négatif ou non entier (garde loud, story 6.7).
  * @throws {SocleUnavailableError} si aucun monde actif ET socle non amorcé (garde loud, #157).
  */
 export function resolveWorld(db: AppDatabase, worldIndex: number): ResolvedWorld {
+  if (!Number.isInteger(worldIndex) || worldIndex < 0) {
+    throw new WorldIndexError(
+      `worldIndex invalide (${worldIndex}) : attendu un entier ≥ 0 (position de carte, MAP §1).`,
+    );
+  }
   const active = db
     .select({
       theme: worlds.theme,

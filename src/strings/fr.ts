@@ -295,6 +295,12 @@ export const fr = {
   map: {
     /** Titre de l'écran (`{n}` = numéro du monde, 1-based pour l'enfant). */
     title: "Monde {n}",
+    /**
+     * Titre **thématisé** de l'écran (`{n}` = numéro du monde 1-based, `{theme}` = thème du monde
+     * généré/socle) — câblage carte↔monde (story 6.7, WIREFRAMES §2 « Monde 3 · La Forêt »). Le
+     * thème per-monde **atteint l'enfant** dans le titre (texte, jamais occulté).
+     */
+    titleThemed: "Monde {n} · {theme}",
     /** Libellé accessible du nœud courant — invite à jouer, point de reprise. */
     nodeCurrent: "Nœud {n} sur {total} — à toi de jouer !",
     /** Libellé accessible d'un nœud terminé (`{stars}` = 0 à 3, rejoue possible). */
@@ -315,6 +321,12 @@ export const fr = {
     loading: "Je prépare ta carte…",
     loadError: "Oups, ça n'a pas marché. On réessaie ?",
     loadErrorRetry: "Réessayer",
+    /**
+     * Message **doux voix de Teddy** quand le monde n'est pas encore prêt (socle de secours non
+     * disponible — `SocleUnavailableError`, story 6.7). Registre COPY §90/91 « Monde en préparation »
+     * (1ère personne, tutoiement, posture croissance) — **jamais** l'erreur technique brute à l'enfant.
+     */
+    worldUnavailable: "Je prépare un nouveau monde… reviens dans un petit instant ! 🧸",
   },
   /**
    * Écran **Collection (Pokédex)** (story 5.6, WIREFRAMES §5, PRODUCT §2.3, ECONOMY
