@@ -11,6 +11,7 @@ import {
   moderatedStatusAfterQaPass,
   type WorldInspector,
 } from "./qa";
+import { readMasterBytesFromDisk } from "./socle-assets";
 
 /**
  * **Worker daemon — logique cœur** (WORLDGEN §2/§3/§6, stories 6.4 + 6.5, épic #6). Consommé par
@@ -105,14 +106,39 @@ export interface WorkerDeps {
    * sur le fallback, jamais actif). **Injecté en test** (signaux d'échec pour exercer chaque règle).
    */
   inspect: WorldInspector;
+  /**
+   * **Chargeur des octets RÉELS du master Teddy** pour l'ancrage img2img de la variante Teddy des
+   * mondes **générés** (WORLDGEN §8, ADR 0009). Le worker prod le **passe à `generateWorld`** dans
+   * ses deps (`{ loadMasterBytes }`) → l'ancrage sur le master figé (#158) devient **effectif sur le
+   * chemin mondes-générés**, pas seulement sur le socle (#181). Défaut committé = `readMasterBytesFromDisk`
+   * (vrai lecteur disque **contraint** sous `storage/reference/`, garde anti-traversal) — **symétrique
+   * de l'owner-run du socle**. C'est un **point d'injection RÉEL** (rétro #184, raison d'être de cette
+   * story #186) : **surchargeable** via l'argument de `resolveWorkerDeps`, mocké en test par un FAKE
+   * (jamais de lecture disque réelle en CI, où le PNG master est gitignoré → 0 régression). Un master
+   * **absent** au runtime prod → l'exception disque **remonte comme un échec générateur** (`processNextJob`
+   * l'attrape : job `retry`/`failed`, monde jamais `active`) = **loud fail-closed**, **jamais** de repli
+   * silencieux sur le marqueur `masterRefBytes` (qui produirait un Teddy hors-style, ADR 0009).
+   */
+  loadMasterBytes: (assetRef: string) => Buffer;
 }
 
 /** Résout les dépendances par défaut (prod), surchargées en test. */
 export function resolveWorkerDeps(overrides?: Partial<WorkerDeps>): WorkerDeps {
+  // Loader disque du master résolu EN AMONT du thunk `generate` (un object literal ne peut pas
+  // référencer une sœur) : défaut committé = `readMasterBytesFromDisk`, surchargeable par l'argument.
+  const loadMasterBytes = overrides?.loadMasterBytes ?? readMasterBytesFromDisk;
   return {
     generate:
       overrides?.generate ??
-      ((db, theme, worldIndex, recent) => generateWorld(db, theme, worldIndex, recent)),
+      // **Injection RÉELLE** du loader disque dans les deps de `generateWorld` (ancrage img2img de la
+      // variante Teddy sur le master figé, ADR 0009 / WORLDGEN §8) : tue le « faux point d'injection »
+      // #184 où le défaut de `generateWorld` (`masterRefBytes` = marqueur, le chemin encodé) laissait
+      // l'ancrage **inerte** sur le chemin mondes-générés (Teddy hors-style en prod, issue #186).
+      // Symétrique de l'owner-run du socle (#181, `readMasterBytesFromDisk` injecté). Le défaut de
+      // `generateWorld` reste **inchangé** (marqueur no-I/O) → isolation des tests 6.3 préservée.
+      ((db, theme, worldIndex, recent) =>
+        generateWorld(db, theme, worldIndex, recent, { loadMasterBytes })),
+    loadMasterBytes,
     now: overrides?.now ?? (() => new Date()),
     config: overrides?.config ?? getWorldGenConfig(),
     inspect: overrides?.inspect ?? defaultInspector,
