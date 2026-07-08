@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { deriveWorldPalette, isHexColor, PaletteError, serializePalette } from "./palette";
+import {
+  deriveWorldPalette,
+  deserializePalette,
+  isHexColor,
+  PaletteError,
+  serializePalette,
+} from "./palette";
 
 /**
  * Tests de la **dérivation de palette** (WORLDGEN §4.2, DESIGN_TOKENS §per-monde). Prouvent à
@@ -40,5 +46,29 @@ describe("palette — serializePalette", () => {
   it("sérialise en JSON relisible (colonne worlds.palette)", () => {
     const json = serializePalette({ slug: "forest", accent: "#5BBF73" });
     expect(JSON.parse(json)).toEqual({ slug: "forest", accent: "#5BBF73" });
+  });
+});
+
+describe("palette — deserializePalette (round-trip + garde de forme DB, story 6.7)", () => {
+  it("round-trip serialize → deserialize (même palette)", () => {
+    const p = deriveWorldPalette("galaxy", "#7C6BF0");
+    expect(deserializePalette(serializePalette(p))).toEqual(p);
+  });
+
+  // GARDE de forme (mutation-prouvée) : une palette stockée mal formée lève au seam plutôt que de
+  // poser un `--world-accent` invalide (variable CSS silencieusement ignorée). Chaque branche rougit
+  // si sa garde est retirée.
+  it.each([
+    ["json illisible", "{pas du json"],
+    ["json null", "null"],
+    ["json tableau (pas un objet-forme)", "[]"],
+    ["slug manquant", '{"accent":"#2BB7E6"}'],
+    ["slug vide", '{"slug":"","accent":"#2BB7E6"}'],
+    ["slug non-texte", '{"slug":42,"accent":"#2BB7E6"}'],
+    ["accent manquant", '{"slug":"ocean"}'],
+    ["accent non-texte", '{"slug":"ocean","accent":42}'],
+    ["accent non-hex", '{"slug":"ocean","accent":"bleu"}'],
+  ])("lève PaletteError : %s", (_label, json) => {
+    expect(() => deserializePalette(json)).toThrow(PaletteError);
   });
 });

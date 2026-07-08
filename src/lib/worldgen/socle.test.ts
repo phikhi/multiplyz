@@ -18,6 +18,7 @@ import {
   socleWorldId,
   SocleUnavailableError,
   SOCLE_WORLD_COUNT,
+  WorldIndexError,
 } from "./socle";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-socle-"));
@@ -219,4 +220,16 @@ describe("resolveWorld (résolveur généré/socle — WORLDGEN §7, AC #1)", ()
     db.delete(socleWorlds).run();
     expect(() => resolveWorld(db, 0)).toThrow(SocleUnavailableError);
   });
+
+  // GARDE loud (story 6.7) : un `worldIndex < 0` (ou non entier) est un invariant serveur violé.
+  // Sans la garde, `pool[-1 % len]` (négatif) → `undefined` → thème/palette/refs silencieusement
+  // `undefined` (monde cassé, câblage invisible). Muter/retirer la garde ferait passer ces appels
+  // sans throw → ces tests rougissent.
+  it.each([-1, -6, -0.5, 1.5, Number.NaN])(
+    "lève WorldIndexError sur un worldIndex invalide (%s) — échec loud, jamais undefined silencieux",
+    (bad) => {
+      const db = freshDb();
+      expect(() => resolveWorld(db, bad)).toThrow(WorldIndexError);
+    },
+  );
 });

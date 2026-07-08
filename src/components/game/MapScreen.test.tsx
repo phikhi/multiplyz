@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { MapScreen } from "./MapScreen";
 import { currentMapAction } from "@/app/(app)/carte/actions";
 import { strings } from "@/strings";
-import type { MapNode, WorldMap } from "@/lib/game/map";
+import type { MapNode } from "@/lib/game/map";
+import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
 import {
   contrastRatio,
   resolveTokenColor,
@@ -40,15 +41,37 @@ function node(overrides: Partial<MapNode> = {}): MapNode {
   };
 }
 
-function map(nodes: readonly MapNode[], worldIndex = 0): WorldMap {
-  return { worldIndex, nodes };
+/** Thème per-monde par défaut (océan) — surchargeable par test (accent/slug/label/fond). */
+function theme(overrides: Partial<WorldTheme> = {}): WorldTheme {
+  return {
+    slug: "ocean",
+    accent: "#2BB7E6",
+    label: "Océan scintillant",
+    background: null,
+    ...overrides,
+  };
 }
 
-async function renderReady(worldMap: WorldMap) {
-  currentMapActionMock.mockResolvedValue({ map: worldMap });
+function map(
+  nodes: readonly MapNode[],
+  worldIndex = 0,
+  themeOverrides: Partial<WorldTheme> = {},
+): CurrentWorldMap {
+  return { worldIndex, nodes, theme: theme(themeOverrides) };
+}
+
+async function renderReady(worldMap: CurrentWorldMap) {
+  currentMapActionMock.mockResolvedValue({ status: "ready", map: worldMap });
   const result = render(<MapScreen />);
   await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
   return result;
+}
+
+/** Le conteneur carte `<main>` (porte `data-world` + `--world-accent` + le fond du monde). */
+function mainEl(): HTMLElement {
+  const el = document.querySelector("main");
+  if (el === null) throw new Error("aucun <main> rendu");
+  return el;
 }
 
 /**
@@ -64,7 +87,7 @@ function nodeLink(): HTMLElement {
 
 describe("MapScreen — chargement / erreur", () => {
   it("affiche un statut de chargement puis la carte (non authentifié → erreur)", async () => {
-    currentMapActionMock.mockResolvedValue({ map: null });
+    currentMapActionMock.mockResolvedValue({ status: "unauthenticated" });
     render(<MapScreen />);
     expect(screen.getByRole("status")).toHaveTextContent(strings.map.loading);
     await waitFor(() => expect(screen.getByText(strings.map.loadError)).toBeInTheDocument());
@@ -72,16 +95,125 @@ describe("MapScreen — chargement / erreur", () => {
   });
 
   it("retry recharge la carte après une erreur", async () => {
-    currentMapActionMock.mockResolvedValue({ map: null });
+    currentMapActionMock.mockResolvedValue({ status: "unauthenticated" });
     render(<MapScreen />);
     await waitFor(() => screen.getByText(strings.map.loadError));
 
-    currentMapActionMock.mockResolvedValue({ map: map([node({ status: "current" })]) });
+    currentMapActionMock.mockResolvedValue({
+      status: "ready",
+      map: map([node({ status: "current" })]),
+    });
     fireEvent.click(screen.getByRole("button", { name: strings.map.loadErrorRetry }));
 
     await waitFor(() =>
-      expect(screen.getByText(strings.map.title.replace("{n}", "1"))).toBeInTheDocument(),
+      expect(
+        screen.getByText(
+          strings.map.titleThemed.replace("{n}", "1").replace("{theme}", "Océan scintillant"),
+        ),
+      ).toBeInTheDocument(),
     );
+  });
+
+  it("un rejet inattendu de l'action (invariant serveur) → message générique de repli, jamais l'erreur brute", async () => {
+    // Effet observable : le `try/catch` de `fetchMap` retombe sur l'écran d'erreur générique
+    // (jamais un crash / une erreur brute à l'enfant). Casse si le catch est retiré.
+    currentMapActionMock.mockRejectedValue(new Error("boom serveur"));
+    render(<MapScreen />);
+    await waitFor(() => expect(screen.getByText(strings.map.loadError)).toBeInTheDocument());
+    expect(screen.queryByText("boom serveur")).not.toBeInTheDocument();
+  });
+});
+
+describe("MapScreen — monde indispo (message DOUX voix de Teddy, story 6.7)", () => {
+  it("status 'unavailable' (socle non amorcé) → message doux Teddy (COPY), jamais l'erreur brute, + retry", async () => {
+    currentMapActionMock.mockResolvedValue({ status: "unavailable" });
+    render(<MapScreen />);
+    await waitFor(() => expect(screen.getByText(strings.map.worldUnavailable)).toBeInTheDocument());
+    // Message doux Teddy, jamais l'erreur générique/technique.
+    expect(screen.queryByText(strings.map.loadError)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: strings.map.loadErrorRetry })).toBeInTheDocument();
+  });
+
+  it("retry après 'unavailable' recharge la carte (socle amorcé entre-temps)", async () => {
+    currentMapActionMock.mockResolvedValue({ status: "unavailable" });
+    render(<MapScreen />);
+    await waitFor(() => screen.getByText(strings.map.worldUnavailable));
+
+    currentMapActionMock.mockResolvedValue({
+      status: "ready",
+      map: map([node({ status: "current" })]),
+    });
+    fireEvent.click(screen.getByRole("button", { name: strings.map.loadErrorRetry }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(
+          strings.map.titleThemed.replace("{n}", "1").replace("{theme}", "Océan scintillant"),
+        ),
+      ).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("MapScreen — thématisation per-monde (--world-accent, story 6.7)", () => {
+  it("pose data-world + --world-accent (token consommé au DOM, #125) sur le conteneur carte", async () => {
+    await renderReady(map([node({ status: "current" })], 0, { slug: "forest", accent: "#5BBF73" }));
+    const main = mainEl();
+    expect(main.getAttribute("data-world")).toBe("forest");
+    // Effet observable : la variable per-monde est réellement POSÉE au DOM (pas juste déclarée).
+    expect(main.style.getPropertyValue("--world-accent")).toBe("#5BBF73");
+  });
+
+  it("l'accent VARIE par monde (effet observable #180) : deux thèmes → deux --world-accent distincts", async () => {
+    const { unmount } = await renderReady(
+      map([node({ status: "current" })], 0, { accent: "#2BB7E6" }),
+    );
+    const first = mainEl().style.getPropertyValue("--world-accent");
+    unmount();
+
+    await renderReady(map([node({ status: "current" })], 1, { accent: "#B57BEF" }));
+    const second = mainEl().style.getPropertyValue("--world-accent");
+
+    expect(first).toBe("#2BB7E6");
+    expect(second).toBe("#B57BEF");
+    expect(second).not.toBe(first); // l'accent per-monde change réellement d'un monde à l'autre.
+  });
+
+  it("bandeau d'accent : consommateur DIRECT de --world-accent (pixel per-monde), décoratif (aria-hidden)", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    const bar = document.querySelector<HTMLElement>("[data-world-accent-bar]");
+    expect(bar).not.toBeNull();
+    expect(bar).toHaveAttribute("aria-hidden", "true");
+    // Fond plein = la variable per-monde (jamais une couleur en dur) → varie avec le monde.
+    expect(bar!.style.backgroundColor).toBe("var(--world-accent)");
+  });
+
+  it("titre THÉMATISÉ : le nom du thème atteint l'enfant dans le titre (WIREFRAMES §2, #180)", async () => {
+    await renderReady(map([node({ status: "current" })], 2, { label: "Forêt enchantée" }));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      strings.map.titleThemed.replace("{n}", "3").replace("{theme}", "Forêt enchantée"),
+    );
+  });
+});
+
+describe("MapScreen — fond du monde validé avant rendu (sécurité, story 6.7)", () => {
+  it("asset réel validé (URL Nginx) → image de fond rendue (background-image) + repli teinté dessous", async () => {
+    await renderReady(
+      map([node({ status: "current" })], 0, { background: "/generated/socle/0/background.png" }),
+    );
+    const main = mainEl();
+    expect(main.style.backgroundImage).toContain("/generated/socle/0/background.png");
+    // Repli teinté theme-safe SOUS l'image (jamais une couleur en dur).
+    expect(main.style.backgroundColor).toBe("var(--world-bg-tint)");
+  });
+
+  it("pas d'asset réel (placeholder → null côté serveur) → AUCUNE image de fond, fond de page neutre inchangé", async () => {
+    // Effet observable : le front n'émet PAS de background-image vers une URL non fournie/validée
+    // (le fond reste neutre `bg-bg` → contraste du titre/trait inchangé, pas de régression #125).
+    await renderReady(map([node({ status: "current" })], 0, { background: null }));
+    const main = mainEl();
+    expect(main.style.backgroundImage).toBe("");
+    expect(main.style.backgroundColor).toBe("");
   });
 });
 

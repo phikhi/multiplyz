@@ -623,9 +623,14 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.goto("/carte");
     await page.waitForLoadState("networkidle");
 
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.map.title.replace("{n}", "1") }),
-    ).toBeVisible();
+    // Titre THÉMATISÉ (câblage carte↔monde, story 6.7, WIREFRAMES §2 « Monde 3 · La Forêt ») :
+    // en base E2E fraîche aucun monde généré `active` → le résolveur retombe sur le SOCLE de
+    // secours (WORLDGEN §7), dont le thème atteint réellement l'enfant dans le titre. On matche
+    // le préfixe « Monde 1 · » + un libellé de thème non vide (le thème exact = socle[0], dérivé).
+    const heading = page.getByRole("heading", { level: 1 });
+    await expect(heading).toBeVisible();
+    const headingText = ((await heading.textContent()) ?? "").trim();
+    expect(headingText).toMatch(/^Monde 1 · .+/u);
 
     // Géométrie 5.2 par défaut (⚙️ non surchargé en E2E) : levelsPerWorld=10 → 11
     // nœuds (le dernier = boss, MAP §6). Le nom accessible complet suffixe le
@@ -691,7 +696,58 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(connectorOcclusion!.svgTop).toBeGreaterThanOrEqual(connectorOcclusion!.badgeBottom - 1);
     expect(connectorOcclusion!.svgHeight).toBeGreaterThan(0);
 
+    // ── Thématisation per-monde câblée — PREUVE PIXEL en vrai navigateur (story 6.7, piège #170) ──
+    // « Token vert » (jsdom) prouve la MÉCANIQUE, jamais la VISIBILITÉ. Ici Playwright résout le
+    // CSS réel : on vérifie que (a) `--world-accent` est réellement POSÉ sur `<main>` et **diffère
+    // du défaut neutre** `--color-accent-secondary` (donc un vrai accent per-monde est appliqué,
+    // pas le repli), (b) le **bandeau d'accent** PEINT cette couleur (sa couleur calculée == l'accent
+    // résolu, pas la neutre), (c) le bandeau est **visible** (dimensions non nulles, dans le cadre)
+    // et **ne recouvre pas** le nœud courant (anti-occlusion : contenu lisible par-dessus le thème).
+    const themed = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      const bar = document.querySelector("[data-world-accent-bar]");
+      const currentLink = document.querySelector('a[data-map-node-status="current"]');
+      if (main === null || bar === null || currentLink === null) return null;
+      const resolve = (value: string) => {
+        // Résout une valeur CSS (hex OU var()) en rgb calculé via un élément sonde.
+        const probe = document.createElement("span");
+        probe.style.color = value;
+        document.body.appendChild(probe);
+        const rgb = getComputedStyle(probe).color;
+        probe.remove();
+        return rgb;
+      };
+      const cs = getComputedStyle(main);
+      const worldAccent = cs.getPropertyValue("--world-accent").trim();
+      const neutralDefault = cs.getPropertyValue("--color-accent-secondary").trim();
+      const barRect = bar.getBoundingClientRect();
+      const nodeRect = currentLink.getBoundingClientRect();
+      return {
+        dataWorld: main.getAttribute("data-world"),
+        worldAccentResolved: resolve(worldAccent),
+        neutralResolved: resolve(neutralDefault),
+        barColor: getComputedStyle(bar).backgroundColor,
+        barW: barRect.width,
+        barH: barRect.height,
+        barTop: barRect.top,
+        nodeVisible: nodeRect.width > 0 && nodeRect.height > 0,
+      };
+    });
+    expect(themed).not.toBeNull();
+    // (a) un vrai accent per-monde est appliqué (data-world posé + accent ≠ neutre par défaut).
+    expect(themed!.dataWorld).not.toBeNull();
+    expect(themed!.worldAccentResolved).not.toBe(themed!.neutralResolved);
+    // (b) le bandeau PEINT réellement l'accent per-monde (pixel), pas la couleur neutre.
+    expect(themed!.barColor).toBe(themed!.worldAccentResolved);
+    // (c) le bandeau est visible (non nul, dans le cadre) et le nœud courant reste rendu (non occulté).
+    expect(themed!.barW).toBeGreaterThan(0);
+    expect(themed!.barH).toBeGreaterThan(0);
+    expect(themed!.barTop).toBeGreaterThanOrEqual(0);
+    expect(themed!.nodeVisible).toBe(true);
+
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
+    // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
+    await page.screenshot({ path: "docs/captures/182-carte-theme.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
     // cliquer le nœud courant ramène bien à l'écran de jeu.
