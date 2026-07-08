@@ -3,8 +3,9 @@
  *
  * Module **pur / client-safe** (aucun import DB, aucun réseau) : il transforme le monde résolu
  * côté serveur (`resolveWorld`, 6.6 — palette + refs d'assets sérialisées en JSON dans la DB) en
- * un `WorldTheme` **propre et validé** que l'écran carte (`MapScreen`, client) consomme pour
- * poser `--world-accent` (DESIGN_TOKENS §per-monde) + rendre le fond du monde.
+ * un `WorldTheme` **propre et validé** que l'écran carte (`MapScreen`, client) consomme pour poser
+ * `--world-accent` (DESIGN_TOKENS §per-monde) + rendre les **trois assets** per-monde validés :
+ * fond du monde (`background`), bande de décor/tuiles (`tiles`) et variante Teddy (`teddy`).
  *
  * **Frontière de validation** (sécurité, story 6.7 + #190) : la palette + les refs d'assets viennent
  * de la DB (source de vérité serveur), mais on **revalide leur forme** avant de les rendre au front :
@@ -60,7 +61,8 @@ export interface WorldTheme {
 
 /** Une carte du monde courant **thématisée** = la géométrie (`WorldMap`) + son thème per-monde. */
 export type CurrentWorldMap = WorldMap & {
-  /** Thème per-monde (accent/slug/label/fond) — attribut **non-clé** (n'altère pas la géométrie). */
+  /** Thème per-monde (accent/slug/label + assets `background`/`tiles`/`teddy`) — attribut **non-clé**
+   * (n'altère pas la géométrie). */
   readonly theme: WorldTheme;
 };
 

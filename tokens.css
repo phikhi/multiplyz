@@ -334,8 +334,13 @@
      nœud COURANT (mascotte-guide, MAP §1 point de reprise). Décoratif (aria-hidden :
      le nœud porte déjà son nom accessible complet → pas de double annonce). Élément
      SUPERPOSÉ/positionné → garde DOUBLÉE pixels + géométrie (non-occlusion #170) : il
-     flotte au-dessus de la pastille, ne recouvre jamais le glyphe de statut centré. */
-  --map-node-teddy-size:  var(--space-7); /* 48px — avatar Teddy sur le nœud courant */
+     flotte au-dessus de la pastille, ne recouvre jamais le glyphe de statut centré.
+     Taille = 32px (PAS 48px) : l'avatar (32) + son léger chevauchement bas (--space-2,
+     8px, cf. `CurrentNodeTeddy`) doit tenir dans la GOUTTIÈRE inter-nœuds
+     (--map-node-gap, 32px) SANS déborder sur le médaillon AMONT — un avatar de 48px
+     débordait de 6px sur le nœud du dessus (révélé par la garde E2E `teddyTop ≥ bas du
+     médaillon amont`, #170). À 32px : marge 8px côté amont ET 24px côté glyphe courant. */
+  --map-node-teddy-size:  var(--space-6); /* 32px — avatar Teddy sur le nœud courant */
 
   /* étoiles de l'écran de RÉSULTATS (fin de niveau, story #126/5.5) — même piège
      que --map-node-star-* ci-dessus : --color-star/--color-star-empty sont des

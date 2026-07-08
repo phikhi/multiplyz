@@ -805,14 +805,22 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // Le tint de <main> dérive de l'accent DU MONDE → distinct du tint neutre de `:root` (per-monde réel).
     expect(tint!.mainTint).not.toBe(tint!.neutralTint);
 
-    // ── Richesse visuelle per-monde (story #190) — PREUVE PIXEL + GÉOMÉTRIE en vrai navigateur ──
-    // Les tuiles/Teddy sont des assets RÉELS (socle[0] seedé sur les fixtures committées). « Token
-    // vert » (jsdom) prouve la mécanique, jamais la VISIBILITÉ (#170). Ici Playwright fait le layout.
+    // ── Richesse visuelle per-monde (story #190) — URL CÂBLÉE + GÉOMÉTRIE NON-OCCLUSION (vrai layout) ──
+    // ⚠️ Ces asserts prouvent le CÂBLAGE (URL de l'asset émise) + la GÉOMÉTRIE de boîte (visibilité,
+    // non-occlusion) — PAS les pixels peints : `getComputedStyle().backgroundImage` renvoie la chaîne
+    // URL même si le PNG ne décode pas. La **vraie preuve pixel #170** = la **capture Playwright
+    // OUVERTE et regardée** en review (`docs/captures/190-carte-richesse.png` + capture réelle locale).
+    // Ici Playwright fait le layout (jsdom non) → on garde ce que jsdom ne peut pas : la géométrie.
     const richness = await page.evaluate(() => {
       const tiles = document.querySelector("[data-world-tiles]");
       const teddy = document.querySelector("[data-world-teddy]");
       const currentLink = document.querySelector('a[data-map-node-status="current"]');
+      const currentLi = currentLink?.closest("li");
       const medallion = currentLink?.querySelector("[data-map-medallion]");
+      // Nœud AMONT (visuellement AU-DESSUS du courant) : le chemin est en `column-reverse` (départ
+      // en bas, boss en haut) → le nœud rendu au-dessus est le `<li>` SUIVANT dans l'ordre DOM.
+      const upstreamLi = currentLi?.nextElementSibling;
+      const upstreamMed = upstreamLi?.querySelector("[data-map-medallion]");
       if (tiles === null || teddy === null || medallion == null) return null;
       const tilesRect = tiles.getBoundingClientRect();
       const teddyRect = teddy.getBoundingClientRect();
@@ -829,28 +837,34 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
         teddyBottom: teddyRect.bottom,
         // Le nœud COURANT ne porte qu'UN avatar Teddy (marqueur unique « tu es ici »).
         teddyCount: document.querySelectorAll("[data-world-teddy]").length,
-        medTop: medRect.top,
-        medBottom: medRect.bottom,
         medCenterY: medRect.top + medRect.height / 2,
+        // Bas du médaillon AMONT (ou `null` si le courant est le nœud le plus haut — pas d'amont).
+        upstreamMedBottom: upstreamMed == null ? null : upstreamMed.getBoundingClientRect().bottom,
       };
     });
     expect(richness).not.toBeNull();
-    // (a) BANDE DE DÉCOR : peint réellement l'image de tuiles du monde (pixel), visible, dans le cadre.
+    // (a) BANDE DE DÉCOR : émet l'URL de l'image de tuiles du monde (câblage), visible, dans le cadre.
     expect(richness!.tilesBg).toContain("world/e2e/tiles.png");
     expect(richness!.tilesW).toBeGreaterThan(0);
     expect(richness!.tilesH).toBeGreaterThan(0);
     expect(richness!.tilesTop).toBeGreaterThanOrEqual(0);
-    // (b) AVATAR TEDDY per-monde : peint réellement l'image Teddy du monde (pixel), un SEUL marqueur.
+    // (b) AVATAR TEDDY per-monde : émet l'URL de l'image Teddy du monde (câblage), un SEUL marqueur.
     expect(richness!.teddyBg).toContain("world/e2e/teddy.png");
     expect(richness!.teddyCount).toBe(1);
     // (c) VISIBLE + DANS LE CADRE : dimensions non nulles, sommet ≥ 0 (jamais clippé hors du haut).
     expect(richness!.teddyW).toBeGreaterThan(0);
     expect(richness!.teddyH).toBeGreaterThan(0);
     expect(richness!.teddyTop).toBeGreaterThanOrEqual(0);
-    // (d) NON-OCCLUSION (#170) : l'avatar FLOTTE au-dessus du médaillon — son bas reste au-dessus du
-    // CENTRE de la pastille, donc il ne recouvre jamais le glyphe de statut centré (▶). Casse si on
-    // régresse la position (ex. Teddy centré SUR la pastille, recouvrant le glyphe).
+    // (d) NON-OCCLUSION AVAL (#170) : l'avatar FLOTTE au-dessus du médaillon COURANT — son bas reste
+    // au-dessus du CENTRE de la pastille, donc il ne recouvre jamais le glyphe de statut centré (▶).
+    // Casse si on régresse la position (ex. Teddy centré SUR la pastille, recouvrant le glyphe).
     expect(richness!.teddyBottom).toBeLessThanOrEqual(richness!.medCenterY);
+    // (e) NON-OCCLUSION AMONT (robustesse #170, Frontend) : l'avatar ne DÉBORDE pas sur le nœud
+    // du DESSUS — son sommet reste SOUS le bas du médaillon amont. Aux tokens actuels la marge est
+    // large ; cet assert rougirait si un futur resserrement de `--map-node-gap` ou agrandissement de
+    // `--map-node-teddy-size` faisait chevaucher l'avatar sur la pastille amont.
+    expect(richness!.upstreamMedBottom).not.toBeNull();
+    expect(richness!.teddyTop).toBeGreaterThanOrEqual(richness!.upstreamMedBottom!);
 
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
     // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
