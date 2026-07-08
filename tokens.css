@@ -361,12 +361,19 @@
   --collection-placeholder-glyph: var(--color-text-primary);
 
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
-     Chaque monde généré pose ces 3 variables (via [data-world] ou
-     style inline). Défaut = neutre. Le reste du système ne change pas. */
+     Chaque monde généré pose --world-accent (via [data-world] ou style
+     inline). Défaut = neutre. Le reste du système ne change pas. */
   --world-accent:   var(--color-accent-secondary);
   /* tint = wash translucide de l'accent SUR la surface du thème courant →
-     reste lisible en light ET dark. Un monde ne pose que --world-accent. */
+     reste lisible en light ET dark.
+     ⚠️ #184 : ce color-mix référence var(--world-accent) et se résout AU NIVEAU
+     de DÉCLARATION (:root). Surcharger --world-accent en descendant (ex. inline
+     sur <main>) ne le re-dérive PAS ici → il faut RE-DÉCLARER --world-bg-tint au
+     niveau de la surcharge pour un tint réellement per-monde (cf. MapScreen
+     `worldMainStyle`). Ce défaut :root reste le repli NEUTRE. */
   --world-bg-tint:  color-mix(in srgb, var(--world-accent) 10%, var(--color-bg-secondary));
+  /* surface opaque du thème → scrim de contraste sous le titre quand un fond-image
+     réel du monde est rendu (garantit la lisibilité indépendamment de la photo). */
   --world-surface:  var(--color-bg-secondary);
 }
 

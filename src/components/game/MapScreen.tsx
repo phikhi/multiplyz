@@ -19,11 +19,13 @@ import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
  * **Thématisation per-monde (story 6.7)** : `<main>` porte `data-world=<slug>` +
  * `--world-accent` (DESIGN_TOKENS §per-monde — la SEULE variable qu'un monde surcharge).
  * L'observable per-monde vient d'un **titre thématisé** (« Monde 3 · Forêt ») + d'un **bandeau
- * d'accent** consommant `--world-accent` en pixel visible. Le **fond-image du monde** (Nginx
- * **validé**) n'est rendu que si un asset réel existe (chemin **dormant** avant l'owner-run #181) ;
- * la **dérivation per-monde du tint de fond + le scrim de contraste sont différés à l'issue #189**
- * (cf. `worldMainStyle` — le repli `--world-bg-tint` est aujourd'hui NEUTRE). Le thème est un
- * attribut **non-clé** : il ne touche jamais la géométrie (rétro #123).
+ * d'accent** consommant `--world-accent` en pixel visible. Quand un **fond-image réel** du monde
+ * existe (Nginx **validé**, `background !== null`), il est rendu en couverture de `<main>`, le
+ * **tint de fond `--world-bg-tint`** se dérive **par monde** (re-déclaré inline sur `<main>`, fix
+ * #184) et le **titre reçoit un scrim `--world-surface` opaque** (cf. `ThemedTitle`) qui garantit
+ * son contraste ≥4.5:1 INDÉPENDAMMENT de la photo IA arbitraire (story #189). Sans asset réel (cas
+ * CI/hors-ligne), `<main>` garde son fond neutre et le titre son fond de page (pas de scrim, pas de
+ * régression #125). Le thème est un attribut **non-clé** : il ne touche jamais la géométrie (#123).
  *
  * **Navigation nœud → niveau** (`(app)/jouer`) : le nœud **courant** (point de
  * reprise, MAP §1) et tout nœud **terminé** (rejoue, progression monotone) sont des
@@ -58,6 +60,21 @@ const TYPE_GLYPH: Record<NodeType, string | null> = {
 const FILLED_STAR = "★";
 const EMPTY_STAR = "☆";
 const STAR_SLOTS: readonly MapStars[] = [1, 2, 3];
+
+/**
+ * Style de texte partagé des titres `h1` de l'écran (chargement / erreur / indispo / carte prête) —
+ * tokens only (jamais de valeur en dur). Couleur `--color-text-primary` : lisible sur le fond de
+ * page neutre (`bg-bg`) ET sur le scrim `--world-surface` du titre thématisé (contraste ≥4.5:1
+ * résolu, testé). Centralisé pour éviter la duplication (une seule source de vérité de style).
+ */
+const TITLE_TEXT_STYLE: CSSProperties = {
+  fontFamily: "var(--font-family-display)",
+  fontSize: "var(--font-size-xl)",
+  fontWeight: "var(--font-weight-bold)",
+  color: "var(--color-text-primary)",
+  margin: 0,
+  textAlign: "center",
+};
 
 function fill(template: string, replacements: Record<string, string>): string {
   return Object.entries(replacements).reduce(
@@ -399,30 +416,41 @@ function NodePath({ map }: { readonly map: WorldMap }) {
  *
  * **Fond du monde** : rendu comme `background` de `<main>` **uniquement** quand un **asset réel
  * validé** existe (`theme.background !== null`, chemin Nginx passé par `isRenderableAssetRef`) →
- * image en couverture, avec `--world-bg-tint` en **repli** dessous. Sans asset réel (placeholder du
- * gate owner → `null`, cas CI/hors-ligne), `<main>` **garde son fond neutre** (`bg-bg`) : le titre
- * et le trait du chemin conservent leur **fond de référence de contraste inchangé** (pas de
- * régression #125). Le fond étant le `background` de `<main>` (backmost), il ne peut **jamais**
- * recouvrir les nœuds (anti-occlusion #170).
+ * image en couverture, avec `--world-bg-tint` **per-monde** en **repli** dessous. Sans asset réel
+ * (placeholder du gate owner → `null`, cas CI/hors-ligne), `<main>` **garde son fond neutre**
+ * (`bg-bg`) : le titre et le trait du chemin conservent leur **fond de référence de contraste
+ * inchangé** (pas de régression #125). Le fond étant le `background` de `<main>` (backmost), il ne
+ * peut **jamais** recouvrir les nœuds (anti-occlusion #170).
  *
- * **NB honnête (tell commentaire↔code)** : `--world-bg-tint` est aujourd'hui **NEUTRE, non
- * per-monde** — il est déclaré à `:root` (`color-mix(--world-accent 10%, …)`) et n'est **pas**
- * re-dérivé par monde ici. La **dérivation per-monde du tint**, le **compositing du fond-image
- * réel** et le **scrim de contraste du titre** sont **différés à l'issue #189** (design en aveugle
- * sans les vrais assets = anti #170). Ce repli teinté ne s'active de toute façon que sur le chemin
- * **dormant** `background !== null` (aucun asset réel avant l'owner-run #181).
+ * **Tint per-monde (fix #184, story #189)** : `--world-bg-tint` (`color-mix(--world-accent 10%,
+ * surface)`) est **RE-DÉCLARÉ ICI** (au niveau de la surcharge inline de `--world-accent`), pas
+ * seulement à `:root`. Raison : la substitution `var()` d'un custom-property se résout **au niveau
+ * où la propriété est DÉCLARÉE** — le `--world-bg-tint` de `:root` reste donc **NEUTRE** sous une
+ * surcharge **descendante** de sa var source (`<main>`), c'est un **faux-dérivé dormant** (piège
+ * #184). En le re-déclarant sur `<main>` (même élément que `--world-accent`), le `color-mix` se
+ * re-résout avec l'accent du monde → tint réellement **per-monde**, theme-safe (light ET dark).
  */
 function worldMainStyle(base: CSSProperties, theme: WorldTheme | null): CSSProperties {
   if (theme === null) {
     return base;
   }
-  // Un monde ne pose qu'`--world-accent` (DESIGN_TOKENS §per-monde) ; l'observable per-monde 6.7
-  // (bandeau d'accent + titre) en découle. Le tint/fond-image sont un chemin dormant (cf. NB).
-  const themed: CSSProperties = { ...base, ["--world-accent" as string]: theme.accent };
+  // Un monde pose `--world-accent` (DESIGN_TOKENS §per-monde) ; `--world-bg-tint` est re-dérivé
+  // per-monde en le RE-DÉCLARANT sur le même élément (fix #184 — sinon le color-mix de `:root`
+  // reste neutre sous la surcharge descendante). Disponible à tout le sous-arbre carte.
+  const themed: CSSProperties = {
+    ...base,
+    ["--world-accent" as string]: theme.accent,
+    // ⚠️ Garder cette formule en SYNC avec `tokens.css` (`--world-bg-tint`, même ratio 10%) : la
+    // re-déclaration inline est un contournement #184 (`color-mix` à `:root` ne se re-dérive PAS
+    // sous une surcharge descendante de `--world-accent`), donc la formule est volontairement
+    // DUPLIQUÉE ici — un changement du wash dans `tokens.css` doit être répercuté à cette ligne.
+    ["--world-bg-tint" as string]:
+      "color-mix(in srgb, var(--world-accent) 10%, var(--color-bg-secondary))",
+  };
   if (theme.background !== null) {
-    // Chemin DORMANT (aucun asset réel avant l'owner-run #181) : asset validé (Nginx) → image en
-    // couverture, `--world-bg-tint` (aujourd'hui NEUTRE, non per-monde — cf. NB, différé #189) en
-    // repli dessous. Jamais rendu vers une URL non validée (garde `isRenderableAssetRef`).
+    // Asset validé (Nginx) → image du monde en couverture, `--world-bg-tint` **per-monde** (cf.
+    // re-déclaration ci-dessus) en repli theme-safe dessous. Jamais rendu vers une URL non validée
+    // (garde `isRenderableAssetRef`). Le titre reçoit un scrim `--world-surface` (cf. `ThemedTitle`).
     themed.backgroundColor = "var(--world-bg-tint)";
     themed.backgroundImage = `url("${theme.background}")`;
     themed.backgroundSize = "cover";
@@ -452,6 +480,55 @@ function WorldAccentBar() {
         borderRadius: "var(--border-radius-full)",
       }}
     />
+  );
+}
+
+/**
+ * **Titre du monde + scrim de contraste** (story #189). Quand un **fond-image réel** du monde est
+ * rendu (`hasBackground`, i.e. `theme.background !== null`), le titre est posé sur une **carte scrim
+ * OPAQUE** consommant `--world-surface` (surface **du thème** light/dark, déclarée au §per-monde de
+ * DESIGN_TOKENS mais **CONSTANTE entre mondes** — seul `--world-accent` varie ; jusqu'ici
+ * **ORPHELIN**, aucun consommateur DOM = piège #125) : elle garantit le contraste du titre
+ * (`--color-text-primary` ≥4.5:1 sur `--world-surface`, résolu + testé) **INDÉPENDAMMENT** de la
+ * photo IA arbitraire — une photo claire ne peut plus noyer le titre. **Opaque** (jamais
+ * semi-transparente) : c'est la SEULE façon d'honnêtement garantir le **plancher de contraste sur
+ * le token résolu** — une photo qui transparaîtrait invaliderait ce plancher (over-claim #170). Le
+ * fond de référence de contraste réellement empilé derrière le titre est donc bien `--world-surface`
+ * (rétro #125). Le titre est un **enfant en flux** du scrim → peint **AU-DESSUS** du fond de carte,
+ * jamais occulté (#170 : pas d'`absolute`/`z-index`, aucun risque d'occlusion). Sans fond-image
+ * (`null`, cas CI/hors-ligne), **pas de scrim** : le titre garde le fond de page neutre `bg-bg`
+ * (contraste inchangé → pas de régression #125).
+ */
+function ThemedTitle({
+  text,
+  hasBackground,
+}: {
+  readonly text: string;
+  readonly hasBackground: boolean;
+}) {
+  // Titre THÉMATISÉ (WIREFRAMES §2 « Monde 3 · La Forêt ») : le thème per-monde (généré/socle)
+  // atteint l'enfant dans le titre — texte, jamais occulté (#180).
+  const heading = <h1 style={TITLE_TEXT_STYLE}>{text}</h1>;
+  if (!hasBackground) {
+    return heading;
+  }
+  return (
+    <div
+      data-world-scrim=""
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        // Scrim OPAQUE = surface **du thème** (light/dark, constante entre mondes ; consomme
+        // `--world-surface`, #125) : garantit le contraste du titre quelle que soit la photo IA
+        // (jamais semi-transparent, #170). Seul `--world-accent`/`--world-bg-tint` varient par monde.
+        backgroundColor: "var(--world-surface)",
+        padding: "var(--space-3) var(--space-5)",
+        borderRadius: "var(--card-radius)",
+        boxShadow: "var(--card-shadow)",
+      }}
+    >
+      {heading}
+    </div>
   );
 }
 
@@ -519,35 +596,14 @@ export function MapScreen() {
       style={worldMainStyle(baseMainStyle, theme)}
     >
       {screen.kind === "loading" && (
-        <h1
-          role="status"
-          style={{
-            fontFamily: "var(--font-family-display)",
-            fontSize: "var(--font-size-xl)",
-            fontWeight: "var(--font-weight-bold)",
-            color: "var(--color-text-primary)",
-            margin: 0,
-            textAlign: "center",
-          }}
-        >
+        <h1 role="status" style={TITLE_TEXT_STYLE}>
           {strings.map.loading}
         </h1>
       )}
 
       {screen.kind === "error" && (
         <>
-          <h1
-            style={{
-              fontFamily: "var(--font-family-display)",
-              fontSize: "var(--font-size-xl)",
-              fontWeight: "var(--font-weight-bold)",
-              color: "var(--color-text-primary)",
-              margin: 0,
-              textAlign: "center",
-            }}
-          >
-            {strings.map.loadError}
-          </h1>
+          <h1 style={TITLE_TEXT_STYLE}>{strings.map.loadError}</h1>
           <button
             type="button"
             className="mz-focusable"
@@ -574,17 +630,7 @@ export function MapScreen() {
         <>
           {/* Socle de secours indispo → message DOUX voix de Teddy (COPY §90/91), jamais l'erreur
               brute. `role="status"` : annoncé (a11y), même patron que le chargement. */}
-          <h1
-            role="status"
-            style={{
-              fontFamily: "var(--font-family-display)",
-              fontSize: "var(--font-size-xl)",
-              fontWeight: "var(--font-weight-bold)",
-              color: "var(--color-text-primary)",
-              margin: 0,
-              textAlign: "center",
-            }}
-          >
+          <h1 role="status" style={TITLE_TEXT_STYLE}>
             {strings.map.worldUnavailable}
           </h1>
           <button
@@ -611,23 +657,15 @@ export function MapScreen() {
 
       {screen.kind === "ready" && (
         <>
-          <h1
-            style={{
-              fontFamily: "var(--font-family-display)",
-              fontSize: "var(--font-size-xl)",
-              fontWeight: "var(--font-weight-bold)",
-              color: "var(--color-text-primary)",
-              margin: 0,
-              textAlign: "center",
-            }}
-          >
-            {/* Titre THÉMATISÉ (WIREFRAMES §2 « Monde 3 · La Forêt ») : le thème per-monde
-                (généré/socle) atteint l'enfant dans le titre — texte, jamais occulté (#180). */}
-            {fill(strings.map.titleThemed, {
+          {/* Titre thématisé + scrim de contraste `--world-surface` quand un fond-image réel du
+              monde est rendu (garantit la lisibilité du titre par-dessus la photo, story #189). */}
+          <ThemedTitle
+            text={fill(strings.map.titleThemed, {
               n: String(screen.map.worldIndex + 1),
               theme: screen.map.theme.label,
             })}
-          </h1>
+            hasBackground={screen.map.theme.background !== null}
+          />
           {/* Bandeau d'accent : consommateur direct de `--world-accent` (pixel per-monde visible). */}
           <WorldAccentBar />
           <NodePath map={screen.map} />
