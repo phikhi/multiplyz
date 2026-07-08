@@ -10,6 +10,15 @@ import { loadWorldGenConfig, type QaConfig, type WorldGenConfig } from "@/config
 import { CURATED_THEMES } from "@/config/worldgen-themes";
 import type { GeneratedWorld } from "./generate-world";
 import * as generateWorldModule from "./generate-world";
+import type { GenerateImageInput } from "./image-client";
+import * as imageClient from "./image-client";
+import { readMasterBytesFromDisk } from "./socle-assets";
+import {
+  approveAsset,
+  MASTER_ASSET_ID,
+  upsertCandidate,
+  type ReferenceAssetInput,
+} from "./reference-assets";
 import type { AssetInspection, WorldInspector } from "./qa";
 import {
   ACTIVE_JOB_STATUSES,
@@ -110,6 +119,24 @@ function seedWorld(db: AppDatabase, index: number, createdAt: Date = NOW): void 
       createdAt,
     })
     .run();
+}
+
+/** Réf disque du master figé (#158) — telle que persistée par le Stage A / owner-run. */
+const MASTER_REF = "storage/reference/teddy/teddy-master.png";
+
+/** Seed un master Teddy **approuvé** (prérequis d'ancrage img2img de la variante Teddy, ADR 0009). */
+function seedApprovedMaster(db: AppDatabase): void {
+  const input: ReferenceAssetInput = {
+    id: MASTER_ASSET_ID,
+    kind: "master",
+    expression: null,
+    assetRef: MASTER_REF,
+    backgroundStrategy: "post-cutout",
+    transparent: true,
+    sourcePhotosHash: "hash-master",
+  };
+  upsertCandidate(db, input);
+  approveAsset(db, MASTER_ASSET_ID, "owner");
 }
 
 /** Crée un profil (prérequis FK de `progress.profile_id`), idempotent par id. */
@@ -235,16 +262,69 @@ describe("resolveWorkerDeps — défauts prod", () => {
     // Inspecteur par défaut = fail-closed : lève tant qu'aucun classifieur vision réel n'est branché.
     expect(deps.inspect).toBeTypeOf("function");
     expect(() => deps.inspect({ ref: "world/0/teddy.png", kind: "teddy" })).toThrow();
+    // Défaut committé du loader master = le VRAI lecteur disque contraint (ancrage ADR 0009 réel
+    // sur le chemin mondes-générés), pas le marqueur `masterRefBytes` (rétro #184, #186).
+    expect(deps.loadMasterBytes).toBe(readMasterBytesFromDisk);
   });
 
-  it("le generate par défaut délègue à generateWorld (6.3) — zéro appel réseau ici (mocké)", async () => {
+  it("loadMasterBytes est un dep injectable SURCHARGEABLE du worker (point d'injection RÉEL, #184)", () => {
+    // Le loader master est surchargeable via l'argument de `resolveWorkerDeps` (pas un stub appelé
+    // en dur) : rougit si `resolveWorkerDeps` ignorait l'override et re-figeait le défaut disque.
+    const fake = (ref: string): Buffer => Buffer.from(`fake:${ref}`);
+    expect(resolveWorkerDeps({ loadMasterBytes: fake }).loadMasterBytes).toBe(fake);
+  });
+
+  it("le generate par défaut délègue à generateWorld en INJECTANT le loader disque réel (ancrage master, #186)", async () => {
     const db = freshDb();
     const spy = vi
       .spyOn(generateWorldModule, "generateWorld")
       .mockResolvedValue({ worldIndex: 3 } as unknown as GeneratedWorld);
     const { generate } = resolveWorkerDeps();
     await generate(db, "ocean", 3, []);
-    expect(spy).toHaveBeenCalledWith(db, "ocean", 3, []);
+    // Le worker passe `{ loadMasterBytes: readMasterBytesFromDisk }` en 5ᵉ arg → l'ancrage img2img
+    // devient effectif en prod. Rougit si le thunk omet l'injection (retomberait sur le marqueur).
+    expect(spy).toHaveBeenCalledWith(db, "ocean", 3, [], {
+      loadMasterBytes: readMasterBytesFromDisk,
+    });
+    spy.mockRestore();
+  });
+
+  it("le generate prod ancre la variante Teddy sur les octets du master via loadMasterBytes (threadé jusqu'à generateWorld, pas le marqueur — #186)", async () => {
+    // Chemin RÉEL bout-en-bout (worker → vraie `generateWorld` → ancrage Teddy), client image mocké
+    // (zéro réseau) : on prouve que les OCTETS chargés par `loadMasterBytes` du worker atterrissent
+    // dans les `refImages` de la variante Teddy. `loadMasterBytes` surchargé par un FAKE renvoyant un
+    // sentinel (jamais de lecture disque réelle en CI). Master approuvé requis (ADR 0009).
+    const db = freshDb();
+    seedApprovedMaster(db);
+    const sentinel = Buffer.from([0xde, 0xad, 0xbe, 0xef]);
+    const seenRefs: string[] = [];
+    const captured: GenerateImageInput[] = [];
+    const spy = vi.spyOn(imageClient, "generateImage").mockImplementation((input) => {
+      captured.push(input);
+      return Promise.resolve(Buffer.from("fake-image"));
+    });
+
+    // `generate` NON surchargé → thunk par défaut → vraie `generateWorld`. Seul `loadMasterBytes`
+    // est surchargé (le worker doit le THREADER jusqu'aux deps de `generateWorld`).
+    const { generate } = resolveWorkerDeps({
+      loadMasterBytes: (ref) => {
+        seenRefs.push(ref);
+        return sentinel;
+      },
+    });
+    await generate(db, themeForWorld(0).slug, 0, []);
+
+    // La variante Teddy est le SEUL appel image portant `refImages` (créatures = texte seul, ADR 0009).
+    const teddyCall = captured.find((c) => c.refImages !== undefined);
+    expect(teddyCall?.refImages).toHaveLength(1);
+    expect(teddyCall?.refImages?.[0].mimeType).toBe("image/png");
+    // Les octets ancrés = ceux chargés par le `loadMasterBytes` du worker (sentinel), PAS le marqueur
+    // `Buffer.from(assetRef)` : mutation-preuve — si le thunk omet `{ loadMasterBytes }`, `generateWorld`
+    // retombe sur `masterRefBytes(master.assetRef)` → `data` = les octets du CHEMIN → ces deux assertions rougissent.
+    expect(teddyCall?.refImages?.[0].data).toEqual(sentinel);
+    expect(teddyCall?.refImages?.[0].data).not.toEqual(Buffer.from(MASTER_REF, "utf8"));
+    // Le loader du worker a bien reçu la réf du master approuvé (jamais les photos, WORLDGEN §8).
+    expect(seenRefs).toEqual([MASTER_REF]);
     spy.mockRestore();
   });
 });
