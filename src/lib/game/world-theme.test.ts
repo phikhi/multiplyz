@@ -84,6 +84,34 @@ describe("buildWorldTheme (assemblage validé — palette + fond)", () => {
     expect(theme.background).toBe(`${WORLD_ASSET_BASE}world/2/background.png`);
   });
 
+  // GAP #180 — LA couverture qui manquait (et a laissé passer le défaut #189) : un `assetRefs`
+  // SOCLE valide (`socle/<slot>/…`, exactement la forme que le pipeline socle stocke) doit produire
+  // un `background` NON-NULL (URL publique). Sans cette garde, le chemin `background !== null`
+  // restait dormant. Rougit si la regex/le contrat de ref régresse (ex. namespace `socle` retiré).
+  it("assetRefs SOCLE valide (socle/<slot>/background.png) → background NON-NULL = URL publique Nginx (comble le gap #180)", () => {
+    const theme = buildWorldTheme(
+      input({
+        assetRefs: JSON.stringify({
+          background: "socle/0/background.png",
+          tiles: "socle/0/tiles.png",
+          teddy: "socle/0/teddy.png",
+        }),
+      }),
+    );
+    expect(theme.background).not.toBeNull();
+    expect(theme.background).toBe(`${WORLD_ASSET_BASE}socle/0/background.png`);
+  });
+
+  // CAUSE-RACINE du défaut #189 : un ref stocké en chemin ABSOLU (`/generated/socle/…`, ce que la DB
+  // locale contenait à tort) est REFUSÉ par le contrat (préfixe absolu hors namespace `world|socle`)
+  // → `background: null` → chemin fond-image DORMANT. Rougit si le contrat se met à accepter l'absolu.
+  it("assetRefs en chemin ABSOLU (/generated/socle/0/background.png) → background null (cause-racine du défaut #189)", () => {
+    const theme = buildWorldTheme(
+      input({ assetRefs: JSON.stringify({ background: "/generated/socle/0/background.png" }) }),
+    );
+    expect(theme.background).toBeNull();
+  });
+
   // GARDE sécurité (mutation-prouvée) : un placeholder (gate owner) n'est JAMAIS rendu → null.
   // Muter `isRenderableAssetRef` pour accepter tout ferait passer `background` à une URL
   // `placeholder://…` → ce test rougirait.

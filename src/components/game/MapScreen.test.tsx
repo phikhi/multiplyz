@@ -217,6 +217,69 @@ describe("MapScreen — fond du monde validé avant rendu (sécurité, story 6.7
   });
 });
 
+describe("MapScreen — scrim de contraste du titre (--world-surface, story #189)", () => {
+  it("fond réel → scrim de titre rendu consommant --world-surface (token jusqu'ici ORPHELIN, #125), titre en enfant au-dessus", async () => {
+    // Effet observable (#125) : `--world-surface`, sans aucun consommateur DOM jusqu'ici, est
+    // désormais RENDU + CONSOMMÉ par une carte scrim derrière le titre. Rougit si le scrim n'est pas
+    // rendu (chemin `background !== null`) ou n'utilise pas `--world-surface`.
+    await renderReady(
+      map([node({ status: "current" })], 0, { background: "/generated/socle/0/background.png" }),
+    );
+    const scrim = document.querySelector<HTMLElement>("[data-world-scrim]");
+    expect(scrim).not.toBeNull();
+    expect(scrim!.style.backgroundColor).toBe("var(--world-surface)");
+    // Le titre est un ENFANT EN FLUX du scrim → peint AU-DESSUS du fond de carte, jamais occulté (#170).
+    const heading = scrim!.querySelector("h1");
+    expect(heading).not.toBeNull();
+    expect(heading!.textContent).toContain("Océan scintillant");
+  });
+
+  it("pas de fond réel (background null) → AUCUN scrim : le titre garde le fond de page neutre (pas de régression #125)", async () => {
+    // Effet observable : le scrim n'apparaît QUE sur le chemin fond-image réel. Rougit si le scrim
+    // est rendu inconditionnellement (le titre porterait alors `--world-surface` même sans photo).
+    await renderReady(map([node({ status: "current" })], 0, { background: null }));
+    expect(document.querySelector("[data-world-scrim]")).toBeNull();
+    // Le titre thématisé reste rendu (nu, directement sur le fond de page neutre).
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+  });
+
+  it.each(["light", "dark"] as const)(
+    "%s : titre (--color-text-primary) ≥ 4.5:1 sur le scrim (--world-surface résolu) — plancher garanti INDÉPENDAMMENT de la photo",
+    (theme) => {
+      // Fond de RÉFÉRENCE = `--world-surface` (le fond DOM réellement empilé derrière le titre, le
+      // scrim étant opaque), JAMAIS la photo IA arbitraire (rétro #125/#170). Rougit si
+      // `--world-surface` est remappé sur une couleur à faible contraste avec le texte du titre.
+      const text = resolveTokenColor(theme, "--color-text-primary");
+      const surface = resolveTokenColor(theme, "--world-surface");
+      expect(contrastRatio(text, surface)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
+describe("MapScreen — tint de fond per-monde (fix #184, story #189)", () => {
+  it("thème rendu → --world-bg-tint RE-DÉCLARÉ inline sur <main> (dérive per-monde), pas seulement --world-accent", async () => {
+    // Effet observable du fix #184 : le tint dérivé est re-déclaré AU NIVEAU de la surcharge de
+    // `--world-accent` (sinon le `color-mix` de `:root` reste NEUTRE sous la surcharge descendante,
+    // faux-dérivé dormant). Rougit si on retire la re-déclaration inline (retour au piège #184).
+    await renderReady(map([node({ status: "current" })], 0, { accent: "#B57BEF" }));
+    const main = mainEl();
+    const tint = main.style.getPropertyValue("--world-bg-tint");
+    expect(tint).toContain("color-mix");
+    expect(tint).toContain("var(--world-accent)");
+    // La var source est bien re-posée sur le MÊME élément (donc le color-mix s'y re-dérive).
+    expect(main.style.getPropertyValue("--world-accent")).toBe("#B57BEF");
+  });
+
+  it("thème NULL (état indispo) → aucune surcharge --world-bg-tint (repli :root neutre, pas de fuite)", async () => {
+    // Effet observable : la re-déclaration per-monde est GATÉE sur un thème résolu (elle ne fuit pas
+    // dans les états sans thème). Rougit si `worldMainStyle` posait le tint sans thème.
+    currentMapActionMock.mockResolvedValue({ status: "unavailable" });
+    render(<MapScreen />);
+    await waitFor(() => screen.getByText(strings.map.worldUnavailable));
+    expect(mainEl().style.getPropertyValue("--world-bg-tint")).toBe("");
+  });
+});
+
 describe("MapScreen — fidélité de rendu à la géométrie fournie (rétro #123)", () => {
   it("rend EXACTEMENT le nombre de nœuds fournis par WorldMap, quel que soit le compte", async () => {
     // Effet observable : si le composant recalculait/tronquait la géométrie, ce

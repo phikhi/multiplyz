@@ -620,6 +620,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await enterPin(page, "1234");
     await expect(page).toHaveURL(/\/jouer$/);
 
+    // Story #189 : le chemin fond-image réel (`background !== null`) est réveillé AU BOOT du serveur
+    // (`e2e/seed-world-background.ts` dans la commande webServer) — le socle[0] pointe une fixture PNG
+    // committée, donc `resolveWorld(0)` sert un fond réel → scrim + tint per-monde exercés ci-dessous.
     await page.goto("/carte");
     await page.waitForLoadState("networkidle");
 
@@ -745,9 +748,67 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(themed!.barTop).toBeGreaterThanOrEqual(0);
     expect(themed!.nodeVisible).toBe(true);
 
+    // ── Scrim de contraste du titre — PREUVE GÉOMÉTRIE en vrai navigateur (story #189, piège #170) ──
+    // Le fond-image réel du monde étant rendu (socle[0] seedé sur la fixture committée), le titre est
+    // posé sur une carte scrim OPAQUE (`--world-surface`). jsdom ne fait AUCUN layout → ici Playwright
+    // résout la géométrie réelle : (a) le fond-image du monde est bien peint sur <main>, (b) le scrim
+    // est rendu + visible, (c) il COUVRE la zone du titre (enveloppe son rect), (d) le titre reste
+    // visible (dimensions non nulles) → jamais occulté par le fond de carte.
+    const scrim = await page.evaluate(() => {
+      const el = document.querySelector("[data-world-scrim]");
+      const h1 = el?.querySelector("h1");
+      const main = document.querySelector("main");
+      if (el === null || h1 == null || main === null) return null;
+      const s = el.getBoundingClientRect();
+      const t = h1.getBoundingClientRect();
+      return {
+        bgImage: getComputedStyle(main).backgroundImage,
+        s: { top: s.top, bottom: s.bottom, left: s.left, right: s.right, w: s.width, h: s.height },
+        t: { top: t.top, bottom: t.bottom, left: t.left, right: t.right, w: t.width, h: t.height },
+      };
+    });
+    expect(scrim).not.toBeNull();
+    // (a) le fond-image réel du monde est bien peint sur <main> (chemin `background !== null` actif).
+    expect(scrim!.bgImage).toContain("world/e2e/background.png");
+    // (b) scrim rendu + visible.
+    expect(scrim!.s.w).toBeGreaterThan(0);
+    expect(scrim!.s.h).toBeGreaterThan(0);
+    // (c) le scrim ENVELOPPE le rect du titre (couvre bien sa zone, à ~1px près).
+    expect(scrim!.s.top).toBeLessThanOrEqual(scrim!.t.top + 1);
+    expect(scrim!.s.bottom).toBeGreaterThanOrEqual(scrim!.t.bottom - 1);
+    expect(scrim!.s.left).toBeLessThanOrEqual(scrim!.t.left + 1);
+    expect(scrim!.s.right).toBeGreaterThanOrEqual(scrim!.t.right - 1);
+    // (d) le titre reste rendu + visible (jamais height:0 / occulté).
+    expect(scrim!.t.w).toBeGreaterThan(0);
+    expect(scrim!.t.h).toBeGreaterThan(0);
+
+    // ── Tint de fond per-monde — PREUVE de dérivation en vrai navigateur (fix #184, story #189) ──
+    // jsdom ne résout pas `color-mix` ; Chromium oui. On compare le `--world-bg-tint` calculé sur
+    // <main> (re-déclaré inline avec l'accent DU MONDE) au `--world-bg-tint` d'un élément NEUTRE hors
+    // <main> (qui hérite celui de `:root`, dérivé de l'accent PAR DÉFAUT). S'ils DIFFÈRENT, la
+    // re-dérivation per-monde fonctionne réellement. Rougit si on retire la re-déclaration inline
+    // (piège #184 : <main> hériterait alors le tint NEUTRE de `:root` → égalité, faux-dérivé dormant).
+    const tint = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      if (main === null) return null;
+      // backgroundColor de <main> = `var(--world-bg-tint)` résolu (posé sous l'image du monde).
+      const mainTint = getComputedStyle(main).backgroundColor;
+      const probe = document.createElement("div"); // enfant de <body>, HORS <main> → hérite :root
+      probe.style.backgroundColor = "var(--world-bg-tint)";
+      document.body.appendChild(probe);
+      const neutralTint = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return { mainTint, neutralTint };
+    });
+    expect(tint).not.toBeNull();
+    // Le tint de <main> dérive de l'accent DU MONDE → distinct du tint neutre de `:root` (per-monde réel).
+    expect(tint!.mainTint).not.toBe(tint!.neutralTint);
+
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
     // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
     await page.screenshot({ path: "docs/captures/182-carte-theme.png", fullPage: true });
+    // Capture dédiée story #189 (fond-image réel + scrim titre + tint per-monde) — OUVERTE en review.
+    await page.screenshot({ path: "docs/captures/189-carte-scrim.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
     // cliquer le nœud courant ramène bien à l'écran de jeu.

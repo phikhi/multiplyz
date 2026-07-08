@@ -46,7 +46,8 @@ Les tokens = **système UI de base**. Chaque monde généré ne surcharge qu'**u
 [data-world="magic"]  { --world-accent: #B57BEF; }
 ```
 
-- `--world-bg-tint` **se dérive automatiquement** : `color-mix(--world-accent 10%, surface du thème)`. → **theme-safe** : reste lisible en clair ET en sombre (ne plus poser de pastel clair en dur, sinon texte illisible en dark mode).
+- `--world-bg-tint` = `color-mix(--world-accent 10%, surface du thème)` → **theme-safe** : reste lisible en clair ET en sombre (ne plus poser de pastel clair en dur, sinon texte illisible en dark mode). ⚠️ **Piège #184** : ce `color-mix` se résout **au niveau où il est déclaré** (`:root`). Surcharger `--world-accent` en **descendant** (ex. inline sur `<main>`) ne re-dérive **pas** le tint de `:root` — il faut **re-déclarer `--world-bg-tint`** au niveau de la surcharge de `--world-accent` pour un tint réellement per-monde (l'app le fait dans `MapScreen` `worldMainStyle`). « Se dérive automatiquement » ne vaut **que** si les deux sont posés au même niveau.
+- `--world-surface` = surface **opaque** du thème → **scrim de contraste** sous le titre quand un fond-image réel du monde est affiché (garantit la lisibilité du titre indépendamment de la photo IA arbitraire, story #189).
 - Utiliser `--world-accent` pour les éléments **thématiques** (fond de carte, barre de progression), **pas** pour les actions (qui restent `--color-accent-primary` pour la cohérence cross-monde).
 
 ## Branchement Tailwind

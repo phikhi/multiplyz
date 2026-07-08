@@ -24,7 +24,10 @@ export default defineConfig({
   webServer: {
     // Migre la base E2E AVANT de démarrer le serveur (table `profiles` requise
     // par le gating). Idempotent (Drizzle journalise les migrations appliquées).
-    command: `pnpm db:migrate && pnpm dev --port ${PORT}`,
+    // Puis pré-amorce un fond-image de monde réel (story #189) DANS ce même contexte
+    // (cwd + DATABASE_PATH) que le serveur → le chemin `background !== null` (scrim +
+    // tint per-monde) est exercé en vrai navigateur, sans dépendre des assets gitignorés.
+    command: `pnpm db:migrate && tsx e2e/seed-world-background.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
