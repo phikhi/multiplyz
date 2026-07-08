@@ -1252,6 +1252,35 @@ describe("purgeFailedWorldAssets (#176b) — purge idempotente des assets de mon
     expect(removed).toEqual([]);
   });
 
+  it("MUTATION-PROUVÉ : payload worldIndex non-entier/négatif exclu de la purge (garde runtime #184)", async () => {
+    const db = freshDb();
+    // Payloads syntaxiquement VALIDES (json_valid ⇒ pas d'illisibilité) mais malformés côté `worldIndex` :
+    // `json_extract` renvoie une string (path-traversal), un négatif, un fractionnaire — le type TS
+    // `sql<number | null>` ne les borne PAS (assertion, pas garde runtime). AUCUN job non-failed pour
+    // ces mondes ⇒ seule la garde runtime `!Number.isInteger(idx) || idx < 0` les tient hors du remover.
+    for (const payload of [
+      JSON.stringify({ worldIndex: "../../../etc" }), // json_extract → string
+      JSON.stringify({ worldIndex: -1 }), //               json_extract → int négatif
+      JSON.stringify({ worldIndex: 1.5 }), //              json_extract → real fractionnaire
+    ]) {
+      db.insert(jobs)
+        .values({
+          type: GENERATE_WORLD_JOB,
+          payload,
+          status: "failed",
+          createdAt: NOW,
+          updatedAt: NOW,
+        })
+        .run();
+    }
+    const { purged, removed } = await purgeRecording(db);
+    // Effet observable : le remover n'est JAMAIS appelé avec une valeur non-entière/négative.
+    // Retirer la garde runtime du point #184 ferait passer ces 3 valeurs (aucun job non-failed ne les
+    // exclut) → `removed` contiendrait "../../../etc", -1, 1.5 → cette assertion rougit.
+    expect(removed).toEqual([]);
+    expect(purged).toBe(0);
+  });
+
   it("idempotente : re-jouer re-cible le même monde `failed` (la purge ne mute pas la DB)", async () => {
     const db = freshDb();
     seedFailedJob(db, 5);

@@ -709,7 +709,15 @@ export function approveWorld(db: AppDatabase, worldId: string, approvedBy: strin
  * test, on injecte un FAKE qui enregistre les index ciblés (aucune I/O disque réelle en CI).
  */
 export interface PurgeFailedWorldsDeps {
-  /** Supprime **idempotemment** tous les assets servables `world/<index>/…` (idempotent côté FS). */
+  /**
+   * Supprime **idempotemment** tous les assets servables `world/<index>/…` (idempotent côté FS).
+   *
+   * **Contrat d'appel (#184)** : `worldIndex` doit être un **entier non-négatif**, contraint par
+   * l'appelant — le remover ne reçoit **jamais** une valeur non validée. `purgeFailedWorldAssets`
+   * garde ce contrat en runtime (`Number.isInteger(idx) && idx >= 0`) avant tout appel, car
+   * `json_extract` peut sortir une string/négatif/fractionnaire malgré le type TS `number`. Même
+   * doctrine que `readMasterBytesFromDisk` : valider la forme reçue avant de toucher au FS.
+   */
   removeWorldAssets: (worldIndex: number) => Promise<void>;
 }
 
@@ -798,6 +806,11 @@ export async function purgeFailedWorldAssets(
   let purged = 0;
   for (const { idx } of failedRows) {
     if (idx === null) continue; // payload illisible → pas d'index à purger.
+    // Garde runtime (#184) : le type `sql<number | null>` est une **assertion TS**, pas une borne
+    // runtime — `json_extract` peut renvoyer une string (`{"worldIndex":"../../../etc"}`), un négatif
+    // ou un fractionnaire. Un payload malformé/négatif/fractionnaire est **ignoré**, jamais passé au
+    // remover (symétrique de `readMasterBytesFromDisk`/`parseWorldIndex` qui valident la forme reçue).
+    if (!Number.isInteger(idx) || idx < 0) continue;
     // Exclusion : un retry en file OU un succès (`done`, ⟹ éventuellement `active`) protège les assets.
     if (hasNonFailedJobForWorld(db, idx)) continue;
     await removeWorldAssets(idx);
