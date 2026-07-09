@@ -4,10 +4,12 @@ import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { strings } from "@/strings";
 import { AVATARS } from "@/config/avatars";
+import { BRAND_NAME } from "@/config/brand";
 import { PIN_LENGTH } from "@/lib/auth/validation";
 import type { PublicProfile } from "@/lib/auth/login";
 import { PinPad } from "@/components/PinPad";
 import { loginAction } from "@/app/login/actions";
+import { loginParentAction } from "@/app/parent/actions";
 
 /**
  * Sélecteur de connexion (AUTH.md §2, WIREFRAMES §1). Deux temps : choisir son
@@ -22,6 +24,9 @@ export interface ProfileSelectorProps {
 }
 
 const WARN_ICON = "⚠️";
+// Glyphes décoratifs (aria-hidden) — react/jsx-no-literals : aucun littéral rendu en JSX.
+const BEAR_ICON = "🧸"; // mascotte Teddy dans l'en-tête de marque (WIREFRAMES §1a).
+const LOCK_ICON = "🔒"; // cadenas de l'entrée « 🔒 Parent » (WIREFRAMES §1a, coin discret).
 const NONE = "";
 
 /** Remplace un jeton `{x}` par sa valeur (micro-interpolation des gabarits). */
@@ -55,6 +60,20 @@ const cardStyle = {
   gap: "var(--space-5)",
 } as const;
 
+// En-tête de marque « multiplyz 🧸 » (WIREFRAMES §1a, au-dessus de « Qui joue aujourd'hui ? »).
+// Le wordmark consomme `--color-text-primary` sur `--card-bg` (contraste WCAG résolu, testé).
+const brandStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "var(--space-2)",
+  margin: 0,
+  fontFamily: "var(--font-family-display)",
+  fontSize: "var(--font-size-2xl)",
+  fontWeight: "var(--font-weight-bold)",
+  color: "var(--color-text-primary)",
+} as const;
+
 const titleStyle = {
   fontFamily: "var(--font-family-display)",
   fontSize: "var(--font-size-xl)",
@@ -62,6 +81,38 @@ const titleStyle = {
   color: "var(--color-text-primary)",
   margin: 0,
   textAlign: "center",
+} as const;
+
+// Entrée discrète « 🔒 Parent » du sélecteur (WIREFRAMES §1a, coin bas). Registre neutre,
+// consomme `--color-text-secondary` sur `--card-bg` (contraste WCAG résolu, testé).
+const parentEntryStyle = {
+  alignSelf: "flex-end",
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  minHeight: "var(--tap-target-min)",
+  padding: "var(--space-2) var(--space-4)",
+  fontFamily: "var(--font-family-body)",
+  fontSize: "var(--font-size-sm)",
+  fontWeight: "var(--font-weight-semibold)",
+  color: "var(--color-text-secondary)",
+  backgroundColor: "transparent",
+  border: "1px solid var(--color-border-primary)",
+  borderRadius: "var(--border-radius-full)",
+  cursor: "pointer",
+} as const;
+
+const forgotLinkStyle = {
+  minHeight: "var(--tap-target-min)",
+  padding: "var(--space-2) var(--space-4)",
+  fontFamily: "var(--font-family-body)",
+  fontSize: "var(--font-size-sm)",
+  fontWeight: "var(--font-weight-semibold)",
+  color: "var(--color-text-secondary)",
+  backgroundColor: "transparent",
+  border: "none",
+  textDecoration: "underline",
+  cursor: "pointer",
 } as const;
 
 const errorStyle = {
@@ -124,6 +175,13 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
   const [submitting, setSubmitting] = useState(false);
   // Incrémenté à chaque échec → remonte le pavé pour rejouer le secouage doux.
   const [shakeNonce, setShakeNonce] = useState(0);
+  // Mode **espace parent** (WIREFRAMES §1a) : pavé PIN parent distinct du pavé enfant, voix
+  // neutre, message d'échec générique. Vit sur le même sélecteur (pas de route dédiée).
+  const [parentMode, setParentMode] = useState(false);
+  const [parentPin, setParentPin] = useState(NONE);
+  const [parentError, setParentError] = useState(false);
+  const [parentSubmitting, setParentSubmitting] = useState(false);
+  const [parentShakeNonce, setParentShakeNonce] = useState(0);
 
   const pickProfile = (profile: PublicProfile) => {
     setSelected(profile);
@@ -169,6 +227,116 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
     }
   };
 
+  // ── Espace parent (WIREFRAMES §1a → §7) ──────────────────────────────────
+  const openParent = () => {
+    setParentMode(true);
+    setParentPin(NONE);
+    setParentError(false);
+  };
+
+  const closeParent = () => {
+    setParentMode(false);
+    setParentPin(NONE);
+    setParentError(false);
+  };
+
+  const submitParent = async (value: string) => {
+    setParentSubmitting(true);
+    setParentError(false);
+    try {
+      const result = await loginParentAction(value);
+      if (result.ok) {
+        // Session parent posée : on rejoint l'espace parent (garde de route validera le cookie).
+        router.push("/parent");
+        router.refresh();
+        return;
+      }
+      // Échec générique (mauvais code OU backoff, indiscernables — anti-énumération).
+      setParentPin(NONE);
+      setParentError(true);
+      setParentShakeNonce((nonce) => nonce + 1);
+    } catch {
+      setParentPin(NONE);
+      setParentError(true);
+      setParentShakeNonce((nonce) => nonce + 1);
+    } finally {
+      setParentSubmitting(false);
+    }
+  };
+
+  const handleParentPinChange = (next: string) => {
+    setParentPin(next);
+    if (next.length === PIN_LENGTH && !parentSubmitting) {
+      void submitParent(next);
+    }
+  };
+
+  // Vue **pavé PIN parent** — registre neutre (COPY §5), échec générique, lien récupération.
+  if (parentMode) {
+    return (
+      <main style={mainStyle} className="bg-bg text-text">
+        <div style={cardStyle}>
+          {parentError && (
+            <p role="alert" style={errorStyle}>
+              <span aria-hidden="true">{WARN_ICON}</span>
+              {strings.parent.error}
+            </p>
+          )}
+          <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
+            {strings.parent.pinTitle}
+          </h1>
+          <p
+            style={{
+              margin: 0,
+              textAlign: "center",
+              color: "var(--color-text-secondary)",
+              fontFamily: "var(--font-family-body)",
+            }}
+          >
+            {strings.parent.pinHint}
+          </p>
+          {/* key = nonce d'échec → remonte pour rejouer l'animation de secouage. */}
+          <div key={parentShakeNonce} className={parentShakeNonce > 0 ? "mz-shake" : undefined}>
+            <PinPad
+              value={parentPin}
+              onChange={handleParentPinChange}
+              label={strings.parent.pinLabel}
+            />
+          </div>
+          {parentSubmitting && (
+            <p
+              role="status"
+              style={{
+                margin: 0,
+                textAlign: "center",
+                color: "var(--color-text-secondary)",
+                fontFamily: "var(--font-family-body)",
+              }}
+            >
+              {strings.parent.checking}
+            </p>
+          )}
+          <button
+            type="button"
+            className="mz-focusable"
+            onClick={() => router.push("/parent/recuperation")}
+            style={forgotLinkStyle}
+          >
+            {strings.parent.forgot}
+          </button>
+          <button
+            type="button"
+            className="mz-focusable"
+            onClick={closeParent}
+            style={ghostButtonStyle}
+          >
+            {strings.parent.back}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main style={mainStyle} className="bg-bg text-text">
       <div style={cardStyle}>
@@ -181,6 +349,11 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
 
         {selected === null ? (
           <>
+            {/* En-tête de marque « multiplyz 🧸 » (WIREFRAMES §1a) — 🧸 décoratif (aria-hidden). */}
+            <p style={brandStyle}>
+              <span>{BRAND_NAME}</span>
+              <span aria-hidden="true">{BEAR_ICON}</span>
+            </p>
             <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
               {strings.login.title}
             </h1>
@@ -212,6 +385,18 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
                 </li>
               ))}
             </ul>
+            {/* Entrée discrète « 🔒 Parent » (WIREFRAMES §1a, coin bas) — 🔒 décoratif, le nom
+                accessible complet est porté par `aria-label` (registre neutre, PAS Teddy). */}
+            <button
+              type="button"
+              className="mz-focusable"
+              aria-label={strings.parent.entryLabel}
+              onClick={openParent}
+              style={parentEntryStyle}
+            >
+              <span aria-hidden="true">{LOCK_ICON}</span>
+              <span>{strings.parent.entry}</span>
+            </button>
           </>
         ) : (
           <>
