@@ -8,12 +8,14 @@ import {
   getEconomyConfig,
   getEngineConfig,
   getMapConfig,
+  getReportingConfig,
   getWorldGenConfig,
   loadAuthConfig,
   loadConfig,
   loadEconomyConfig,
   loadEngineConfig,
   loadMapConfig,
+  loadReportingConfig,
   loadWorldGenConfig,
   resetConfigCache,
 } from "./server-config";
@@ -516,6 +518,70 @@ describe("loadConfig — bloc engine intégré", () => {
   it("expose le bloc worldgen dans la config applicative", () => {
     expect(loadConfig({ NODE_ENV: "development" }).worldgen).toEqual(CONFIG_DEFAULTS.worldgen);
   });
+
+  it("expose le bloc reporting dans la config applicative", () => {
+    expect(loadConfig({ NODE_ENV: "development" }).reporting).toEqual(CONFIG_DEFAULTS.reporting);
+  });
+});
+
+describe("loadReportingConfig — défauts ⚙️ (PLAN §Espace parent, ADR 0012)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadReportingConfig({})).toEqual(CONFIG_DEFAULTS.reporting);
+  });
+
+  it("semaine glissante 7 j, zones mortes 0.05 / 300 ms, seuils 0.85 / 0.4, top 5", () => {
+    const r = loadReportingConfig({});
+    expect(r.trendWindowDays).toBe(7);
+    expect(r.trendAccuracyDelta).toBe(0.05);
+    expect(r.trendSpeedDeltaMs).toBe(300);
+    expect(r.masteredMinRatio).toBe(0.85);
+    expect(r.inProgressMinRatio).toBe(0.4);
+    expect(r.reviewListSize).toBe(5);
+  });
+});
+
+describe("loadReportingConfig — surcharges ⚙️ par env", () => {
+  it("surcharge les six paramètres de reporting", () => {
+    const r = loadReportingConfig({
+      REPORTING_TREND_WINDOW_DAYS: "14",
+      REPORTING_TREND_ACCURACY_DELTA: "0.1",
+      REPORTING_TREND_SPEED_DELTA_MS: "500",
+      REPORTING_MASTERED_MIN_RATIO: "0.9",
+      REPORTING_IN_PROGRESS_MIN_RATIO: "0.5",
+      REPORTING_REVIEW_LIST_SIZE: "8",
+    });
+    expect(r.trendWindowDays).toBe(14);
+    expect(r.trendAccuracyDelta).toBe(0.1);
+    expect(r.trendSpeedDeltaMs).toBe(500);
+    expect(r.masteredMinRatio).toBe(0.9);
+    expect(r.inProgressMinRatio).toBe(0.5);
+    expect(r.reviewListSize).toBe(8);
+  });
+
+  it("accepte les bornes légitimes 0 (zones mortes) mais rejette l'invalide vers le défaut", () => {
+    const d = CONFIG_DEFAULTS.reporting;
+    // Zones mortes : 0 légitime (aucune zone morte).
+    expect(loadReportingConfig({ REPORTING_TREND_ACCURACY_DELTA: "0" }).trendAccuracyDelta).toBe(0);
+    expect(loadReportingConfig({ REPORTING_TREND_SPEED_DELTA_MS: "0" }).trendSpeedDeltaMs).toBe(0);
+    // Fenêtre / taille de liste : ≥ 1 requis → 0 et négatif retombent sur le défaut.
+    expect(loadReportingConfig({ REPORTING_TREND_WINDOW_DAYS: "0" }).trendWindowDays).toBe(
+      d.trendWindowDays,
+    );
+    expect(loadReportingConfig({ REPORTING_REVIEW_LIST_SIZE: "-3" }).reviewListSize).toBe(
+      d.reviewListSize,
+    );
+    // Ratios de la carte : `]0,1]` → 0, > 1 et non numérique retombent sur le défaut.
+    expect(loadReportingConfig({ REPORTING_MASTERED_MIN_RATIO: "0" }).masteredMinRatio).toBe(
+      d.masteredMinRatio,
+    );
+    expect(loadReportingConfig({ REPORTING_IN_PROGRESS_MIN_RATIO: "1.5" }).inProgressMinRatio).toBe(
+      d.inProgressMinRatio,
+    );
+    // Zone morte de justesse hors `[0,1]` → défaut.
+    expect(loadReportingConfig({ REPORTING_TREND_ACCURACY_DELTA: "2" }).trendAccuracyDelta).toBe(
+      d.trendAccuracyDelta,
+    );
+  });
 });
 
 describe("loadWorldGenConfig — défauts ⚙️ (WORLDGEN §2/§3/§5, ADR 0008)", () => {
@@ -729,6 +795,15 @@ describe("getWorldGenConfig — accès mémoïsé", () => {
 
   it("expose le bloc worldgen de la config applicative", () => {
     expect(getWorldGenConfig()).toBe(getConfig().worldgen);
+  });
+});
+
+describe("getReportingConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc reporting de la config applicative", () => {
+    expect(getReportingConfig()).toBe(getConfig().reporting);
   });
 });
 
