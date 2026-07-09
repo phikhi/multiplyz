@@ -81,6 +81,14 @@ const titleStyle = {
   color: "var(--color-text-primary)",
   margin: 0,
   textAlign: "center",
+  // Ces titres portent `ref={focusHeading} tabIndex={-1}` : le focus est posé
+  // **programmatiquement** à chaque étape (annonce lecteur d'écran), jamais atteint au Tab
+  // (hors ordre clavier). On supprime donc l'outline UA (`:focus`/`:focus-visible`) — un
+  // anneau parasite full-width autour du titre, sans valeur a11y ici (l'annonce SR vient du
+  // déplacement du focus, pas d'un ring). Pas `mz-focusable` : cet utilitaire ne stylise QUE
+  // `:focus-visible` (il ajouterait un anneau, ou laisserait l'outline UA si le focus
+  // programmatique ne matche pas `:focus-visible`). `outline:none` sûr car tabIndex=-1.
+  outline: "none",
 } as const;
 
 // Entrée discrète « 🔒 Parent » du sélecteur (WIREFRAMES §1a, coin bas). Registre neutre,

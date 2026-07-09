@@ -1048,8 +1048,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       };
     }, strings.parent.entryLabel);
     expect(geom).not.toBeNull();
-    expect(geom!.width).toBeGreaterThan(0);
-    expect(geom!.height).toBeGreaterThanOrEqual(44); // cible tactile a11y
+    expect(geom!.width).toBeGreaterThanOrEqual(44); // cible tactile a11y (largeur)
+    expect(geom!.height).toBeGreaterThanOrEqual(44); // cible tactile a11y (hauteur)
     expect(geom!.inViewport).toBe(true);
     expect(geom!.notOccluded).toBe(true);
 
@@ -1065,6 +1065,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(
       page.getByRole("heading", { level: 1, name: strings.parent.pinTitle }),
     ).toBeVisible();
+    // Capture du pavé PIN parent (titre `:285`) — vérif pixels : aucun outline UA parasite
+    // autour du titre programmatiquement focus (tabIndex=-1), cf. fix Frontend PR #221.
+    await page.screenshot({ path: "docs/captures/214-pave-pin-parent.png", fullPage: true });
     await enterPin(page, "9876"); // PIN parent posé à l'onboarding, auto-soumission au 4ᵉ
 
     await expect(page).toHaveURL(/\/parent$/);

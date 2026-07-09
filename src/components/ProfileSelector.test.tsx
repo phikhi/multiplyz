@@ -199,4 +199,17 @@ describe("ProfileSelector — contraste WCAG résolu (story 7.1)", () => {
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
+
+  // Bannière d'erreur (`errorStyle`) réutilisée pour `strings.parent.error` sur ce sélecteur
+  // retouché (⚠️ + texte). Le token de texte de statut `--color-on-warning` est CONSTANT (ne
+  // s'inverse jamais par thème, a11y CLAUDE.md) → contraste résolu ≥ 4.5:1 sur le fond
+  // `--color-status-warning` en light ET dark (rétro #126 : auditer tout glyphe rendu).
+  it.each(THEMES)(
+    "bannière d'erreur : color-on-warning ≥ 4.5:1 sur color-status-warning (%s)",
+    (theme) => {
+      const text = resolveTokenColor(theme, "color-on-warning");
+      const bg = resolveTokenColor(theme, "color-status-warning");
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });
