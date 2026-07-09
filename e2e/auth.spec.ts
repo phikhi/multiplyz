@@ -1356,6 +1356,16 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.getByRole("button", { name: settings.theme.light }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await page.screenshot({ path: "docs/captures/7.3-reglages-clair.png", fullPage: true });
+
+    // Responsive téléphone 375px (WIREFRAMES §8) : pills/selects wrap, AUCUN débordement horizontal.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: settings.title })).toBeVisible();
+    const fitsWidth = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    );
+    expect(fitsWidth).toBe(true); // le contenu tient dans la largeur (pas de scroll horizontal)
+    await page.screenshot({ path: "docs/captures/7.3-reglages-mobile.png", fullPage: true });
   });
 
   test("récupération PIN parent via code de secours → nouveau code (capture)", async ({ page }) => {

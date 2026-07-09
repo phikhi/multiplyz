@@ -45,10 +45,12 @@ type ErrorCode = keyof typeof strings.parent.settings.errors;
 const s = strings.parent.settings;
 
 /**
- * Applique la préférence de thème **immédiatement** côté client (`data-theme` sur `<html>`, même
- * mécanisme que `app/layout.tsx` côté serveur + l'ancien `ThemeToggle`). `system` → retire
- * l'attribut (le média-query `prefers-color-scheme` de `tokens.css` décide) ; `light`/`dark` →
- * pose l'attribut (force le thème). Le serveur re-stampe la même valeur au prochain rendu (persisté).
+ * Applique la préférence de thème **immédiatement** côté client (`data-theme` sur `<html>`) : même
+ * **mécanisme** (`data-theme` + `tokens.css`) que `app/layout.tsx` côté serveur, mais **composant
+ * distinct** de `ThemeToggle` (toggle binaire dev-only de `/styleguide`, inadapté aux 3 états
+ * système/clair/sombre → réécrit ici sans l'importer). `system` → retire l'attribut (le média-query
+ * `prefers-color-scheme` de `tokens.css` décide) ; `light`/`dark` → pose l'attribut (force le thème).
+ * Le serveur re-stampe la même valeur au prochain rendu (persisté).
  */
 function applyThemePreference(theme: ThemePreference): void {
   if (theme === "system") {

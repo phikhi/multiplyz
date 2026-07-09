@@ -599,15 +599,26 @@ export const fr = {
         legend: "Temps d'écran",
         /** Libellé du réglage de pause suggérée (nudge doux). */
         nudgeLabel: "Pause suggérée après",
-        /** Consigne neutre du nudge. */
-        nudgeHint: "Une invitation douce à faire une pause, sans jamais bloquer.",
+        /**
+         * Consigne du nudge. **Copy « bientôt »** (idiome de `language.hint`) : le réglage est
+         * STOCKÉ seulement, l'enforcement runtime = story 7.8 #229 (bloquée par 7.4 #217). Ne PAS
+         * affirmer un effet actif tant que 7.8 n'est pas mergée (sinon fausse promesse au parent).
+         * Texte final fidèle DETAILS §27 (« invitation douce ») à restaurer quand 7.8 câble l'effet.
+         */
+        nudgeHint: "Bientôt : une invitation douce à faire une pause, sans jamais bloquer.",
         /** Libellé accessible d'une durée en minutes (gabarit). */
         minutesOption: "{min} minutes",
         /** Libellé du toggle du verrou dur optionnel. */
         hardLockToggle: "Limite quotidienne",
-        /** Consigne neutre du verrou dur (fidèle à DETAILS §27). */
+        /**
+         * Consigne du verrou dur. **Copy « bientôt »** (idiome de `language.hint`) : le seuil est
+         * STOCKÉ + validé seulement, l'enforcement (mise en pause de l'app) = story 7.8 #229 (bloquée
+         * par 7.4 #217). Ne PAS affirmer au présent que l'app « se met en pause » — un parent le
+         * croirait actif alors que rien ne se passe avant 7.8. Texte final fidèle DETAILS §27
+         * (« l'app se verrouille en douceur jusqu'au lendemain ») à restaurer quand 7.8 câble l'effet.
+         */
         hardLockHint:
-          "Au-delà de cette limite, l'application se met en pause en douceur jusqu'au lendemain.",
+          "Bientôt : au-delà de cette limite, l'application invitera à s'arrêter en douceur jusqu'au lendemain.",
         /** Libellé du réglage de seuil du verrou dur. */
         hardLockLabel: "Limite par jour",
       },
