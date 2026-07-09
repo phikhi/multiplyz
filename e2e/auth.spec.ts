@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
+import { BRAND_NAME } from "../src/config/brand";
 
 /**
  * E2E du parcours auth complet — onboarding 1er usage (#2.2), connexion (#2.3),
@@ -1002,6 +1003,151 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   // (la fenêtre expire pendant la navigation) = flaky sur un gate. La courbe et le
   // blocage sont couverts de façon **déterministe** (horloge injectée) en unitaire :
   // `rate-limit.test.ts`, `pin-attempts.test.ts`, `login.test.ts` (guardedAuthenticateChild).
+
+  // ==========================================================================
+  // Espace parent (story 7.1, épic #7) — entrée sélecteur + en-tête marque, gate
+  // PIN parent, séparation stricte enfant/parent. Le PIN parent est 9876 (posé à
+  // l'onboarding) — ces tests s'exécutent AVANT la récupération (qui le change).
+  // ==========================================================================
+
+  test("sélecteur : en-tête marque + entrée 🔒 Parent visibles NON recouvertes (capture)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // En-tête de marque « multiplyz 🧸 » rendu (WIREFRAMES §1a) au-dessus du titre.
+    await expect(page.getByText(BRAND_NAME, { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
+
+    // Entrée « 🔒 Parent » (nom accessible neutre) visible.
+    const parentEntry = page.getByRole("button", { name: strings.parent.entryLabel });
+    await expect(parentEntry).toBeVisible();
+
+    // NON-OCCLUSION (#170/#190) — la géométrie RAISONNÉE ne prouve rien : on vérifie en VRAI
+    // navigateur que l'entrée n'est pas recouverte (l'élément le plus haut au CENTRE du bouton
+    // est le bouton lui-même ou un de ses descendants), dans le cadre, cible ≥ 44 px.
+    const geom = await page.evaluate((label) => {
+      const btn = [...document.querySelectorAll("button")].find(
+        (b) => b.getAttribute("aria-label") === label,
+      );
+      if (btn == null) return null;
+      const r = btn.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const topEl = document.elementFromPoint(cx, cy);
+      return {
+        width: r.width,
+        height: r.height,
+        inViewport:
+          r.top >= 0 &&
+          r.left >= 0 &&
+          r.bottom <= window.innerHeight &&
+          r.right <= window.innerWidth,
+        notOccluded: topEl != null && (topEl === btn || btn.contains(topEl)),
+      };
+    }, strings.parent.entryLabel);
+    expect(geom).not.toBeNull();
+    expect(geom!.width).toBeGreaterThanOrEqual(44); // cible tactile a11y (largeur)
+    expect(geom!.height).toBeGreaterThanOrEqual(44); // cible tactile a11y (hauteur)
+    expect(geom!.inViewport).toBe(true);
+    expect(geom!.notOccluded).toBe(true);
+
+    await page.screenshot({ path: "docs/captures/214-selecteur-parent.png", fullPage: true });
+  });
+
+  test("code parent correct → espace parent (stub) (capture)", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    // Vue pavé PIN parent (registre neutre, distinct du pavé enfant).
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.parent.pinTitle }),
+    ).toBeVisible();
+    // Capture du pavé PIN parent (titre `:285`) — vérif pixels : aucun outline UA parasite
+    // autour du titre programmatiquement focus (tabIndex=-1), cf. fix Frontend PR #221.
+    await page.screenshot({ path: "docs/captures/214-pave-pin-parent.png", fullPage: true });
+    await enterPin(page, "9876"); // PIN parent posé à l'onboarding, auto-soumission au 4ᵉ
+
+    await expect(page).toHaveURL(/\/parent$/);
+    // Stub du tableau de bord : bandeau « Espace parent » + placeholder neutre (dashboard = 7.7).
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.parent.dashboard.title }),
+    ).toBeVisible();
+    await expect(page.getByText(strings.parent.dashboard.placeholder)).toBeVisible();
+
+    await page.screenshot({ path: "docs/captures/214-espace-parent.png", fullPage: true });
+  });
+
+  test("« code parent oublié » depuis le pavé parent → /parent/recuperation", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await page.getByRole("button", { name: strings.parent.forgot }).click();
+    await expect(page).toHaveURL(/\/parent\/recuperation$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.recovery.title }),
+    ).toBeVisible();
+  });
+
+  test("SÉCU : une session ENFANT ne peut pas ouvrir /parent (redirigée)", async ({ page }) => {
+    // Connexion enfant → session kind=child.
+    await page.goto("/");
+    await page.getByRole("button", { name: profileLabel }).click();
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+
+    // Le garde de /parent filtre kind==='parent' → une session enfant est redirigée au sélecteur.
+    await page.goto("/parent");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
+  });
+
+  test("SÉCU : une session PARENT ne peut pas ouvrir le jeu enfant (redirigée)", async ({
+    page,
+  }) => {
+    // Connexion parent → session kind=parent.
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+
+    // Le garde du jeu filtre kind==='child' → une session parent est redirigée au sélecteur.
+    await page.goto("/jouer");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
+  });
+
+  test("/parent sans session valide → redirection vers le sélecteur", async ({ page }) => {
+    // Contexte neuf (aucun cookie) → le garde parent redirige au sélecteur.
+    await page.goto("/parent");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
+  });
+
+  test("quitter l'espace parent → session parent révoquée, /parent redirige de nouveau", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+
+    // Sortie (✕ du wireframe §7) : révoque la session serveur puis retourne au sélecteur.
+    await page.getByRole("button", { name: strings.parent.dashboard.exit }).click();
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page).toHaveURL(/\/$/);
+
+    // Session révoquée serveur : /parent redirige à nouveau (le garde lit la session à chaque requête).
+    await page.goto("/parent");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+  });
 
   test("récupération PIN parent via code de secours → nouveau code (capture)", async ({ page }) => {
     const rec = strings.recovery;

@@ -431,6 +431,49 @@ export const fr = {
     },
   },
   /**
+   * **Espace parent** (épic #7, story 7.1 — AUTH.md §2 «espace parent», WIREFRAMES §1a/§7,
+   * PRODUCT.md écran 7). Écran **parent** → registre **NEUTRE / vouvoiement** (COPY.md §5, PAS
+   * la voix tutoyante de Teddy). L'entrée du sélecteur + le pavé PIN parent + le stub du
+   * tableau de bord. Message d'échec **générique** (anti-énumération, AUTH.md §4). Le vrai
+   * tableau de bord (justesse/compétences/temps) arrive en story 7.7.
+   */
+  parent: {
+    /**
+     * Entrée discrète « 🔒 Parent » du sélecteur de profil (WIREFRAMES §1a, coin bas). Le
+     * cadenas 🔒 est un glyphe **décoratif** (aria-hidden) → `entry` = texte visible,
+     * `entryLabel` = nom accessible complet annoncé au lecteur d'écran. Registre neutre.
+     */
+    entry: "Parent",
+    /** Nom accessible de l'entrée (le 🔒 décoratif ne porte pas d'info a11y). */
+    entryLabel: "Espace parent",
+    /** Titre du pavé PIN parent (registre neutre/vouvoiement, COPY §5). */
+    pinTitle: "Espace parent",
+    /** Consigne du pavé PIN parent (vouvoiement). */
+    pinHint: "Saisissez le code parent pour continuer.",
+    /** Libellé accessible du groupe pavé PIN parent. */
+    pinLabel: "Code parent",
+    /** Vérification en cours (après saisie complète du code). */
+    checking: "Vérification…",
+    /** Échec **générique** (code faux OU backoff, indiscernables) — anti-énumération, neutre. */
+    error: "Code incorrect. Réessayez.",
+    /** Lien « code parent oublié » → `/parent/recuperation` (flow #2.5, AUTH §5). */
+    forgot: "Code parent oublié",
+    /** Retour au sélecteur de profil (annule la saisie du code parent). */
+    back: "Retour",
+    /**
+     * **Stub** du tableau de bord (story 7.1 — le vrai dashboard justesse/compétences/temps
+     * arrive en story 7.7, WIREFRAMES §7). Bandeau + placeholder + sortie, registre neutre.
+     */
+    dashboard: {
+      /** Bandeau de l'espace parent (WIREFRAMES §7 en-tête). */
+      title: "Espace parent",
+      /** Placeholder neutre — le tableau de bord des progrès arrive en story 7.7. */
+      placeholder: "Le tableau de bord des progrès arrive bientôt.",
+      /** Bouton de sortie (✕ du wireframe §7) → révoque la session parent, retour au sélecteur. */
+      exit: "Quitter l'espace parent",
+    },
+  },
+  /**
    * **Copy du générateur de mondes** (WORLDGEN §4, story 6.3, épic #6). Banques de **noms
    * par défaut** et d'**histoires** (beats courts, COPY §4) piochées **déterministe** par seed
    * lors de la génération d'une créature **non légendaire** (commune/rare) — la légendaire garde

@@ -129,6 +129,24 @@ describe("strings (i18n FR)", () => {
     expect(parentText).not.toMatch(/\bte\b/);
   });
 
+  it("espace parent (7.1) = registre NEUTRE/vouvoiement (pas de tutoiement Teddy)", () => {
+    const p = strings.parent;
+    expect(p.entry.length).toBeGreaterThan(0);
+    expect(p.entryLabel.length).toBeGreaterThan(0);
+    expect(p.pinTitle.length).toBeGreaterThan(0);
+    // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant (« tu »/« te »/« ton »/« ta »).
+    const parentText =
+      `${p.pinHint} ${p.error} ${p.forgot} ${p.dashboard.placeholder} ${p.dashboard.exit}`.toLowerCase();
+    expect(parentText).not.toMatch(/\btu\b/);
+    expect(parentText).not.toMatch(/\bte\b/);
+    expect(parentText).not.toMatch(/\bton\b/);
+    expect(parentText).not.toMatch(/\bta\b/);
+    // Échec générique (anti-énumération) : jamais de fuite « profil inexistant ».
+    expect(p.error.toLowerCase()).not.toContain("inexistant");
+    // Lien récupération présent (câblage vers /parent/recuperation).
+    expect(p.forgot.toLowerCase()).toContain("oublié");
+  });
+
   it("erreurs de récupération = clés RecoveryErrorCode + GENERIC (contrat UI↔serveur)", () => {
     expect(Object.keys(strings.recovery.errors).sort()).toEqual([
       "CODE_INVALID",
