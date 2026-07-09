@@ -379,6 +379,62 @@ export interface WorldGenConfig {
   qa: QaConfig;
 }
 
+/**
+ * ⚙️ **Sémantiques de reporting de l'espace parent** (PLAN §Espace parent :79-84, story 7.2,
+ * ADR 0012). **Posés ET consommés** par les agrégats read-only `lib/parent/stats.ts` (justesse,
+ * rapidité/fluence, carte de maîtrise, à revoir) — chaque valeur AGIT sur un agrégat testé.
+ *
+ * ⚠️ Ce sont des **définitions de reporting DÉRIVÉES** : elles décrivent COMMENT présenter au
+ * parent l'état du moteur, **sans changer aucune décision ENGINE verrouillée**. La **maîtrise
+ * reste `box ≥ 4`** (`isFactMastered`/`skillMasteryRatio`, ENGINE §2), la **justesse reste la
+ * correction et non la vitesse** (PRODUCT §5 :138, ENGINE §5). Les seuils de **fluence** (« lent »
+ * au niveau d'un fait) restent ceux d'`EngineConfig.fluenceThresholdsMs` — jamais redéfinis ici.
+ * Distinct d'`EngineConfig` (seuils **pédagogiques** qui pilotent le jeu de l'enfant) : ces ⚙️ ne
+ * pilotent **que** l'affichage parent.
+ */
+export interface ReportingConfig {
+  /**
+   * **Fenêtre « semaine glissante »** en jours (PLAN §Espace parent « tendance dans le temps »).
+   * La tendance compare la fenêtre **courante** `(now − N j, now]` à la fenêtre **précédente**
+   * `(now − 2N j, now − N j]`. Défaut `7` (semaine). ≥ 1 (une fenêtre nulle n'a pas de sens).
+   */
+  trendWindowDays: number;
+  /**
+   * **Zone morte** de la tendance de **justesse** (ratio `[0,1]`) : un écart de justesse entre
+   * fenêtres `≤ ce seuil` (en valeur absolue) est rapporté **stable** (ni amélioration ni
+   * régression), pour ne pas sur-interpréter le bruit. Défaut `0.05` (5 points). `0` légitime
+   * (aucune zone morte : le moindre écart fait tendance).
+   */
+  trendAccuracyDelta: number;
+  /**
+   * **Zone morte** de la tendance de **rapidité** (ms) : un écart de temps de réponse moyen entre
+   * fenêtres `≤ ce seuil` est rapporté **stable**. Pour la rapidité, **baisser = s'améliorer**
+   * (automatisation) — la direction est calculée en conséquence (`lowerIsBetter`). Défaut `300` ms.
+   * `0` légitime (aucune zone morte).
+   */
+  trendSpeedDeltaMs: number;
+  /**
+   * **Seuil « maîtrisé »** de la carte de maîtrise (ratio `]0,1]`) : une compétence dont le ratio
+   * `skillMasteryRatio` (proportion de ses faits Tier 1 à `box ≥ 4`, ENGINE §2) est `≥ ce seuil`
+   * est classée **maîtrisée**. Défaut `0.85` — aligné (intentionnellement) sur le déclencheur de
+   * Tier (`tierUnlockRatio`, ENGINE §8) : « compétence essentiellement acquise ». Réglage
+   * **d'affichage**, calibrable indépendamment du gate moteur.
+   */
+  masteredMinRatio: number;
+  /**
+   * **Seuil « en cours »** de la carte de maîtrise (ratio `]0,1]`) : ratio `≥ ce seuil` (et
+   * `< masteredMinRatio`) → **en cours** ; en dessous → **faible**. Défaut `0.4` — écho de la
+   * bascule interleaving (ENGINE §7). Attendu `< masteredMinRatio` (ordre de classement), mais la
+   * classification reste déterministe même si l'env les inverse (« maîtrisé » testé en premier).
+   */
+  inProgressMinRatio: number;
+  /**
+   * **Taille max de la liste « à revoir »** (top N calculs ratés/lents, PLAN §Espace parent). La
+   * liste est **bornée** à ce nombre après tri par priorité de remédiation. Défaut `5`. ≥ 1.
+   */
+  reviewListSize: number;
+}
+
 export interface AppConfig {
   mode: AppMode;
   database: DatabaseConfig;
@@ -388,6 +444,7 @@ export interface AppConfig {
   map: MapConfig;
   economy: EconomyConfig;
   worldgen: WorldGenConfig;
+  reporting: ReportingConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -535,6 +592,18 @@ export const CONFIG_DEFAULTS = {
       unsafeMaxScore: 0.5,
       styleMinScore: 0.6,
     },
+  },
+  reporting: {
+    // Semaine glissante (PLAN §Espace parent « tendance dans le temps »).
+    trendWindowDays: 7,
+    // Zones mortes de tendance : 5 points de justesse / 300 ms de rapidité (bruit ignoré).
+    trendAccuracyDelta: 0.05,
+    trendSpeedDeltaMs: 300,
+    // Carte de maîtrise : maîtrisé ≥ 85 % (écho tier ENGINE §8) · en cours ≥ 40 % (écho §7).
+    masteredMinRatio: 0.85,
+    inProgressMinRatio: 0.4,
+    // Top 5 calculs « à revoir » (PLAN §Espace parent).
+    reviewListSize: 5,
   },
 } as const;
 
@@ -781,6 +850,32 @@ export function loadEconomyConfig(env: Env): EconomyConfig {
 }
 
 /**
+ * Bloc **reporting espace parent** de la config (PLAN §Espace parent :79-84, ADR 0012), isolé en
+ * fonction pure (mêmes conventions que `loadEngineConfig`). Source unique des ⚙️ de **sémantique
+ * de reporting** — fenêtre de tendance, zones mortes, seuils de la carte de maîtrise, taille de la
+ * liste « à revoir » — **consommés** par `lib/parent/stats.ts`. Aucun secret : réglages purs.
+ *
+ * Choix des parseurs par borne légitime :
+ * - `parsePositiveInt` (≥ 1) pour `trendWindowDays` / `reviewListSize` : une fenêtre ou une liste
+ *   de taille `0`/négative n'a pas de sens.
+ * - `parseUnitInterval` (`[0,1]`) pour `trendAccuracyDelta` : `0` est une zone morte nulle légitime.
+ * - `parseNonNegativeInt` (≥ 0) pour `trendSpeedDeltaMs` : `0` = zone morte nulle légitime.
+ * - `parseRatio` (`]0,1]`) pour les seuils de la carte de maîtrise : un ratio `0` ne classerait
+ *   jamais « faible » (dégénéré) → exclu.
+ */
+export function loadReportingConfig(env: Env): ReportingConfig {
+  const d = CONFIG_DEFAULTS.reporting;
+  return {
+    trendWindowDays: parsePositiveInt(env.REPORTING_TREND_WINDOW_DAYS, d.trendWindowDays),
+    trendAccuracyDelta: parseUnitInterval(env.REPORTING_TREND_ACCURACY_DELTA, d.trendAccuracyDelta),
+    trendSpeedDeltaMs: parseNonNegativeInt(env.REPORTING_TREND_SPEED_DELTA_MS, d.trendSpeedDeltaMs),
+    masteredMinRatio: parseRatio(env.REPORTING_MASTERED_MIN_RATIO, d.masteredMinRatio),
+    inProgressMinRatio: parseRatio(env.REPORTING_IN_PROGRESS_MIN_RATIO, d.inProgressMinRatio),
+    reviewListSize: parsePositiveInt(env.REPORTING_REVIEW_LIST_SIZE, d.reviewListSize),
+  };
+}
+
+/**
  * Parse une **chaîne** de configuration : valeur d'env **non vide** (espaces compactés à ses
  * extrémités) sinon défaut. Retenu pour les prompts de base ⚙️ (override d'un gabarit ART §5
  * au playtest) — une valeur vide/espaces retombe sur la charte verrouillée (jamais de prompt
@@ -900,6 +995,7 @@ export function loadConfig(env: Env): AppConfig {
     map: loadMapConfig(env),
     economy: loadEconomyConfig(env),
     worldgen: loadWorldGenConfig(env),
+    reporting: loadReportingConfig(env),
   };
 }
 
@@ -952,6 +1048,15 @@ export function getEconomyConfig(): EconomyConfig {
  */
 export function getWorldGenConfig(): WorldGenConfig {
   return getConfig().worldgen;
+}
+
+/**
+ * Bloc **reporting espace parent** de la config applicative (mémoïsé). Consommé par les agrégats
+ * read-only de l'espace parent (`lib/parent/stats.ts`, story 7.2) — justesse, rapidité, carte de
+ * maîtrise, à revoir. Source unique des ⚙️ de sémantique de reporting (ADR 0012).
+ */
+export function getReportingConfig(): ReportingConfig {
+  return getConfig().reporting;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */
