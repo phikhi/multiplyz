@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { strings } from "@/strings";
 import {
   contrastRatio,
+  mixSrgb,
   resolveTokenColor,
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
@@ -232,5 +233,55 @@ describe("ProfileManager — contraste WCAG résolu (tous glyphes rendus)", () =
         ),
       ).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it("état DÉSACTIVÉ : texte COMPOSITÉ réellement peint ≥ 4.5:1 (aucune dilution par `opacity`)", () => {
+    // Rétro Frontend #226 : un `opacity` sur le bouton compositerait le texte vers le fond → sous
+    // 4.5:1. Ce test lit l'opacité RÉELLEMENT rendue sur les boutons désactivés et calcule la
+    // couleur **post-blend** effectivement peinte (piège #170 « token résolu ≠ pixel peint ») → il
+    // ROUGIT si un `opacity` diluant est réintroduit. Tous les états désactivés/pending du fichier
+    // partagent le même `disabledButtonStyle` (owner-« Supprimer » permanent + « Enregistrer » vide).
+    render(<ProfileManager profiles={PROFILES} />);
+    const ownerDelete = card("Léa").getByRole("button", { name: m.delete.action });
+    // « Enregistrer » du renommage, désactivé quand le champ est vide.
+    fireEvent.click(card("Zoé").getByRole("button", { name: m.rename.action }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "" } });
+    const renameSave = screen.getByRole("button", { name: m.rename.save });
+
+    for (const btn of [ownerDelete, renameSave]) {
+      const opacity = btn.style.opacity === "" ? 1 : Number(btn.style.opacity);
+      expect(opacity).toBe(1); // garde directe : aucun opacity diluant sur un bouton désactivé
+      for (const theme of THEMES) {
+        const text = resolveTokenColor(theme, "color-text-secondary");
+        const bg = resolveTokenColor(theme, "color-bg-secondary");
+        // Couleur réellement peinte = blend du texte sur le fond selon l'opacité rendue.
+        const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
+        expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+});
+
+// ============================================================================
+// Gestion du focus à l'ouverture d'un panneau (rétro Frontend #226) : le focus doit se déplacer
+// dans le panneau — champ pour renommer, bouton Annuler pour réinit + suppression destructive.
+// ============================================================================
+describe("ProfileManager — focus à l'ouverture des panneaux (a11y clavier/SR)", () => {
+  it("renommer → focus déplacé sur le champ prénom", () => {
+    render(<ProfileManager profiles={PROFILES} />);
+    fireEvent.click(card("Zoé").getByRole("button", { name: m.rename.action }));
+    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+  });
+
+  it("réinitialiser le code → focus déplacé sur Annuler", () => {
+    render(<ProfileManager profiles={PROFILES} />);
+    fireEvent.click(card("Zoé").getByRole("button", { name: m.resetPin.action }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: m.resetPin.cancel }));
+  });
+
+  it("supprimer (destructif) → focus déplacé sur Annuler (choix sûr par défaut)", () => {
+    render(<ProfileManager profiles={PROFILES} />);
+    fireEvent.click(card("Zoé").getByRole("button", { name: m.delete.action }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: m.delete.cancel }));
   });
 });

@@ -174,6 +174,24 @@ const dangerButtonStyle = {
   border: "none",
 } as const;
 
+// État **désactivé / en cours** (rétro Frontend #226) : registre neutre « inactif » **sans
+// `opacity`** — un `opacity:0.55` sur le bouton compositerait le TEXTE vers le fond de la carte et
+// le ferait tomber **sous 4.5:1** (piège #170/#104 « token résolu ≠ pixel réellement peint », ici
+// via l'opacité, pas l'occlusion). On garde donc le **texte à alpha pleine** (`--color-text-secondary`
+// sur `--color-bg-secondary` = contraste résolu ≥ 4.5:1 déjà prouvé) ; le signal « désactivé » vient
+// de `disabled`/`aria-disabled` + `cursor:not-allowed` + une bordure atténuée (`--color-border-secondary`),
+// jamais d'une dilution du texte. Priorité : owner-« Supprimer » (désactivé EN PERMANENCE) reste lisible.
+const disabledButtonStyle = {
+  ...buttonBase,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  color: "var(--color-text-secondary)",
+  backgroundColor: "transparent",
+  border: "1px solid var(--color-border-secondary)",
+  cursor: "not-allowed",
+} as const;
+
 const inputStyle = {
   minHeight: "var(--tap-target-min)",
   padding: "var(--space-3) var(--space-4)",
@@ -237,6 +255,16 @@ const m = strings.parent.manage;
 export function ProfileManager({ profiles }: ProfileManagerProps) {
   const router = useRouter();
   const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
+    node?.focus();
+  }, []);
+  // **Gestion du focus à l'ouverture d'un panneau** (rétro Frontend #226) : un panneau (renommer /
+  // réinit / supprimer) apparaît par rendu conditionnel → le bouton cliqué démonte et le focus
+  // retombe sur `<body>` (clavier/SR perdus). On déplace donc le focus dans le panneau ouvert via ce
+  // ref (invoqué au MONTAGE de l'ancre, ref stable `useCallback` → une seule fois par ouverture, pas
+  // à chaque frappe). Ancre = le champ pour renommer (naturel), le bouton **Annuler** pour réinit et
+  // **surtout la suppression destructive** (choix sûr par défaut). L'annonce SR vient du déplacement
+  // de focus — pas de 2ᵉ région alert. Boutons/inputs nativement focusables → pas d'artefact #222.
+  const panelAnchorRef = useCallback((node: HTMLElement | null) => {
     node?.focus();
   }, []);
   const [active, setActive] = useState<{ id: number; mode: Mode } | null>(null);
@@ -370,6 +398,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     {fill(m.rename.label, "{prénom}", p.name)}
                   </span>
                   <input
+                    ref={panelAnchorRef}
                     type="text"
                     autoComplete="off"
                     value={renameValue}
@@ -393,11 +422,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     className="mz-focusable"
                     disabled={!canRename || pending}
                     onClick={() => submitRename(p.id)}
-                    style={{
-                      ...primaryButtonStyle,
-                      opacity: !canRename || pending ? 0.55 : 1,
-                      cursor: !canRename || pending ? "not-allowed" : "pointer",
-                    }}
+                    style={!canRename || pending ? disabledButtonStyle : primaryButtonStyle}
                   >
                     {m.rename.save}
                   </button>
@@ -409,6 +434,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                 <PinPad value={pinValue} onChange={setPinValue} label={m.resetPin.label} />
                 <div style={panelButtonsStyle}>
                   <button
+                    ref={panelAnchorRef}
                     type="button"
                     className="mz-focusable"
                     onClick={cancel}
@@ -421,11 +447,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     className="mz-focusable"
                     disabled={!canSubmitPin || pending}
                     onClick={() => submitResetPin(p.id)}
-                    style={{
-                      ...primaryButtonStyle,
-                      opacity: !canSubmitPin || pending ? 0.55 : 1,
-                      cursor: !canSubmitPin || pending ? "not-allowed" : "pointer",
-                    }}
+                    style={!canSubmitPin || pending ? disabledButtonStyle : primaryButtonStyle}
                   >
                     {m.resetPin.save}
                   </button>
@@ -442,6 +464,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                 </p>
                 <div style={panelButtonsStyle}>
                   <button
+                    ref={panelAnchorRef}
                     type="button"
                     className="mz-focusable"
                     onClick={cancel}
@@ -454,11 +477,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     className="mz-focusable"
                     disabled={pending}
                     onClick={() => submitDelete(p.id)}
-                    style={{
-                      ...dangerButtonStyle,
-                      opacity: pending ? 0.55 : 1,
-                      cursor: pending ? "not-allowed" : "pointer",
-                    }}
+                    style={pending ? disabledButtonStyle : dangerButtonStyle}
                   >
                     <span aria-hidden="true">{WARN_ICON}</span>
                     {m.delete.confirm}
@@ -490,11 +509,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     disabled={p.isOwner}
                     aria-disabled={p.isOwner}
                     onClick={() => openDelete(p)}
-                    style={{
-                      ...ghostButtonStyle,
-                      opacity: p.isOwner ? 0.55 : 1,
-                      cursor: p.isOwner ? "not-allowed" : "pointer",
-                    }}
+                    style={p.isOwner ? disabledButtonStyle : ghostButtonStyle}
                   >
                     {m.delete.action}
                   </button>

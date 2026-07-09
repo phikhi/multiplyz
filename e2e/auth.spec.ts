@@ -1211,6 +1211,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(geom.inViewport).toBe(true);
     expect(geom.notOccluded).toBe(true);
 
+    // Masque l'indicateur dev Next.js (badge « N » coin bas-gauche) pour une preuve pixel propre.
+    await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
     await page.screenshot({ path: "docs/captures/218-gerer-profils.png", fullPage: true });
   });
 
