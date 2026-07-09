@@ -439,6 +439,34 @@ export interface ReportingConfig {
   reviewListSize: number;
 }
 
+/**
+ * ⚙️ **Contrôles parentaux — temps d'écran** (DETAILS §27, PRODUCT §1.4, story 7.3). Source unique
+ * des **défauts + bornes** ⚙️ des réglages de temps d'écran que le parent calibre depuis l'espace
+ * parent (persistés par foyer dans `household_settings`, `lib/parent/settings.ts`).
+ *
+ * ⚠️ **État de consommation (honnête, #127/#155)** : ces ⚙️ sont **POSÉS + VALIDÉS + STOCKÉS** en
+ * 7.3 (défauts d'un foyer neuf + bornes de validation `writeHouseholdSettings`). Ils ne sont **PAS
+ * ENFORCÉS** ici : l'enforcement runtime (nudge de session + verrou dur qui bloque l'app) dépend du
+ * **temps-joué persisté** (story 7.4 #217, inexistant) et vit dans la **story 7.8 #229**. Décrire
+ * « borne posée + validée + stockée, consommée en 7.8 », **jamais** « agit / bloque ».
+ *
+ * `parsePositiveInt` partout (≥ 1) : une durée `0`/négative n'a pas de sens (min de session, min/jour).
+ */
+export interface ParentControlsConfig {
+  /** Nudge doux — durée de session par **défaut** avant « fais une pause » (min, DETAILS §27 « 15-20 »). */
+  screenTimeNudgeDefaultMinutes: number;
+  /** Nudge doux — borne **min** admissible (min) — validation de `writeHouseholdSettings`. */
+  screenTimeNudgeMinMinutes: number;
+  /** Nudge doux — borne **max** admissible (min) — validation de `writeHouseholdSettings`. */
+  screenTimeNudgeMaxMinutes: number;
+  /** Verrou dur — seuil quotidien par **défaut** (min/jour, DETAILS §27) — opt-in parent. */
+  screenTimeHardLockDefaultMinutes: number;
+  /** Verrou dur — borne **min** admissible (min/jour) — validation de `writeHouseholdSettings`. */
+  screenTimeHardLockMinMinutes: number;
+  /** Verrou dur — borne **max** admissible (min/jour) — validation de `writeHouseholdSettings`. */
+  screenTimeHardLockMaxMinutes: number;
+}
+
 export interface AppConfig {
   mode: AppMode;
   database: DatabaseConfig;
@@ -449,6 +477,7 @@ export interface AppConfig {
   economy: EconomyConfig;
   worldgen: WorldGenConfig;
   reporting: ReportingConfig;
+  parentControls: ParentControlsConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -609,6 +638,17 @@ export const CONFIG_DEFAULTS = {
     inProgressMinRatio: 0.4,
     // Top 5 calculs « à revoir » (PLAN §Espace parent).
     reviewListSize: 5,
+  },
+  parentControls: {
+    // Temps d'écran (DETAILS §27) — défauts + bornes ⚙️. STOCKÉS/validés en 7.3, ENFORCÉS en 7.8 #229.
+    // Nudge doux : défaut 20 min (fourchette 15-20), plage admissible 5..60.
+    screenTimeNudgeDefaultMinutes: 20,
+    screenTimeNudgeMinMinutes: 5,
+    screenTimeNudgeMaxMinutes: 60,
+    // Verrou dur optionnel : défaut 45 min/jour, plage admissible 10..240.
+    screenTimeHardLockDefaultMinutes: 45,
+    screenTimeHardLockMinMinutes: 10,
+    screenTimeHardLockMaxMinutes: 240,
   },
 } as const;
 
@@ -881,6 +921,42 @@ export function loadReportingConfig(env: Env): ReportingConfig {
 }
 
 /**
+ * Bloc **contrôles parentaux** de la config (DETAILS §27, story 7.3), isolé en fonction pure (mêmes
+ * conventions que `loadEngineConfig`). Source unique des ⚙️ **défauts + bornes** de temps d'écran —
+ * **consommés** par `lib/parent/settings.ts` (défauts d'un foyer neuf + validation de borne). Aucun
+ * secret : réglages purs. `parsePositiveInt` (≥ 1) : une durée `0`/négative est invalide → défaut.
+ */
+export function loadParentControlsConfig(env: Env): ParentControlsConfig {
+  const d = CONFIG_DEFAULTS.parentControls;
+  return {
+    screenTimeNudgeDefaultMinutes: parsePositiveInt(
+      env.PARENT_SCREEN_TIME_NUDGE_DEFAULT_MIN,
+      d.screenTimeNudgeDefaultMinutes,
+    ),
+    screenTimeNudgeMinMinutes: parsePositiveInt(
+      env.PARENT_SCREEN_TIME_NUDGE_MIN,
+      d.screenTimeNudgeMinMinutes,
+    ),
+    screenTimeNudgeMaxMinutes: parsePositiveInt(
+      env.PARENT_SCREEN_TIME_NUDGE_MAX,
+      d.screenTimeNudgeMaxMinutes,
+    ),
+    screenTimeHardLockDefaultMinutes: parsePositiveInt(
+      env.PARENT_SCREEN_TIME_HARD_LOCK_DEFAULT_MIN,
+      d.screenTimeHardLockDefaultMinutes,
+    ),
+    screenTimeHardLockMinMinutes: parsePositiveInt(
+      env.PARENT_SCREEN_TIME_HARD_LOCK_MIN,
+      d.screenTimeHardLockMinMinutes,
+    ),
+    screenTimeHardLockMaxMinutes: parsePositiveInt(
+      env.PARENT_SCREEN_TIME_HARD_LOCK_MAX,
+      d.screenTimeHardLockMaxMinutes,
+    ),
+  };
+}
+
+/**
  * Parse une **chaîne** de configuration : valeur d'env **non vide** (espaces compactés à ses
  * extrémités) sinon défaut. Retenu pour les prompts de base ⚙️ (override d'un gabarit ART §5
  * au playtest) — une valeur vide/espaces retombe sur la charte verrouillée (jamais de prompt
@@ -1001,6 +1077,7 @@ export function loadConfig(env: Env): AppConfig {
     economy: loadEconomyConfig(env),
     worldgen: loadWorldGenConfig(env),
     reporting: loadReportingConfig(env),
+    parentControls: loadParentControlsConfig(env),
   };
 }
 
@@ -1062,6 +1139,15 @@ export function getWorldGenConfig(): WorldGenConfig {
  */
 export function getReportingConfig(): ReportingConfig {
   return getConfig().reporting;
+}
+
+/**
+ * Bloc **contrôles parentaux** de la config applicative (mémoïsé). Consommé par les réglages du
+ * foyer (`lib/parent/settings.ts`, story 7.3) — défauts d'un foyer neuf + bornes de validation du
+ * temps d'écran. Source unique des ⚙️ de temps d'écran (STOCKÉS/validés en 7.3, ENFORCÉS en 7.8 #229).
+ */
+export function getParentControlsConfig(): ParentControlsConfig {
+  return getConfig().parentControls;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */

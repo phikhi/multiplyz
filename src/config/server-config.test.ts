@@ -8,6 +8,7 @@ import {
   getEconomyConfig,
   getEngineConfig,
   getMapConfig,
+  getParentControlsConfig,
   getReportingConfig,
   getWorldGenConfig,
   loadAuthConfig,
@@ -15,6 +16,7 @@ import {
   loadEconomyConfig,
   loadEngineConfig,
   loadMapConfig,
+  loadParentControlsConfig,
   loadReportingConfig,
   loadWorldGenConfig,
   resetConfigCache,
@@ -804,6 +806,59 @@ describe("getReportingConfig — accès mémoïsé", () => {
 
   it("expose le bloc reporting de la config applicative", () => {
     expect(getReportingConfig()).toBe(getConfig().reporting);
+  });
+});
+
+describe("loadParentControlsConfig — défauts ⚙️ temps d'écran (DETAILS §27, story 7.3)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadParentControlsConfig({})).toEqual(CONFIG_DEFAULTS.parentControls);
+  });
+
+  it("nudge défaut 20 (plage 5..60), verrou dur défaut 45 (plage 10..240)", () => {
+    const c = loadParentControlsConfig({});
+    expect(c.screenTimeNudgeDefaultMinutes).toBe(20);
+    expect(c.screenTimeNudgeMinMinutes).toBe(5);
+    expect(c.screenTimeNudgeMaxMinutes).toBe(60);
+    expect(c.screenTimeHardLockDefaultMinutes).toBe(45);
+    expect(c.screenTimeHardLockMinMinutes).toBe(10);
+    expect(c.screenTimeHardLockMaxMinutes).toBe(240);
+  });
+});
+
+describe("loadParentControlsConfig — surcharges ⚙️ par env", () => {
+  it("surcharge les six paramètres de temps d'écran", () => {
+    const c = loadParentControlsConfig({
+      PARENT_SCREEN_TIME_NUDGE_DEFAULT_MIN: "25",
+      PARENT_SCREEN_TIME_NUDGE_MIN: "10",
+      PARENT_SCREEN_TIME_NUDGE_MAX: "45",
+      PARENT_SCREEN_TIME_HARD_LOCK_DEFAULT_MIN: "60",
+      PARENT_SCREEN_TIME_HARD_LOCK_MIN: "15",
+      PARENT_SCREEN_TIME_HARD_LOCK_MAX: "180",
+    });
+    expect(c).toEqual({
+      screenTimeNudgeDefaultMinutes: 25,
+      screenTimeNudgeMinMinutes: 10,
+      screenTimeNudgeMaxMinutes: 45,
+      screenTimeHardLockDefaultMinutes: 60,
+      screenTimeHardLockMinMinutes: 15,
+      screenTimeHardLockMaxMinutes: 180,
+    });
+  });
+
+  it("une valeur `0`/négative/non numérique retombe sur le défaut (≥ 1 requis)", () => {
+    const d = CONFIG_DEFAULTS.parentControls;
+    expect(loadParentControlsConfig({ PARENT_SCREEN_TIME_NUDGE_DEFAULT_MIN: "0" })).toEqual(d);
+    expect(loadParentControlsConfig({ PARENT_SCREEN_TIME_HARD_LOCK_MAX: "-5" })).toEqual(d);
+    expect(loadParentControlsConfig({ PARENT_SCREEN_TIME_NUDGE_MIN: "abc" })).toEqual(d);
+  });
+});
+
+describe("getParentControlsConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc parentControls de la config applicative", () => {
+    expect(getParentControlsConfig()).toBe(getConfig().parentControls);
   });
 });
 

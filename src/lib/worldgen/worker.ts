@@ -11,6 +11,7 @@ import {
   moderatedStatusAfterQaPass,
   type WorldInspector,
 } from "./qa";
+import { readHouseholdSettings } from "@/lib/parent/settings";
 import { readMasterBytesFromDisk } from "./socle-assets";
 
 /**
@@ -542,9 +543,13 @@ export async function processNextJob(
   // ── QA réussie : finaliser ATOMIQUEMENT (statut de modération PUIS job `done`) ──
   // Transaction multi-écritures (#122) : la 2ᵉ écriture (job `done`) protégée derrière la 1ʳᵉ
   // (statut du monde). Une panne de la 2ᵉ rollback la 1ʳᵉ → jamais « monde livré, job ouvert ».
-  // Statut cible = **toggle validation parent** ⚙️ (WORLDGEN §6) : `active` auto (toggle off) OU
-  // `buffered` en attente d'approbation parent (toggle on) — jamais `active` sans QA passée (AC3).
-  const targetStatus = moderatedStatusAfterQaPass(deps.config.qa);
+  // Statut cible = **validation des mondes** (WORLDGEN §6) : `active` auto (validation off) OU
+  // `buffered` en attente d'approbation parent (validation on) — jamais `active` sans QA passée (AC3).
+  // **Source de vérité = réglage parent persisté** (story 7.3) : le worker lit `household_settings`
+  // via `readHouseholdSettings(db)` (le `deps.config.qa.parentValidationEnabled` reste le défaut
+  // d'amorçage d'un foyer neuf, cf. `resolveSettingsDefaults`). Câble le ⚙️ 6.5 sur le toggle parent.
+  const parentValidationEnabled = readHouseholdSettings(db).parentWorldValidation;
+  const targetStatus = moderatedStatusAfterQaPass(parentValidationEnabled);
   db.transaction((tx) => {
     // 1ʳᵉ écriture : statut de modération du monde QA-validé (WORLDGEN §6).
     tx.update(worlds).set({ status: targetStatus }).where(eq(worlds.index, worldIndex)).run();

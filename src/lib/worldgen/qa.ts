@@ -180,14 +180,18 @@ export function assessWorldAssets(
 }
 
 /**
- * **Statut cible d'un monde QA-validé** selon le **toggle validation parent** ⚙️ (WORLDGEN §6). C'est
- * la consommation à effet observable du toggle par le worker :
+ * **Statut cible d'un monde QA-validé** selon la **validation parent** (WORLDGEN §6). C'est la
+ * consommation à effet observable du réglage par le worker :
  * - `parentValidationEnabled = true` → le monde reste `buffered` (attend l'approbation parent
  *   `approvedBy` — cf. `approveWorld`) ;
  * - `parentValidationEnabled = false` → le monde passe `active` **auto** après QA.
  *
- * Muter/inverser ce toggle change le statut observable en base (test aux deux états).
+ * Prend un **booléen** (pas la `QaConfig`) : depuis la story 7.3, la **source de vérité** est le
+ * réglage parent persisté (`household_settings.parent_world_validation`, lu par le worker via
+ * `readHouseholdSettings`), et non plus l'env `qa.parentValidationEnabled` seul (qui reste le
+ * **défaut d'amorçage** d'un foyer neuf, cf. `resolveSettingsDefaults`). Muter/inverser l'argument
+ * change le statut observable en base (test aux deux états).
  */
-export function moderatedStatusAfterQaPass(config: QaConfig): WorldStatus {
-  return config.parentValidationEnabled ? "buffered" : "active";
+export function moderatedStatusAfterQaPass(parentValidationEnabled: boolean): WorldStatus {
+  return parentValidationEnabled ? "buffered" : "active";
 }

@@ -178,6 +178,35 @@ describe("strings (i18n FR)", () => {
     expect(m.delete.confirmBody.toLowerCase()).toContain("irréversible");
   });
 
+  it("réglages (7.3) = registre NEUTRE/vouvoiement + gabarit {min} + clés d'erreur", () => {
+    const set = strings.parent.settings;
+    // Lien depuis le tableau de bord (câblage vers /parent/reglages).
+    expect(strings.parent.dashboard.settingsLink.length).toBeGreaterThan(0);
+    // Gabarit minutes interpolable (voix neutre, jamais Teddy).
+    expect(set.screenTime.minutesOption).toContain("{min}");
+    // Trois options de thème (DETAILS §3 clair/sombre + automatique).
+    expect(set.theme.system.length).toBeGreaterThan(0);
+    expect(set.theme.light.length).toBeGreaterThan(0);
+    expect(set.theme.dark.length).toBeGreaterThan(0);
+    // Langue FR grisée (future i18n, DETAILS §5).
+    expect(set.language.value).toBe("Français");
+    // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant.
+    const settingsText =
+      `${set.intro} ${set.theme.hint} ${set.worlds.hint} ${set.screenTime.hardLockHint} ${set.errors.UNAUTHORIZED}`.toLowerCase();
+    expect(settingsText).not.toMatch(/\btu\b/);
+    expect(settingsText).not.toMatch(/\bte\b/);
+    expect(settingsText).not.toMatch(/\bton\b/);
+    expect(settingsText).not.toMatch(/\bta\b/);
+    // Clés d'erreur = codes de `SettingsValidationError` + `UNAUTHORIZED` + `GENERIC` (contrat UI↔serveur).
+    expect(Object.keys(set.errors).sort()).toEqual([
+      "GENERIC",
+      "HARD_LOCK_OUT_OF_RANGE",
+      "NUDGE_OUT_OF_RANGE",
+      "THEME_INVALID",
+      "UNAUTHORIZED",
+    ]);
+  });
+
   it("erreurs de récupération = clés RecoveryErrorCode + GENERIC (contrat UI↔serveur)", () => {
     expect(Object.keys(strings.recovery.errors).sort()).toEqual([
       "CODE_INVALID",
