@@ -214,6 +214,25 @@ describe("computeAccuracyStats", () => {
     const wide = withReporting({ trendWindowDays: 12 });
     expect(computeAccuracyStats(attempts, wide, NOW).trend.direction).toBe("stable");
   });
+
+  it("le SEUIL de tendance JUSTESSE (⚙️ trendAccuracyDelta) AGIT", () => {
+    const attempts = [
+      // Fenêtre courante (0-7 j) : 2 justes → 1.0.
+      attempt({ createdAt: daysAgo(1), correct: true }),
+      attempt({ createdAt: daysAgo(2), correct: true }),
+      // Fenêtre précédente (7-14 j) : 3 justes + 1 faux → 0.75. Écart exact = 0.25.
+      attempt({ createdAt: daysAgo(8), correct: true }),
+      attempt({ createdAt: daysAgo(9), correct: true }),
+      attempt({ createdAt: daysAgo(10), correct: true }),
+      attempt({ createdAt: daysAgo(11), correct: false }),
+    ];
+    // Défaut (0.05) : 0.25 > seuil → amélioration.
+    expect(computeAccuracyStats(attempts, CONFIG, NOW).trend.direction).toBe("improving");
+    // Seuil relevé à 0.5 : 0.25 dans la zone morte → stable (prouve que le ⚙️ est bien câblé,
+    // rougit si `trendAccuracyDelta` est figé au défaut dans `computeAccuracyStats`).
+    const wide = withReporting({ trendAccuracyDelta: 0.5 });
+    expect(computeAccuracyStats(attempts, wide, NOW).trend.direction).toBe("stable");
+  });
 });
 
 // ============================================================================
@@ -276,6 +295,19 @@ describe("computeSpeedStats", () => {
     // Seuil 100 → l'écart franchit la zone morte = amélioration.
     const tight = withReporting({ trendSpeedDeltaMs: 100 });
     expect(computeSpeedStats(attempts, tight, NOW).trend.direction).toBe("improving");
+  });
+
+  it("la FENÊTRE de tendance (⚙️ trendWindowDays) AGIT aussi sur la VITESSE", () => {
+    // Câblage vitesse du ⚙️ de fenêtre prouvé séparément (call-site vitesse, #206).
+    const attempts = [
+      attempt({ createdAt: daysAgo(3), responseMs: 1000 }),
+      attempt({ createdAt: daysAgo(10), responseMs: 5000 }),
+    ];
+    // Fenêtre 7 j : courant {3j=1000} vs précédent {10j=5000} → plus rapide = amélioration.
+    expect(computeSpeedStats(attempts, CONFIG, NOW).trend.direction).toBe("improving");
+    // Fenêtre 12 j : courant {3j,10j}=3000, précédent {}=null → indécidable = stable.
+    const wide = withReporting({ trendWindowDays: 12 });
+    expect(computeSpeedStats(attempts, wide, NOW).trend.direction).toBe("stable");
   });
 });
 
@@ -340,6 +372,26 @@ describe("computeMasteryMap", () => {
     expect(computeMasteryMap(scope, withReporting({ inProgressMinRatio: 0.6 })).mult.level).toBe(
       "weak",
     );
+  });
+
+  it("BORNE INCLUSIVE maîtrisé : ratio EXACTEMENT = masteredMinRatio → maîtrisé (≥)", () => {
+    // 2 maîtrisés / 10 = 0.2 EXACTEMENT ; seuil maîtrisé = 0.2 → `0.2 >= 0.2` → maîtrisé.
+    // Muter `>=` en `>` (0.2 > 0.2 = faux) ferait retomber en « faible » → ce test rougit.
+    const scope: ScopeEntry[] = [];
+    for (let k = 1; k <= 10; k++)
+      scope.push(scopeEntry("mult", 1, k, masteryState({ box: k <= 2 ? 5 : 0 })));
+    expect(computeMasteryMap(scope, withReporting({ masteredMinRatio: 0.2 })).mult.level).toBe(
+      "mastered",
+    );
+  });
+
+  it("BORNE INCLUSIVE en cours : ratio EXACTEMENT = inProgressMinRatio → en cours (≥)", () => {
+    // 4 maîtrisés / 10 = 0.4 EXACTEMENT = inProgressMinRatio défaut (< masteredMinRatio 0.85).
+    // `0.4 >= 0.4` → en cours ; muter `>=` en `>` ferait retomber en « faible » → ce test rougit.
+    const scope: ScopeEntry[] = [];
+    for (let k = 1; k <= 10; k++)
+      scope.push(scopeEntry("mult", 1, k, masteryState({ box: k <= 4 ? 5 : 0 })));
+    expect(computeMasteryMap(scope, CONFIG).mult.level).toBe("in-progress");
   });
 });
 

@@ -221,6 +221,26 @@ export function computeTrend(
 }
 
 /**
+ * **Tendance hebdo** d'un indicateur agrégé sur une fenêtre glissante. Partitionne `records` en
+ * fenêtre **courante** vs **précédente** (`trendWindowDays` ⚙️, UN SEUL call-site du paramètre —
+ * partagé par justesse ET rapidité pour qu'un unique test de fenêtre prouve les deux câblages,
+ * #206), applique `metric` à chaque fenêtre, puis `computeTrend` (seuil + polarité de l'indicateur).
+ */
+function windowTrend(
+  records: readonly AttemptRecord[],
+  now: number,
+  reporting: ReportingConfig,
+  metric: (window: readonly AttemptRecord[]) => number | null,
+  threshold: number,
+  lowerIsBetter: boolean,
+): Trend {
+  const windowMs = reporting.trendWindowDays * MS_PER_DAY;
+  const current = metric(records.filter((r) => inWindow(r.createdAt, now, windowMs, 0)));
+  const previous = metric(records.filter((r) => inWindow(r.createdAt, now, windowMs, 1)));
+  return computeTrend(current, previous, threshold, lowerIsBetter);
+}
+
+/**
  * **Justesse** (global + par compétence + tendance hebdo). Ne compte que les **1ʳᵉˢ réponses**
  * (`isRetry = false`, ENGINE §9) — la justesse est la **correction**, pas la vitesse (PRODUCT §5).
  */
@@ -234,13 +254,18 @@ export function computeAccuracyStats(
   for (const skill of SKILLS) {
     bySkill[skill] = accuracyOf(graded.filter((a) => a.skill === skill));
   }
-  const windowMs = config.reporting.trendWindowDays * MS_PER_DAY;
-  const current = accuracyOf(graded.filter((a) => inWindow(a.createdAt, now, windowMs, 0)));
-  const previous = accuracyOf(graded.filter((a) => inWindow(a.createdAt, now, windowMs, 1)));
   return {
     overall: accuracyOf(graded),
     bySkill,
-    trend: computeTrend(current, previous, config.reporting.trendAccuracyDelta, false),
+    // Justesse : haut = mieux → `lowerIsBetter = false`, zone morte `trendAccuracyDelta`.
+    trend: windowTrend(
+      graded,
+      now,
+      config.reporting,
+      accuracyOf,
+      config.reporting.trendAccuracyDelta,
+      false,
+    ),
   };
 }
 
@@ -259,13 +284,18 @@ export function computeSpeedStats(
   for (const skill of SKILLS) {
     bySkillMs[skill] = meanResponseMsOf(graded.filter((a) => a.skill === skill));
   }
-  const windowMs = config.reporting.trendWindowDays * MS_PER_DAY;
-  const current = meanResponseMsOf(graded.filter((a) => inWindow(a.createdAt, now, windowMs, 0)));
-  const previous = meanResponseMsOf(graded.filter((a) => inWindow(a.createdAt, now, windowMs, 1)));
   return {
     overallMs: meanResponseMsOf(graded),
     bySkillMs,
-    trend: computeTrend(current, previous, config.reporting.trendSpeedDeltaMs, true),
+    // Rapidité : baisser = mieux → `lowerIsBetter = true`, zone morte `trendSpeedDeltaMs`.
+    trend: windowTrend(
+      graded,
+      now,
+      config.reporting,
+      meanResponseMsOf,
+      config.reporting.trendSpeedDeltaMs,
+      true,
+    ),
   };
 }
 

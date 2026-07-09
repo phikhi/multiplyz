@@ -54,9 +54,12 @@ source de la **maîtrise** et de la **fluence** (`EngineConfig`, réutilisé, ja
 
 **Ces définitions sont DÉRIVÉES et ne changent AUCUNE décision ENGINE/PLAN verrouillée** : la
 maîtrise reste `box ≥ 4`, la justesse reste la correction, les seuils de fluence restent ceux du
-moteur. `ReportingConfig` ne pilote **que** l'affichage parent. Les valeurs par défaut échoient
-intentionnellement des seuils moteur familiers (maîtrisé 0.85 = déclencheur de Tier ENGINE §8 ; en
-cours 0.4 = bascule interleaving ENGINE §7) mais restent **calibrables indépendamment**.
+moteur. `ReportingConfig` ne pilote **que** l'affichage parent. Les valeurs par défaut s'inspirent de
+seuils moteur familiers, mais avec une nuance importante : `masteredMinRatio = 0.85` est un **écho
+exact** du déclencheur de Tier (ENGINE §8) — même ratio ET même computation (proportion à `box ≥ 4`) ;
+`inProgressMinRatio = 0.4` est en revanche un **emprunt purement numérique** à la bascule interleaving
+(ENGINE §7), car §7 mesure sur `box ≥ 3` (`interleaveMinBox`) alors que la carte de maîtrise classe
+sur `box ≥ 4` — ce n'est **pas** la même computation. Tous restent **calibrables indépendamment**.
 
 ## Alternatives
 

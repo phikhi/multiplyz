@@ -5,12 +5,16 @@
  * LECTURE SEULE** : l'espace parent **observe** l'état de l'enfant, il ne le modifie **jamais**
  * (aucune écriture, aucun impact runtime enfant — cf. issue #215).
  *
- * **Read-only garanti à deux niveaux** :
- * - **compile-time** : la lecture des `attempts` prend un handle `Pick<AppDatabase, "select">` — le
- *   type n'expose ni `insert`/`update`/`delete` (ajouter une écriture **ne compilerait pas**) ;
- * - **runtime observable** : `stats-source.test.ts` espionne `insert`/`update`/`delete` et vérifie
- *   qu'aucune n'est appelée + que les comptes de lignes sont **inchangés** (la garde **rougit** si
- *   une écriture est introduite).
+ * **Read-only garanti à deux niveaux** — la garde **runtime** est la barrière **primaire** (elle
+ * couvre TOUT le chemin), le typage n'est qu'un filet **partiel** :
+ * - **compile-time (partiel)** : la seule requête maison, `loadAttemptRecords`, prend un handle
+ *   `Pick<AppDatabase, "select">` — ce sous-type n'expose ni `insert`/`update`/`delete`, donc une
+ *   écriture ajoutée **dans cette fonction** ne compilerait pas. ⚠️ `loadParentStats` reçoit en
+ *   revanche un `AppDatabase` **complet** (il le faut pour appeler `loadScope`) : un `db.insert(…)`
+ *   ajouté **directement dans `loadParentStats`** compilerait — seule la garde runtime l'attrape ;
+ * - **runtime observable (couvre tout)** : `stats-source.test.ts` espionne `insert`/`update`/
+ *   `delete` sur le vrai `db` et vérifie qu'aucune n'est appelée + que les comptes de lignes sont
+ *   **inchangés** (la garde **rougit** si une écriture est introduite N'IMPORTE OÙ dans le chemin).
  *
  * **SERVER-ONLY par transitivité** (importe la couche DB + le moteur). Le `profileId` vient
  * **toujours** de la session parent (jamais du client) — résolu par l'appelant (server action de
@@ -33,8 +37,9 @@ import {
 
 /**
  * Handle DB **lecture seule** : seule la méthode `select` est exposée. Le type exclut
- * `insert`/`update`/`delete` → une écriture accidentelle dans la couche stats **casse la
- * compilation** (garde read-only compile-time, cf. doc du module).
+ * `insert`/`update`/`delete` → une écriture ajoutée **dans `loadAttemptRecords`** casse la
+ * compilation. Filet **partiel** (ne couvre que cette fonction, pas `loadParentStats` qui a besoin
+ * du `AppDatabase` complet pour `loadScope`) : la garde runtime reste la barrière primaire.
  */
 type ReadonlyStatsDb = Pick<AppDatabase, "select">;
 

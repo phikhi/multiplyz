@@ -416,16 +416,20 @@ export interface ReportingConfig {
   /**
    * **Seuil « maîtrisé »** de la carte de maîtrise (ratio `]0,1]`) : une compétence dont le ratio
    * `skillMasteryRatio` (proportion de ses faits Tier 1 à `box ≥ 4`, ENGINE §2) est `≥ ce seuil`
-   * est classée **maîtrisée**. Défaut `0.85` — aligné (intentionnellement) sur le déclencheur de
-   * Tier (`tierUnlockRatio`, ENGINE §8) : « compétence essentiellement acquise ». Réglage
-   * **d'affichage**, calibrable indépendamment du gate moteur.
+   * est classée **maîtrisée**. Défaut `0.85` — écho **exact** du déclencheur de Tier
+   * (`tierUnlockRatio`, ENGINE §8) : même ratio ET **même computation** (proportion à `box ≥ 4`).
+   * Réglage **d'affichage**, calibrable indépendamment du gate moteur.
    */
   masteredMinRatio: number;
   /**
    * **Seuil « en cours »** de la carte de maîtrise (ratio `]0,1]`) : ratio `≥ ce seuil` (et
-   * `< masteredMinRatio`) → **en cours** ; en dessous → **faible**. Défaut `0.4` — écho de la
-   * bascule interleaving (ENGINE §7). Attendu `< masteredMinRatio` (ordre de classement), mais la
-   * classification reste déterministe même si l'env les inverse (« maîtrisé » testé en premier).
+   * `< masteredMinRatio`) → **en cours** ; en dessous → **faible**. Défaut `0.4` — valeur
+   * **empruntée** à la bascule interleaving (ENGINE §7) mais appliquée à une **computation
+   * différente** : la carte classe sur `box ≥ 4` (comme tout le reporting), tandis que
+   * l'interleaving mesure sur `box ≥ 3` (`interleaveMinBox`). Emprunt **numérique**, pas un écho
+   * exact (contrairement à `masteredMinRatio`) → **calibrable indépendamment**. Attendu
+   * `< masteredMinRatio` (ordre de classement), mais la classification reste déterministe même si
+   * l'env les inverse (« maîtrisé » testé en premier).
    */
   inProgressMinRatio: number;
   /**
@@ -599,7 +603,8 @@ export const CONFIG_DEFAULTS = {
     // Zones mortes de tendance : 5 points de justesse / 300 ms de rapidité (bruit ignoré).
     trendAccuracyDelta: 0.05,
     trendSpeedDeltaMs: 300,
-    // Carte de maîtrise : maîtrisé ≥ 85 % (écho tier ENGINE §8) · en cours ≥ 40 % (écho §7).
+    // Carte de maîtrise (classée sur box≥4) : maîtrisé ≥ 85 % (écho EXACT tier ENGINE §8, box≥4) ·
+    // en cours ≥ 40 % (valeur EMPRUNTÉE à §7 mais §7 mesure box≥3 → emprunt numérique, pas écho).
     masteredMinRatio: 0.85,
     inProgressMinRatio: 0.4,
     // Top 5 calculs « à revoir » (PLAN §Espace parent).
