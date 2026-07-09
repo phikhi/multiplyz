@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
 import { BRAND_NAME } from "../src/config/brand";
+import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
 
 /**
  * E2E du parcours auth complet — onboarding 1er usage (#2.2), connexion (#2.3),
@@ -30,6 +31,22 @@ const profileLabel = strings.login.profileOption.replace("{prénom}", "Léa");
 
 function digit(d: string) {
   return strings.pinPad.digit.replace("{d}", d);
+}
+
+// Helpers « Gérer les profils » (story 7.5, #218).
+const manage = strings.parent.manage;
+/** Libellé accessible d'une carte de profil sur l'écran de gestion. */
+const manageProfileLabel = (name: string) => manage.profileLabel.replace("{prénom}", name);
+/** Libellé de la carte de profil dans le sélecteur de connexion. */
+const selectorLabel = (name: string) => strings.login.profileOption.replace("{prénom}", name);
+/** Connexion parent (PIN 9876) → tableau de bord → écran « Gérer les profils ». */
+async function goToManageAsParent(page: Page) {
+  await page.goto("/");
+  await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+  await enterPin(page, "9876");
+  await expect(page).toHaveURL(/\/parent$/);
+  await page.getByRole("link", { name: strings.parent.dashboard.manageLink }).click();
+  await expect(page).toHaveURL(/\/parent\/profils$/);
 }
 
 // Code de secours capté à l'onboarding (aléatoire), réutilisé par la récupération
@@ -1145,6 +1162,134 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     // Session révoquée serveur : /parent redirige à nouveau (le garde lit la session à chaque requête).
     await page.goto("/parent");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+  });
+
+  // ==========================================================================
+  // Gérer les profils (story 7.5, #218) — renommer / réinitialiser le PIN enfant /
+  // supprimer = purge + révocation de session. Sous garde session PARENT (9876, encore
+  // valide ici — AVANT la récupération qui le change). La création d'un frère/sœur est v2
+  // (pas d'UI) → on amorce `Zoé` en base pour prouver la suppression sur un profil NON
+  // propriétaire ; le propriétaire (Léa) n'est JAMAIS muté (rename/reset/delete ciblent Zoé).
+  // ==========================================================================
+
+  test("gérer les profils : propriétaire non-supprimable + frère/sœur supprimable (capture + non-occlusion)", async ({
+    page,
+  }) => {
+    // Zoé (frère/sœur) + sa session sont amorcés par la chaîne `webServer` (seed-sibling.cli).
+    await goToManageAsParent(page);
+    await expect(page.getByRole("heading", { level: 1, name: manage.title })).toBeVisible();
+
+    // Propriétaire (Léa) : badge « Compte parent » + suppression DÉSACTIVÉE (garde OWNER).
+    const ownerRegion = page.getByRole("region", { name: manageProfileLabel("Léa") });
+    await expect(ownerRegion.getByText(manage.ownerBadge)).toBeVisible();
+    await expect(ownerRegion.getByRole("button", { name: manage.delete.action })).toBeDisabled();
+
+    // Frère/sœur (Zoé) : suppression ACTIVE.
+    const siblingRegion = page.getByRole("region", { name: manageProfileLabel(SIBLING_NAME) });
+    const siblingDelete = siblingRegion.getByRole("button", { name: manage.delete.action });
+    await expect(siblingDelete).toBeEnabled();
+
+    // NON-OCCLUSION (#170/#190) — assert de layout RÉEL : le bouton de suppression est cliquable
+    // (non recouvert au centre), dans le cadre, cible ≥ 44 px. Le raisonnement géométrique ne
+    // suffit pas (rétro #190) → on vérifie en vrai navigateur.
+    const geom = await siblingDelete.evaluate((btn) => {
+      const r = btn.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const topEl = document.elementFromPoint(cx, cy);
+      return {
+        width: r.width,
+        height: r.height,
+        inViewport: r.top >= 0 && r.left >= 0 && r.bottom <= window.innerHeight,
+        notOccluded: topEl != null && (topEl === btn || btn.contains(topEl)),
+      };
+    });
+    expect(geom.height).toBeGreaterThanOrEqual(44);
+    expect(geom.width).toBeGreaterThanOrEqual(44);
+    expect(geom.inViewport).toBe(true);
+    expect(geom.notOccluded).toBe(true);
+
+    await page.screenshot({ path: "docs/captures/218-gerer-profils.png", fullPage: true });
+  });
+
+  test("SÉCU : une session ENFANT ne peut pas ouvrir /parent/profils (redirigée)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: profileLabel }).click(); // Léa
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+
+    // Le garde de groupe `(espace)` filtre kind==='parent' → une session enfant est redirigée.
+    await page.goto("/parent/profils");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
+  });
+
+  test("renommer un frère/sœur (Zoé → Zoélie)", async ({ page }) => {
+    await goToManageAsParent(page);
+    const region = page.getByRole("region", { name: manageProfileLabel(SIBLING_NAME) });
+    await region.getByRole("button", { name: manage.rename.action }).click();
+    await page.getByRole("textbox").fill("Zoélie");
+    await page.getByRole("button", { name: manage.rename.save }).click();
+
+    await expect(page.getByText(manage.rename.success)).toBeVisible();
+    // La liste (servie par le serveur) reflète le nouveau prénom.
+    await expect(page.getByRole("region", { name: manageProfileLabel("Zoélie") })).toBeVisible();
+  });
+
+  test("réinitialiser le PIN enfant : le NOUVEAU code marche, l'ANCIEN non", async ({ page }) => {
+    await goToManageAsParent(page);
+    const region = page.getByRole("region", { name: manageProfileLabel("Zoélie") });
+    await region.getByRole("button", { name: manage.resetPin.action }).click();
+    await enterPin(page, "3333"); // pavé de réinitialisation (pas d'auto-soumission)
+    await page.getByRole("button", { name: manage.resetPin.save }).click();
+    await expect(page.getByText(manage.resetPin.success)).toBeVisible();
+
+    // Preuve bout-en-bout : l'ANCIEN code (2222) échoue, le NOUVEAU (3333) ouvre le jeu.
+    await page.goto("/");
+    await page.getByRole("button", { name: selectorLabel("Zoélie") }).click();
+    await enterPin(page, "2222"); // auto-soumission au 4ᵉ → échec générique, pavé réinitialisé
+    await expect(page.getByText(strings.login.error)).toBeVisible();
+    await enterPin(page, "3333"); // nouveau code → session enfant → jeu
+    await expect(page).toHaveURL(/\/jouer$/);
+  });
+
+  test("supprimer un frère/sœur = purge + session révoquée (cascade)", async ({ page }) => {
+    const cookie = {
+      name: "mz_session",
+      value: SIBLING_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+
+    // AVANT : la session amorcée de Zoélie est valide (le token ouvre le jeu).
+    await page.context().addCookies([cookie]);
+    await page.goto("/jouer");
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL(/\/jouer$/);
+    await page.context().clearCookies();
+
+    // Suppression via l'UI parent (confirmation destructive).
+    await goToManageAsParent(page);
+    const region = page.getByRole("region", { name: manageProfileLabel("Zoélie") });
+    await region.getByRole("button", { name: manage.delete.action }).click();
+    await expect(
+      page.getByText(manage.delete.confirmBody.replace("{prénom}", "Zoélie")),
+    ).toBeVisible();
+    await page.getByRole("button", { name: manage.delete.confirm }).click();
+    await expect(page.getByText(manage.delete.success)).toBeVisible();
+    // La carte du profil a disparu (purge).
+    await expect(page.getByRole("region", { name: manageProfileLabel("Zoélie") })).toHaveCount(0);
+
+    // APRÈS : la session amorcée est révoquée par la cascade FK → le token n'ouvre plus rien.
+    await page.context().clearCookies();
+    await page.context().addCookies([cookie]);
+    await page.goto("/jouer");
     await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL(/\/$/);
   });

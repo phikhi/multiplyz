@@ -147,6 +147,37 @@ describe("strings (i18n FR)", () => {
     expect(p.forgot.toLowerCase()).toContain("oublié");
   });
 
+  it("gérer les profils (7.5) = registre NEUTRE/vouvoiement + gabarits {prénom} + clés d'erreur", () => {
+    const m = strings.parent.manage;
+    // Lien depuis le tableau de bord (câblage vers /parent/profils).
+    expect(strings.parent.dashboard.manageLink.length).toBeGreaterThan(0);
+    // Gabarits prénom interpolables (voix neutre, jamais Teddy).
+    expect(m.profileLabel).toContain("{prénom}");
+    expect(m.rename.label).toContain("{prénom}");
+    expect(m.resetPin.hint).toContain("{prénom}");
+    expect(m.delete.confirmTitle).toContain("{prénom}");
+    expect(m.delete.confirmBody).toContain("{prénom}");
+    // Registre NEUTRE (vouvoiement) : impératif pluriel, jamais de tutoiement enfant.
+    const manageText = `${m.intro} ${m.resetPin.hint} ${m.errors.UNAUTHORIZED}`.toLowerCase();
+    expect(manageText).not.toMatch(/\btu\b/);
+    expect(manageText).not.toMatch(/\bte\b/);
+    expect(manageText).not.toMatch(/\bton\b/);
+    expect(manageText).not.toMatch(/\bta\b/);
+    // Clés d'erreur = codes de `ProfileManagementError` + `UNAUTHORIZED` + `GENERIC` (contrat UI↔serveur).
+    expect(Object.keys(m.errors).sort()).toEqual([
+      "GENERIC",
+      "NAME_INVALID",
+      "NAME_TAKEN",
+      "OWNER_UNDELETABLE",
+      "PARENT_PIN_SAME",
+      "PIN_INVALID",
+      "PROFILE_NOT_FOUND",
+      "UNAUTHORIZED",
+    ]);
+    // Suppression = action destructive verbalisée « irréversible » (confirmation claire).
+    expect(m.delete.confirmBody.toLowerCase()).toContain("irréversible");
+  });
+
   it("erreurs de récupération = clés RecoveryErrorCode + GENERIC (contrat UI↔serveur)", () => {
     expect(Object.keys(strings.recovery.errors).sort()).toEqual([
       "CODE_INVALID",

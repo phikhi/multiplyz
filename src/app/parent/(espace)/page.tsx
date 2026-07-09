@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { strings } from "@/strings";
 import { ParentExitButton } from "@/components/ParentExitButton";
 
@@ -34,6 +35,24 @@ const placeholderStyle = {
   fontSize: "var(--font-size-base)",
 } as const;
 
+// Lien « Gérer les profils » (story 7.5) — cible tactile ≥ 44 px, registre neutre. Texte fort
+// `--color-text-primary` sur `--card-bg` (contraste WCAG résolu, testé), bordure neutre.
+const manageLinkStyle = {
+  alignSelf: "flex-start",
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: "var(--tap-target-min)",
+  padding: "var(--space-3) var(--space-5)",
+  fontFamily: "var(--font-family-body)",
+  fontSize: "var(--font-size-base)",
+  fontWeight: "var(--font-weight-semibold)",
+  color: "var(--color-text-primary)",
+  backgroundColor: "transparent",
+  border: "1px solid var(--color-border-primary)",
+  borderRadius: "var(--border-radius-full)",
+  textDecoration: "none",
+} as const;
+
 /**
  * **Espace parent — stub de fondation** (story 7.1, WIREFRAMES §7, AUTH.md §2). Accessible
  * uniquement avec une **session parent valide** (garde `(espace)/layout.tsx`). Registre
@@ -47,6 +66,9 @@ export default function ParentDashboardPage() {
       <div style={cardStyle}>
         <h1 style={titleStyle}>{strings.parent.dashboard.title}</h1>
         <p style={placeholderStyle}>{strings.parent.dashboard.placeholder}</p>
+        <Link href="/parent/profils" style={manageLinkStyle} className="mz-focusable">
+          {strings.parent.dashboard.manageLink}
+        </Link>
         <ParentExitButton />
       </div>
     </main>

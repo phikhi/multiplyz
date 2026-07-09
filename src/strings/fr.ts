@@ -469,8 +469,89 @@ export const fr = {
       title: "Espace parent",
       /** Placeholder neutre — le tableau de bord des progrès arrive en story 7.7. */
       placeholder: "Le tableau de bord des progrès arrive bientôt.",
+      /** Lien vers l'écran « Gérer les profils » (story 7.5, DETAILS §3). */
+      manageLink: "Gérer les profils",
       /** Bouton de sortie (✕ du wireframe §7) → révoque la session parent, retour au sélecteur. */
       exit: "Quitter l'espace parent",
+    },
+    /**
+     * Écran **« Gérer les profils »** (story 7.5, DETAILS §3 : renommer / réinitialiser le PIN
+     * enfant / supprimer = purge). Registre **neutre/vouvoiement** (COPY §5, pas la voix de Teddy).
+     * Le gabarit `{prénom}` est interpolé côté composant. Aucun texte en dur ailleurs.
+     */
+    manage: {
+      /** Titre de l'écran (h1). */
+      title: "Gérer les profils",
+      /** Consigne neutre sous le titre. */
+      intro: "Renommez un profil, réinitialisez son code enfant ou supprimez-le.",
+      /** Retour vers le tableau de bord parent. */
+      back: "Retour au tableau de bord",
+      /** Badge du profil propriétaire (porte l'accès parent). */
+      ownerBadge: "Compte parent",
+      /** Explication : le compte parent ne peut pas être supprimé (garde OWNER_UNDELETABLE). */
+      ownerHint: "Ce profil détient l'accès parent : il ne peut pas être supprimé.",
+      /** Libellé accessible d'une carte de profil (gabarit prénom). */
+      profileLabel: "Profil de {prénom}",
+      /** Renommage d'un profil. */
+      rename: {
+        /** Bouton ouvrant l'édition du prénom. */
+        action: "Renommer",
+        /** Libellé du champ (gabarit prénom courant). */
+        label: "Nouveau prénom de {prénom}",
+        /** Placeholder du champ prénom. */
+        placeholder: "Prénom",
+        /** Valider le nouveau prénom. */
+        save: "Enregistrer",
+        /** Annuler l'édition. */
+        cancel: "Annuler",
+        /** Confirmation neutre après renommage. */
+        success: "Profil renommé.",
+      },
+      /** Réinitialisation du PIN enfant (AUTH §5). */
+      resetPin: {
+        /** Bouton ouvrant la réinitialisation du code. */
+        action: "Réinitialiser le code",
+        /** Titre du panneau de réinitialisation (gabarit prénom). */
+        title: "Nouveau code de {prénom}",
+        /** Consigne : nouveau code à 4 chiffres (gabarit prénom). */
+        hint: "Choisissez un nouveau code à 4 chiffres pour {prénom}.",
+        /** Libellé accessible du pavé PIN de réinitialisation. */
+        label: "Nouveau code enfant",
+        /** Valider le nouveau code. */
+        save: "Enregistrer le code",
+        /** Annuler la réinitialisation. */
+        cancel: "Annuler",
+        /** Confirmation neutre après réinitialisation. */
+        success: "Code enfant réinitialisé.",
+      },
+      /** Suppression d'un profil = purge (action destructive → confirmation). */
+      delete: {
+        /** Bouton ouvrant la confirmation de suppression. */
+        action: "Supprimer",
+        /** Titre de la confirmation (gabarit prénom). */
+        confirmTitle: "Supprimer le profil de {prénom} ?",
+        /** Corps de la confirmation : purge irréversible (gabarit prénom). */
+        confirmBody:
+          "Toutes les données de {prénom} (progrès, collection, pièces) seront " +
+          "définitivement effacées. Cette action est irréversible.",
+        /** Confirmer la suppression définitive. */
+        confirm: "Supprimer définitivement",
+        /** Annuler la suppression. */
+        cancel: "Annuler",
+        /** Confirmation neutre après suppression. */
+        success: "Profil supprimé.",
+      },
+      /** Messages d'erreur (mappés depuis `ProfileManagementError` + repli). */
+      errors: {
+        NAME_INVALID: "Ce prénom n'est pas valide.",
+        NAME_TAKEN: "Ce prénom est déjà utilisé.",
+        PIN_INVALID: "Le code doit contenir 4 chiffres.",
+        PARENT_PIN_SAME: "Le code enfant doit être différent du code parent.",
+        PROFILE_NOT_FOUND: "Ce profil est introuvable.",
+        OWNER_UNDELETABLE: "Le compte parent ne peut pas être supprimé.",
+        UNAUTHORIZED: "Votre session parent a expiré. Reconnectez-vous.",
+        GENERIC: "Une erreur est survenue. Réessayez.",
+      },
     },
   },
   /**

@@ -28,7 +28,10 @@ export default defineConfig({
     // même contexte (cwd + DATABASE_PATH) que le serveur → les chemins `background/tiles/teddy
     // !== null` (scrim + tint + bande de décor + avatar Teddy per-monde) sont exercés en vrai
     // navigateur, sans dépendre des assets gitignorés.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && pnpm dev --port ${PORT}`,
+    // ...puis amorce un profil frère/sœur (`Zoé`) + sa session (story 7.5 : prouver
+    // suppression=purge+révocation sur un NON-propriétaire ; la création de frères/sœurs est v2,
+    // pas d'UI) — DANS le même contexte que le serveur (cwd + DATABASE_PATH), comme les assets.
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
