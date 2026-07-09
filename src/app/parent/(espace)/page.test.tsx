@@ -18,4 +18,10 @@ describe("ParentDashboardPage — stub de fondation (story 7.1)", () => {
     expect(screen.getByText(strings.parent.dashboard.placeholder)).toBeInTheDocument();
     expect(screen.getByTestId("exit")).toBeInTheDocument();
   });
+
+  it("expose le lien « Gérer les profils » vers /parent/profils (story 7.5)", () => {
+    render(<ParentDashboardPage />);
+    const link = screen.getByRole("link", { name: strings.parent.dashboard.manageLink });
+    expect(link).toHaveAttribute("href", "/parent/profils");
+  });
 });
