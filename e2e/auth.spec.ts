@@ -866,6 +866,70 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(richness!.upstreamMedBottom).not.toBeNull();
     expect(richness!.teddyTop).toBeGreaterThanOrEqual(richness!.upstreamMedBottom!);
 
+    // ── Contraste des glyphes de bas d'écran sur photo (story #202) — RENDU + GÉOMÉTRIE vrai layout ──
+    // Sur la photo IA arbitraire, deux éléments étaient peints SANS fond opaque (contraste ~1.21:1 sur
+    // la fixture rayée, #170) : le bouton « Changer de joueur » (ghost) et le trait du chemin (peint
+    // dans la gouttière de <main>, backmost). #202 pose un scrim/casing opaque `--world-surface` sous
+    // chacun. jsdom ne fait pas de layout → ici on vérifie en vrai navigateur que (a) le scrim de footer
+    // ENVELOPPE le bouton (couvre son rect, fond opaque résolu) et le bouton reste visible, (b) la casing
+    // du trait est peinte, plus large que le trait, avec la MÊME géométrie (gouttière) → aucune occlusion
+    // nouvelle, fond de référence du trait = un token opaque, pas la photo.
+    const footer = await page.evaluate(() => {
+      const scrim = document.querySelector("[data-world-footer-scrim]");
+      const button = scrim?.querySelector("button");
+      const casing = document.querySelector("[data-map-connector-casing]");
+      const line = document.querySelector(
+        "[data-map-connector] line:not([data-map-connector-casing])",
+      );
+      const casingSvg = casing?.closest("svg");
+      const casingBadge = casingSvg?.closest("li")?.querySelector("[data-map-node-status]");
+      if (
+        scrim == null ||
+        button == null ||
+        casing == null ||
+        line == null ||
+        casingBadge == null
+      ) {
+        return null;
+      }
+      const s = scrim.getBoundingClientRect();
+      const b = button.getBoundingClientRect();
+      const casingRect = casing.getBoundingClientRect();
+      const svgRect = casingSvg!.getBoundingClientRect();
+      const badgeRect = casingBadge.getBoundingClientRect();
+      const px = (v: string) => Number.parseFloat(v);
+      return {
+        // (a) scrim de footer : fond opaque résolu (non transparent) + enveloppe le bouton + bouton visible.
+        scrimBg: getComputedStyle(scrim).backgroundColor,
+        scrimCoversButton:
+          s.top <= b.top + 1 &&
+          s.bottom >= b.bottom - 1 &&
+          s.left <= b.left + 1 &&
+          s.right >= b.right - 1,
+        buttonVisible: b.width > 0 && b.height > 0,
+        // (b) casing du trait : plus large que le trait coloré + couleur ≠ celle du trait + opaque.
+        casingWidth: px(getComputedStyle(casing).strokeWidth),
+        lineWidth: px(getComputedStyle(line).strokeWidth),
+        casingStroke: getComputedStyle(casing).stroke,
+        lineStroke: getComputedStyle(line).stroke,
+        // Non-occlusion : le SVG (casing incluse) vit dans la gouttière SOUS la pastille (sommet ≥ bas
+        // du médaillon), donc ni recouvert par le nœud ni recouvrant un glyphe (même invariant que #169).
+        casingInGutter: svgRect.top >= badgeRect.bottom - 1 && casingRect.height > 0,
+      };
+    });
+    expect(footer).not.toBeNull();
+    // (a) le scrim de footer est opaque (jamais transparent → contraste garanti) et enveloppe le bouton.
+    expect(footer!.scrimBg).not.toBe("rgba(0, 0, 0, 0)");
+    expect(footer!.scrimBg).not.toBe("transparent");
+    expect(footer!.scrimCoversButton).toBe(true);
+    expect(footer!.buttonVisible).toBe(true);
+    // (b) la casing est PLUS LARGE que le trait (halo visible de part et d'autre) et d'une couleur
+    // DISTINCTE (opaque `--world-surface` vs `--map-node-path-color`) → le fond de référence du trait
+    // n'est plus la photo. Non-occlusion : la casing partage la gouttière du connecteur (sous la pastille).
+    expect(footer!.casingWidth).toBeGreaterThan(footer!.lineWidth);
+    expect(footer!.casingStroke).not.toBe(footer!.lineStroke);
+    expect(footer!.casingInGutter).toBe(true);
+
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
     // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
     await page.screenshot({ path: "docs/captures/182-carte-theme.png", fullPage: true });
@@ -874,6 +938,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // Capture dédiée story #190 (bande de décor tuiles + avatar Teddy per-monde) — OUVERTE + pixels
     // analysés en review (garde-fou #170 : générer ne suffit pas, on regarde que c'est visible).
     await page.screenshot({ path: "docs/captures/190-carte-richesse.png", fullPage: true });
+    // Capture dédiée story #202 (scrim opaque du bouton « Changer de joueur » + casing du trait sur
+    // photo) — OUVERTE + pixels analysés en review (garde-fou #170 : glyphes lisibles sur la photo).
+    await page.screenshot({ path: "docs/captures/202-carte-footer-contraste.png", fullPage: true });
 
     // Navigation nœud → niveau (MAP §1, point de reprise sur le nœud courant, #125) :
     // cliquer le nœud courant ramène bien à l'écran de jeu.

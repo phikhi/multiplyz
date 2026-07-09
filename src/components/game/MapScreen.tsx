@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useCallback, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { strings } from "@/strings";
 import { LogoutButton } from "@/components/LogoutButton";
@@ -23,9 +23,17 @@ import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
  * existe (Nginx **validé**, `background !== null`), il est rendu en couverture de `<main>`, le
  * **tint de fond `--world-bg-tint`** se dérive **par monde** (re-déclaré inline sur `<main>`, fix
  * #184) et le **titre reçoit un scrim `--world-surface` opaque** (cf. `ThemedTitle`) qui garantit
- * son contraste ≥4.5:1 INDÉPENDAMMENT de la photo IA arbitraire (story #189). Sans asset réel (cas
- * CI/hors-ligne), `<main>` garde son fond neutre et le titre son fond de page (pas de scrim, pas de
- * régression #125). Le thème est un attribut **non-clé** : il ne touche jamais la géométrie (#123).
+ * son contraste ≥4.5:1 INDÉPENDAMMENT de la photo IA arbitraire (story #189).
+ *
+ * **Tint = fond RÉEL même sans photo (story #199)** : `<main>` peint désormais `--world-bg-tint`
+ * comme son `backgroundColor` dès qu'un thème est résolu — plus seulement quand `background !==
+ * null`. Avant #199, le tint était bien re-dérivé (#184) mais jamais **peint** dans l'état
+ * sans-image (repli socle placeholder, CI, hors-ligne) : l'enfant ne voyait jamais l'identité du
+ * monde sans photo (déclaré ≠ consommé, #125/#180). Sûr **sans scrim** ici (contrairement à la
+ * photo) car la palette d'accent est **bornée** (6 thèmes curatés, `CURATED_THEMES` — jamais une
+ * couleur IA arbitraire) : le contraste titre/nœuds/trait sur ce tint est **prouvé
+ * analytiquement** pour les 6 accents × 2 thèmes (MapScreen.test.tsx), pas seulement affirmé.
+ * Le thème est un attribut **non-clé** : il ne touche jamais la géométrie (#123).
  *
  * **Richesse visuelle per-monde (story #190)** : au-delà de l'accent/titre/fond, deux assets du
  * monde résolu (WORLDGEN §4) atteignent l'écran carte quand ils sont **validés** (`isRenderableAssetRef`,
@@ -35,6 +43,18 @@ import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
  * per-monde** (`theme.teddy`, `CurrentNodeTeddy`, ancrée master figé #158/ADR 0009) posée en avatar
  * « tu es ici » **superposé** au médaillon du nœud courant → garde DOUBLÉE pixels + géométrie E2E
  * (non-occlusion #170), sans jamais recouvrir le glyphe de statut.
+ *
+ * **Contraste généralisé sur photo arbitraire (story #202)** : la photo (pas le tint, cf. #199)
+ * est **arbitraire** — aucune garantie analytique possible (#170). Deux glyphes de bas de chemin
+ * y étaient peints **sans** scrim (mesuré ~1.21:1 sur la fixture E2E rayée) : le bouton « Changer de
+ * joueur » (`LogoutButton`, texte transparent) et le **trait du chemin** (`NodeConnector`, peint
+ * dans la gouttière de `<main>`, backmost). Même patron que le scrim du titre (#189, opaque
+ * `--world-surface`, jamais semi-transparent) : `FooterScrim` enveloppe `LogoutButton`, et
+ * `NodeConnector` reçoit une **casing** opaque sous le trait coloré — **seulement** quand
+ * `theme.background !== null` (sans photo, #199 couvre déjà le contraste analytiquement, pas de
+ * scrim superflu). Les autres glyphes de l'écran (médaillons de nœud, étoiles, badge de type) ont
+ * **déjà** leur propre fond opaque local (`--map-node-*-bg`) — inchangés par le fond de `<main>`,
+ * revérifié par audit (MapScreen.test.tsx, CLAUDE.md règle #126 : auditer TOUS les glyphes).
  *
  * **Navigation nœud → niveau** (`(app)/jouer`) : le nœud **courant** (point de
  * reprise, MAP §1) et tout nœud **terminé** (rejoue, progression monotone) sont des
@@ -371,8 +391,28 @@ function horizontalOffsetPercent(x: number): number {
  * portée (états/types/étoiles sont sur le nœud, l'ordre est porté par l'ordre DOM des
  * nœuds) — mais son contraste résolu est désormais **testé** (MapScreen.test.tsx).
  * Tokens `--map-node-path-*`.
+ *
+ * **Casing de contraste sur photo (story #202)** : quand une **photo IA arbitraire** du monde est
+ * active (`hasBackground`), le trait est peint dans la gouttière de `<main>` (backmost) directement
+ * SUR la photo → contraste **non garantissable analytiquement** (sur la fixture E2E rayée ~1.21:1,
+ * quasi invisible, #170). Même patron que le scrim du titre (#189) : une **casing OPAQUE**
+ * (`--world-surface`, jamais semi-transparente) plus large (`--map-node-path-casing-width` = 8px >
+ * les 4px du trait) est peinte **sous** le trait coloré → le fond de RÉFÉRENCE de contraste du trait
+ * redevient un token opaque (`--world-surface`), pas la photo. Rendue **uniquement** sur photo :
+ * sans photo (tint-seul #199 / neutre), le contraste du trait est déjà prouvé analytiquement
+ * (MapScreen.test.tsx) → pas de casing superflue. La casing partage la géométrie exacte du trait
+ * (même `x1/x2`, même SVG en gouttière) → aucun risque d'occlusion nouveau (#170/#190).
  */
-function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: number }) {
+function NodeConnector({
+  fromX,
+  toX,
+  hasBackground,
+}: {
+  readonly fromX: number;
+  readonly toX: number;
+  /** `true` si une photo réelle du monde est rendue → casing opaque sous le trait (contraste, #202). */
+  readonly hasBackground: boolean;
+}) {
   // Décalages horizontaux (%) des deux nœuds (positions 5.2, pas recalculés). Le `<li>`
   // courant est DÉJÀ translaté de `currentOffset` → dans le repère du SVG (qui suit le
   // <li>), le centre du nœud courant est à x=50 ; celui du précédent est décalé du
@@ -404,6 +444,25 @@ function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: n
         zIndex: 0,
       }}
     >
+      {/* Casing OPAQUE (story #202) : peinte EN PREMIER (donc SOUS le trait coloré, ordre de peinture
+          SVG) et plus large → le fond de référence de contraste du trait redevient `--world-surface`
+          (opaque), jamais la photo arbitraire (#170). Rendue seulement sur photo (sans photo, #199 :
+          contraste déjà prouvé analytiquement). Même géométrie que le trait → 0 occlusion nouvelle. */}
+      {hasBackground && (
+        <line
+          data-map-connector-casing=""
+          x1={x1}
+          y1={0}
+          x2={x2}
+          y2={100}
+          style={{
+            stroke: "var(--world-surface)",
+            strokeWidth: "var(--map-node-path-casing-width)",
+          }}
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
       <line
         x1={x1}
         y1={0}
@@ -432,10 +491,13 @@ function NodeConnector({ fromX, toX }: { readonly fromX: number; readonly toX: n
 function NodePath({
   map,
   teddyUrl,
+  hasBackground,
 }: {
   readonly map: WorldMap;
   /** Variante Teddy per-monde validée (ou `null`) — posée sur le nœud courant (marqueur « tu es ici »). */
   readonly teddyUrl: string | null;
+  /** `true` si une photo réelle du monde est rendue → casing opaque sous le trait (contraste, #202). */
+  readonly hasBackground: boolean;
 }) {
   const total = map.nodes.length;
   return (
@@ -469,7 +531,11 @@ function NodePath({
             }}
           >
             {previous !== undefined && (
-              <NodeConnector fromX={node.position.x} toX={previous.position.x} />
+              <NodeConnector
+                fromX={node.position.x}
+                toX={previous.position.x}
+                hasBackground={hasBackground}
+              />
             )}
             <NodeBadge node={node} total={total} teddyUrl={teddyUrl} />
           </li>
@@ -485,21 +551,26 @@ function NodePath({
  * descendants (bandeau d'accent…) en héritent. En story 6.7, l'observable per-monde vient de
  * `--world-accent` (bandeau d'accent + titre thématisé), pas d'une teinte de fond.
  *
- * **Fond du monde** : rendu comme `background` de `<main>` **uniquement** quand un **asset réel
- * validé** existe (`theme.background !== null`, chemin Nginx passé par `isRenderableAssetRef`) →
- * image en couverture, avec `--world-bg-tint` **per-monde** en **repli** dessous. Sans asset réel
- * (placeholder du gate owner → `null`, cas CI/hors-ligne), `<main>` **garde son fond neutre**
- * (`bg-bg`) : le titre et le trait du chemin conservent leur **fond de référence de contraste
- * inchangé** (pas de régression #125). Le fond étant le `background` de `<main>` (backmost), il ne
- * peut **jamais** recouvrir les nœuds (anti-occlusion #170).
+ * **Fond du monde** : le `<main>` peint TOUJOURS le **tint per-monde `--world-bg-tint`** comme
+ * `backgroundColor` dès qu'un thème est résolu (story #199 — avant, le tint était re-dérivé mais
+ * peint SEULEMENT quand une photo existait, donc **jamais visible** dans l'état sans-image : repli
+ * socle placeholder, CI, hors-ligne → carte neutre, identité du monde non vécue, gap #180). Quand un
+ * **asset réel validé** existe en plus (`theme.background !== null`, chemin Nginx passé par
+ * `isRenderableAssetRef`), l'image du monde se pose **par-dessus** ce tint en couverture. Le fond
+ * (tint OU image) étant le `background` de `<main>` (backmost), il ne peut **jamais** recouvrir les
+ * nœuds (anti-occlusion #170). Sûr **sans scrim** dans l'état tint-seul : la palette d'accent est
+ * bornée (6 thèmes curatés) → contraste des glyphes/titre/trait sur ce tint **prouvé
+ * analytiquement** (MapScreen.test.tsx), contrairement à la photo arbitraire (qui, elle, exige un
+ * scrim/casing opaque, cf. `ThemedTitle` #189 / `FooterScrim`+casing du trait #202).
  *
- * **Tint per-monde (fix #184, story #189)** : `--world-bg-tint` (`color-mix(--world-accent 10%,
+ * **Tint per-monde (fix #184, story #189/#199)** : `--world-bg-tint` (`color-mix(--world-accent 10%,
  * surface)`) est **RE-DÉCLARÉ ICI** (au niveau de la surcharge inline de `--world-accent`), pas
  * seulement à `:root`. Raison : la substitution `var()` d'un custom-property se résout **au niveau
  * où la propriété est DÉCLARÉE** — le `--world-bg-tint` de `:root` reste donc **NEUTRE** sous une
  * surcharge **descendante** de sa var source (`<main>`), c'est un **faux-dérivé dormant** (piège
  * #184). En le re-déclarant sur `<main>` (même élément que `--world-accent`), le `color-mix` se
- * re-résout avec l'accent du monde → tint réellement **per-monde**, theme-safe (light ET dark).
+ * re-résout avec l'accent du monde → tint réellement **per-monde**, theme-safe (light ET dark). Le
+ * `backgroundColor` posé ci-dessous consomme cette re-déclaration → le tint est bien PEINT per-monde.
  */
 function worldMainStyle(base: CSSProperties, theme: WorldTheme | null): CSSProperties {
   if (theme === null) {
@@ -517,12 +588,15 @@ function worldMainStyle(base: CSSProperties, theme: WorldTheme | null): CSSPrope
     // DUPLIQUÉE ici — un changement du wash dans `tokens.css` doit être répercuté à cette ligne.
     ["--world-bg-tint" as string]:
       "color-mix(in srgb, var(--world-accent) 10%, var(--color-bg-secondary))",
+    // Story #199 : le tint per-monde est PEINT comme fond réel de la carte dès qu'un thème est
+    // résolu (plus seulement quand une photo existe). Consomme la re-déclaration ci-dessus → tint
+    // per-monde effectif. Sans photo, c'est LE fond qui donne l'identité du monde à l'enfant.
+    backgroundColor: "var(--world-bg-tint)",
   };
   if (theme.background !== null) {
-    // Asset validé (Nginx) → image du monde en couverture, `--world-bg-tint` **per-monde** (cf.
-    // re-déclaration ci-dessus) en repli theme-safe dessous. Jamais rendu vers une URL non validée
-    // (garde `isRenderableAssetRef`). Le titre reçoit un scrim `--world-surface` (cf. `ThemedTitle`).
-    themed.backgroundColor = "var(--world-bg-tint)";
+    // Asset validé (Nginx) → image du monde en couverture, PAR-DESSUS le tint per-monde déjà posé
+    // (repli theme-safe si l'image ne décode pas). Jamais rendu vers une URL non validée (garde
+    // `isRenderableAssetRef`). Le titre reçoit un scrim `--world-surface` (cf. `ThemedTitle`).
     themed.backgroundImage = `url("${theme.background}")`;
     themed.backgroundSize = "cover";
     themed.backgroundPosition = "center";
@@ -636,6 +710,53 @@ function ThemedTitle({
   );
 }
 
+/**
+ * **Scrim de contraste du bouton de bas d'écran** (« Changer de joueur », `LogoutButton`, story
+ * #202). Le bouton est un contrôle **ghost/outline** (`background:transparent`, texte
+ * `--color-text-secondary`, cf. `LogoutButton.tsx`) : sans fond opaque, son texte est peint
+ * directement sur le fond de `<main>`. Sur une **photo IA arbitraire** (`active`, i.e.
+ * `theme.background !== null`), ce fond n'est plus un token → contraste **non garantissable**
+ * (mesuré ~1.21:1 sur la fixture E2E rayée, quasi illisible — #170, audit #126).
+ *
+ * Même patron que le scrim du titre (#189) : une **carte scrim OPAQUE** (`--world-surface`, jamais
+ * semi-transparente) enveloppe le bouton → le fond de RÉFÉRENCE du texte redevient `--world-surface`
+ * (`--color-text-secondary` ≥4.5:1 sur `--world-surface`, résolu + testé, MapScreen.test.tsx),
+ * INDÉPENDAMMENT de la photo. **Enfant en flux** (pas d'`absolute`/`z-index`) → aucun risque
+ * d'occlusion (#170). Rendu **uniquement** sur photo (`active`) : sans photo (tint-seul #199 /
+ * neutre), le bouton garde le contraste déjà prouvé sur son fond token (pas de scrim superflu, pas
+ * de régression #125 dans les autres écrans — le bouton est partagé, cf. `PlayScreen`). Le hub
+ * « Ma collection » a **déjà** son propre fond opaque local (`--color-bg-tertiary`) → pas concerné
+ * (audit #126 : tous les glyphes du footer revus, seul le bouton ghost manquait de fond opaque).
+ */
+function FooterScrim({
+  children,
+  active,
+}: {
+  readonly children: ReactNode;
+  readonly active: boolean;
+}) {
+  if (!active) {
+    // Pas de photo (états loading/error/unavailable, ou ready sans image) : le bouton garde son
+    // rendu natif sur un fond token → contraste déjà garanti, aucun scrim ajouté.
+    return <>{children}</>;
+  }
+  return (
+    <div
+      data-world-footer-scrim=""
+      style={{
+        display: "inline-flex",
+        // Scrim OPAQUE tokenisé (identique au scrim du titre #189) : le fond de référence du texte
+        // ghost du bouton redevient `--world-surface`, jamais la photo arbitraire (#170). `padding:0`
+        // + même `--border-radius-full` que le bouton → la pastille scrim épouse exactement le bouton.
+        backgroundColor: "var(--world-surface)",
+        borderRadius: "var(--border-radius-full)",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 type ScreenState =
   | { readonly kind: "loading" }
   | { readonly kind: "error" }
@@ -684,6 +805,11 @@ export function MapScreen() {
   // Thème per-monde (câblage carte↔monde, story 6.7) — disponible seulement une fois la carte
   // chargée. `data-world` + `--world-accent` + fond du monde posés sur `<main>` (backmost).
   const theme = screen.kind === "ready" ? screen.map.theme : null;
+  // Une PHOTO réelle du monde est-elle rendue ? (`theme.background !== null`) → active les scrims
+  // opaques de contraste sur photo arbitraire (#202 : titre déjà #189, bouton de bas d'écran +
+  // casing du trait ici). Faux dans tous les autres états (loading/error/unavailable, ready
+  // sans-image #199 où le contraste sur le tint borné est prouvé analytiquement).
+  const hasBackground = theme?.background != null;
   const baseMainStyle: CSSProperties = {
     minHeight: "100dvh",
     display: "flex",
@@ -775,8 +901,13 @@ export function MapScreen() {
           {/* Bande de décor thématisée (tuiles du monde) — rendue seulement si le monde fournit des
               tuiles validées (WORLDGEN §4, #190). Décor per-monde visible, jamais sous un glyphe. */}
           {screen.map.theme.tiles !== null && <WorldTilesBand src={screen.map.theme.tiles} />}
-          {/* Chemin des nœuds + variante Teddy per-monde sur le nœud courant (marqueur « tu es ici »). */}
-          <NodePath map={screen.map} teddyUrl={screen.map.theme.teddy} />
+          {/* Chemin des nœuds + variante Teddy per-monde sur le nœud courant (marqueur « tu es ici »).
+              `hasBackground` → casing opaque sous le trait quand une photo réelle est rendue (#202). */}
+          <NodePath
+            map={screen.map}
+            teddyUrl={screen.map.theme.teddy}
+            hasBackground={screen.map.theme.background !== null}
+          />
           {/* Hub (WIREFRAMES §2) : accès à la Collection (Pokédex) depuis la carte. */}
           <Link
             href="/collection"
@@ -801,7 +932,12 @@ export function MapScreen() {
         </>
       )}
 
-      <LogoutButton />
+      {/* Bouton « Changer de joueur » (ghost/transparent) — enveloppé d'un scrim opaque
+          `--world-surface` quand une photo réelle est rendue (contraste garanti sur photo
+          arbitraire, #202) ; rendu nu sinon (fond token, contraste déjà garanti). */}
+      <FooterScrim active={hasBackground}>
+        <LogoutButton />
+      </FooterScrim>
     </main>
   );
 }

@@ -271,6 +271,16 @@
      revendiquée, donc testée (cf. CLAUDE.md, tell commentaire↔code). */
   --map-node-path-color:      var(--color-text-secondary);
   --map-node-path-width:      4px;
+  /* Casing opaque du trait (story #202, généralisation du scrim #189) : quand une PHOTO IA
+     arbitraire du monde est active (`theme.background !== null`), le trait est peint directement
+     dans la gouttière de `<main>` (backmost) — sur la fixture E2E rayée le violet du motif ramène
+     le trait à ~1.21:1 (quasi invisible), contre ~4.7:1 sur le fond neutre par défaut. Une photo
+     ARBITRAIRE ne permet AUCUNE garantie analytique de contraste (#170) ⇒ même patron que le scrim
+     du titre : une CASING opaque (`--world-surface`) posée dessous avant le trait coloré (jamais
+     dans l'état tint-seul/neutre, #199 — palette d'accent bornée, contraste déjà prouvé
+     analytiquement, cf. MapScreen.test.tsx). Largeur = --space-2 (8px, > les 4px du trait) pour
+     déborder visiblement de part et d'autre du trait fin. */
+  --map-node-path-casing-width: var(--space-2);
   /* verrouillé : fond neutre en retrait, glyphe cadenas = texte fort sur cette
      surface neutre (--color-text-primary, ≥10.8:1 les 2 thèmes — jamais
      --color-text-inverse, fond non accent). */
@@ -396,10 +406,20 @@
      de DÉCLARATION (:root). Surcharger --world-accent en descendant (ex. inline
      sur <main>) ne le re-dérive PAS ici → il faut RE-DÉCLARER --world-bg-tint au
      niveau de la surcharge pour un tint réellement per-monde (cf. MapScreen
-     `worldMainStyle`). Ce défaut :root reste le repli NEUTRE. */
+     `worldMainStyle`). Ce défaut :root reste le repli NEUTRE.
+     Story #199 : `<main>` consomme désormais ce tint comme SON FOND RÉEL dès qu'un thème est
+     résolu — plus seulement quand une photo existe (avant #199, la variable était re-dérivée
+     mais jamais PEINTE dans l'état sans-image : déclaré ≠ consommé, #125/#180). Sûr sans scrim
+     car la palette d'accent qui l'alimente est BORNÉE (6 thèmes curatés, `CURATED_THEMES` —
+     jamais une couleur IA arbitraire comme une photo) : contraste titre/nœuds/trait prouvé
+     analytiquement pour les 6 accents × 2 thèmes (MapScreen.test.tsx). */
   --world-bg-tint:  color-mix(in srgb, var(--world-accent) 10%, var(--color-bg-secondary));
   /* surface opaque du thème → scrim de contraste sous le titre quand un fond-image
-     réel du monde est rendu (garantit la lisibilité indépendamment de la photo). */
+     réel du monde est rendu (garantit la lisibilité indépendamment de la photo).
+     Story #202 : généralisé aussi au bouton de bas d'écran (« Changer de joueur »,
+     `FooterScrim`/MapScreen) ET à la casing du trait de chemin (`--map-node-path-casing-width`,
+     NodeConnector) — même besoin (glyphe/trait peint sur une photo ARBITRAIRE, contraste non
+     garantissable analytiquement, #170) que le scrim du titre (#189). */
   --world-surface:  var(--color-bg-secondary);
 }
 

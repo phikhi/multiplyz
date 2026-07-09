@@ -111,3 +111,21 @@ export function contrastRatio(hexA: string, hexB: string): number {
   const [lLight, lDark] = [relativeLuminance(hexA), relativeLuminance(hexB)].sort((a, b) => b - a);
   return (lLight + 0.05) / (lDark + 0.05);
 }
+
+/**
+ * Réplique **`color-mix(in srgb, <a> <pct>%, <b>)`** de CSS pour un test de contraste RÉSOLU sur un
+ * token dérivé par `color-mix` (ex. `--world-bg-tint = color-mix(in srgb, var(--world-accent) 10%,
+ * var(--color-bg-secondary))`). jsdom ne résout PAS `color-mix` (piège #182/#184) → pour vérifier le
+ * contraste EFFECTIF du tint per-monde sans vrai navigateur, on reproduit ici la sémantique CSS :
+ * l'espace `srgb` interpole sur les **coordonnées sRGB gamma-encodées** (0–255), composante par
+ * composante — `mix = fraction·a + (1−fraction)·b`. Prend deux hex `#RRGGBB`, renvoie un hex
+ * `#RRGGBB` (arrondi entier, comme le rendu 8-bit du navigateur). Couplage volontaire à `color-mix`
+ * dans `tokens.css` : si la formule du token change (espace, ratio), ce helper doit suivre.
+ */
+export function mixSrgb(hexA: string, hexB: string, fraction: number): string {
+  const chan = (hex: string, i: number) =>
+    Number.parseInt(hex.replace("#", "").slice(i, i + 2), 16);
+  const mix = (i: number) => Math.round(fraction * chan(hexA, i) + (1 - fraction) * chan(hexB, i));
+  const hex2 = (v: number) => v.toString(16).padStart(2, "0");
+  return `#${hex2(mix(0))}${hex2(mix(2))}${hex2(mix(4))}`;
+}

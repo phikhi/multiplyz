@@ -7,8 +7,18 @@ import type { MapNode } from "@/lib/game/map";
 import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
 import {
   contrastRatio,
+  mixSrgb,
   resolveTokenColor,
 } from "@/components/game/scaffolds/test-support/tokens-css";
+import { CURATED_THEMES } from "@/config/worldgen-themes";
+
+/**
+ * Accents curatés (la palette BORNÉE des mondes du socle, `worldgen-themes.ts`) — source de vérité
+ * des couleurs qu'un monde peut réellement poser en `--world-accent`. Le tint per-monde sans-photo
+ * (#199) est peint SANS scrim : c'est légitime UNIQUEMENT parce que cette palette est finie, donc le
+ * contraste sur le tint dérivé est PROUVÉ pour chacune (jamais une couleur IA arbitraire, cf. photo).
+ */
+const CURATED_ACCENTS = CURATED_THEMES.map((t) => t.accent);
 
 /**
  * Tests de l'écran carte (story #125, WIREFRAMES §2, PRODUCT §2.1, MAP §1/§2/§4/§5).
@@ -209,13 +219,64 @@ describe("MapScreen — fond du monde validé avant rendu (sécurité, story 6.7
     expect(main.style.backgroundColor).toBe("var(--world-bg-tint)");
   });
 
-  it("pas d'asset réel (placeholder → null côté serveur) → AUCUNE image de fond, fond de page neutre inchangé", async () => {
+  it("pas d'asset réel (placeholder → null côté serveur) → AUCUNE image de fond (le tint per-monde reste peint, #199)", async () => {
     // Effet observable : le front n'émet PAS de background-image vers une URL non fournie/validée
-    // (le fond reste neutre `bg-bg` → contraste du titre/trait inchangé, pas de régression #125).
+    // (aucune URL non validée fetchée). Mais le TINT per-monde reste peint comme fond réel (#199,
+    // cf. bloc dédié plus bas). Rougit si un `background-image` fuyait sans asset validé.
     await renderReady(map([node({ status: "current" })], 0, { background: null }));
     const main = mainEl();
     expect(main.style.backgroundImage).toBe("");
-    expect(main.style.backgroundColor).toBe("");
+    // #199 : le fond n'est plus vide sans photo — le tint per-monde EST peint (identité du monde
+    // vécue même sans asset). Rougit si on retire le `backgroundColor` du chemin sans-image.
+    expect(main.style.backgroundColor).toBe("var(--world-bg-tint)");
+  });
+});
+
+describe("MapScreen — tint per-monde PEINT comme fond réel même sans photo (story #199)", () => {
+  it("thème résolu SANS photo (background null) → <main> PEINT --world-bg-tint comme backgroundColor (identité du monde vécue, #180)", async () => {
+    // Effet observable (#199) : avant, le tint était re-dérivé (#184) mais PEINT seulement quand une
+    // photo existait → carte neutre dans l'état sans-image (repli socle/CI/hors-ligne). Ici on prouve
+    // que le tint EST le fond réel même sans photo. Rougit si on regate le backgroundColor sur la photo.
+    await renderReady(
+      map([node({ status: "current" })], 0, { accent: "#5BBF73", background: null }),
+    );
+    const main = mainEl();
+    expect(main.style.backgroundImage).toBe(""); // toujours aucune image (pas de fetch non validé)
+    expect(main.style.backgroundColor).toBe("var(--world-bg-tint)"); // mais le tint EST peint
+    // Le tint est bien re-dérivé per-monde (fix #184) sur le MÊME élément que l'accent → per-monde réel.
+    const tint = main.style.getPropertyValue("--world-bg-tint");
+    expect(tint).toContain("color-mix");
+    expect(tint).toContain("var(--world-accent)");
+    expect(main.style.getPropertyValue("--world-accent")).toBe("#5BBF73");
+  });
+
+  it("le tint sans-photo est SÛR car la palette d'accent est BORNÉE : titre (--color-text-primary) ≥ 4.5:1 sur le tint per-monde résolu, pour CHAQUE accent curaté × 2 thèmes", () => {
+    // Effet observable (#199, honnêteté #170) : sans photo, le tint est peint SANS scrim — c'est
+    // légitime UNIQUEMENT parce que la palette est bornée (6 accents curatés), donc le contraste est
+    // PROUVÉ analytiquement (pas affirmé). On résout le tint réel `color-mix(accent 10%, surface)`
+    // pour chaque accent et on vérifie le plancher texte. Rougit si un accent curaté est ajouté/changé
+    // pour une couleur qui casse ce plancher, ou si le ratio du wash (10%) est modifié dangereusement.
+    for (const theme of ["light", "dark"] as const) {
+      const surface = resolveTokenColor(theme, "--color-bg-secondary");
+      const textPrimary = resolveTokenColor(theme, "--color-text-primary");
+      for (const accent of CURATED_ACCENTS) {
+        const tint = mixSrgb(accent, surface, 0.1); // même formule que --world-bg-tint (tokens.css)
+        expect(contrastRatio(textPrimary, tint)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("le tint sans-photo est SÛR : trait du chemin (--map-node-path-color) ≥ 3:1 sur le tint per-monde résolu, pour CHAQUE accent curaté × 2 thèmes", () => {
+    // Même garantie analytique pour le trait du chemin (élément non-texte, WCAG 1.4.11 ≥3:1) sur le
+    // tint borné. Rougit si un accent curaté rend le tint trop proche de `--color-text-secondary`.
+    for (const theme of ["light", "dark"] as const) {
+      const surface = resolveTokenColor(theme, "--color-bg-secondary");
+      const pathColor = resolveTokenColor(theme, "--map-node-path-color");
+      for (const accent of CURATED_ACCENTS) {
+        const tint = mixSrgb(accent, surface, 0.1);
+        expect(contrastRatio(pathColor, tint)).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
 
@@ -368,6 +429,90 @@ describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190,
     );
     expect(document.querySelector("[data-world-teddy]")).toBeNull();
   });
+});
+
+describe("MapScreen — contraste des glyphes de bas d'écran sur photo arbitraire (scrim #189 généralisé, story #202)", () => {
+  const withPhoto = { background: "/generated/socle/0/background.png" as string };
+
+  it("photo réelle → bouton « Changer de joueur » enveloppé d'un scrim opaque --world-surface (contraste garanti sur photo)", async () => {
+    // Effet observable (#202/#170) : le bouton ghost (fond transparent) est peint sur la photo
+    // arbitraire → contraste non garanti. Le scrim opaque `--world-surface` derrière lui redevient le
+    // fond de référence. Rougit si le scrim n'est pas rendu (chemin photo) ou n'utilise pas le token.
+    await renderReady(map([node({ status: "current" })], 0, withPhoto));
+    const scrim = document.querySelector<HTMLElement>("[data-world-footer-scrim]");
+    expect(scrim).not.toBeNull();
+    expect(scrim!.style.backgroundColor).toBe("var(--world-surface)");
+  });
+
+  it("pas de photo (background null, #199 tint-seul) → AUCUN scrim de footer (contraste déjà prouvé analytiquement, pas de scrim superflu)", async () => {
+    // Effet observable : le scrim de footer n'apparaît QUE sur photo. Rougit s'il était rendu
+    // inconditionnellement (régression #125 : scrim inutile sur le tint borné déjà sûr, et sur les
+    // autres écrans partageant `LogoutButton`).
+    await renderReady(map([node({ status: "current" })], 0, { background: null }));
+    expect(document.querySelector("[data-world-footer-scrim]")).toBeNull();
+  });
+
+  it.each(["light", "dark"] as const)(
+    "%s : texte du bouton (--color-text-secondary, cf. LogoutButton) ≥ 4.5:1 sur le scrim (--world-surface résolu)",
+    (theme) => {
+      // Fond de RÉFÉRENCE du texte ghost du bouton = `--world-surface` (le scrim opaque empilé
+      // derrière, JAMAIS la photo, #125/#170). `--color-text-secondary` = la couleur de texte de
+      // `LogoutButton.tsx`. Rougit si `--world-surface` régresse vers une couleur à faible contraste.
+      const text = resolveTokenColor(theme, "--color-text-secondary");
+      const surface = resolveTokenColor(theme, "--world-surface");
+      expect(contrastRatio(text, surface)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+});
+
+describe("MapScreen — casing opaque du trait du chemin sur photo arbitraire (story #202)", () => {
+  const withPhoto = { background: "/generated/socle/0/background.png" as string };
+
+  async function readyTwoNodes(themeOverrides: Partial<WorldTheme>) {
+    await renderReady(
+      map(
+        [node({ index: 0, status: "current" }), node({ index: 1, status: "locked" })],
+        0,
+        themeOverrides,
+      ),
+    );
+  }
+
+  it("photo réelle → une casing opaque --world-surface est peinte SOUS le trait coloré (contraste garanti sur photo)", async () => {
+    // Effet observable (#202/#170) : le trait est peint dans la gouttière de <main> (backmost) sur la
+    // photo → contraste non garanti. La casing opaque (peinte AVANT le trait, donc dessous) redonne un
+    // fond de référence tokenisé. Rougit si la casing n'est pas rendue (chemin photo) ou perd son token.
+    await readyTwoNodes(withPhoto);
+    const casing = document.querySelector<SVGLineElement>("[data-map-connector-casing]");
+    expect(casing).not.toBeNull();
+    expect(casing!.style.stroke).toBe("var(--world-surface)");
+    expect(casing!.style.strokeWidth).toBe("var(--map-node-path-casing-width)");
+    // La casing est peinte AVANT le trait coloré (ordre de peinture SVG = sous le trait) : elle est le
+    // 1ᵉʳ enfant <line> du SVG, le trait coloré le 2ᵉ. Rougit si l'ordre s'inverse (casing par-dessus).
+    const lines = document.querySelectorAll("[data-map-connector] line");
+    expect(lines[0]).toBe(casing);
+    expect((lines[1] as SVGLineElement).style.stroke).toBe("var(--map-node-path-color)");
+  });
+
+  it("pas de photo (background null, #199 tint-seul) → AUCUNE casing (contraste du trait déjà prouvé sur le tint borné)", async () => {
+    // Effet observable : la casing n'apparaît QUE sur photo. Rougit si elle était rendue
+    // inconditionnellement (casing opaque superflue épaississant le trait sur un fond déjà sûr).
+    await readyTwoNodes({ background: null });
+    expect(document.querySelector("[data-map-connector-casing]")).toBeNull();
+    // Le trait coloré lui-même reste rendu (le chemin est toujours visible, juste sans casing).
+    expect(document.querySelector("[data-map-connector] line")).not.toBeNull();
+  });
+
+  it.each(["light", "dark"] as const)(
+    "%s : trait du chemin (--map-node-path-color) ≥ 3:1 sur la casing (--world-surface résolu) — plancher garanti sur photo",
+    (theme) => {
+      // Fond de RÉFÉRENCE du trait sur photo = la casing opaque `--world-surface` (empilée dessous),
+      // jamais la photo (#170). Élément non-texte → ≥3:1 (WCAG 1.4.11). Rougit si le token régresse.
+      const path = resolveTokenColor(theme, "--map-node-path-color");
+      const surface = resolveTokenColor(theme, "--world-surface");
+      expect(contrastRatio(path, surface)).toBeGreaterThanOrEqual(3);
+    },
+  );
 });
 
 describe("MapScreen — fidélité de rendu à la géométrie fournie (rétro #123)", () => {
