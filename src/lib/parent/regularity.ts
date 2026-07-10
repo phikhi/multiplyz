@@ -188,9 +188,17 @@ function recordStreak(ordinals: readonly number[], gap: number): number {
  * **Agrégats de régularité** (jours joués, temps/jour, série courante + record, respect 15-20 min).
  * Compte **TOUTES** les réponses (re-essais inclus : engagement, pas correction — cf. en-tête). Le
  * jour calendaire est défini dans le fuseau ⚙️ (`dayTimeZone`), l'horloge `now` est injectée.
+ *
+ * `attempts` n'a besoin que de `createdAt` (`Pick<AttemptRecord, "createdAt">`, pas l'objet
+ * complet) : cette fonction ne lit **jamais** `skill`/`correct`/`responseMs`/`isRetry` — un
+ * consommateur au chemin **chaud** (story 7.8, `lib/parent/screen-time-lock.ts` : garde exécutée à
+ * CHAQUE entrée de niveau) peut ainsi charger une projection allégée (seuls les horodatages) sans
+ * dupliquer le regroupement par jour / l'amplitude bornée / le classement de fenêtre saine — cette
+ * logique reste **unique**, ici. `stats-source.ts` (chemin froid, tableau de bord parent) continue de
+ * passer des `AttemptRecord` complets, structurellement compatibles (surtype).
  */
 export function computeRegularityStats(
-  attempts: readonly AttemptRecord[],
+  attempts: readonly Pick<AttemptRecord, "createdAt">[],
   config: RegularityConfig,
   now: number,
 ): RegularityStats {

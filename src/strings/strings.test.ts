@@ -114,6 +114,23 @@ describe("strings (i18n FR)", () => {
     expect(strings.play.results.starsLabelPlural).toContain("{n}");
   });
 
+  it("verrou dur temps d'écran (7.8) = voix Teddy douce, jamais punitive (« on reprend demain »)", () => {
+    const locked = strings.play.screenTimeLocked;
+    expect(locked.title.length).toBeGreaterThan(0);
+    expect(locked.hint.length).toBeGreaterThan(0);
+    // Posture croissance : jamais « faux »/« erreur » — ce n'est pas un échec, un garde-fou bien-être.
+    const lockedText = `${locked.title} ${locked.hint}`.toLowerCase();
+    expect(lockedText).not.toContain("faux");
+    expect(lockedText).not.toContain("erreur");
+    // Écho explicite « on reprend demain » (issue #229 AC 1, DETAILS §27).
+    expect(lockedText).toContain("demain");
+    // Écran ENFANT (tutoiement, voix Teddy) — distinct du registre neutre parent.
+    expect(lockedText).toMatch(/\btu\b|\bte\b|\bton\b|\bta\b/u);
+    // Distinct de l'écran d'erreur générique (deux écrans différents pour deux causes différentes).
+    expect(locked.title).not.toBe(strings.play.loadError);
+    expect(locked.hint).not.toBe(strings.play.loadError);
+  });
+
   it("question = énoncés signes clairs interpolables (COPY §6)", () => {
     expect(strings.play.question.equationTwoOperands).toContain("{op}");
     expect(strings.play.question.equationComplement).toContain("{cible}");
@@ -249,6 +266,13 @@ describe("strings (i18n FR)", () => {
     expect(set.theme.dark.length).toBeGreaterThan(0);
     // Langue FR grisée (future i18n, DETAILS §5).
     expect(set.language.value).toBe("Français");
+    // Verrou dur (story 7.8 #229) : enforcement câblé → copie au PRÉSENT, écho DETAILS §27
+    // (« verrouille en douceur jusqu'au lendemain ») — plus de « Bientôt » (mentirait au parent
+    // maintenant que le réglage AGIT réellement). Le nudge reste hors scope 7.8 → « Bientôt » inchangé.
+    expect(set.screenTime.hardLockHint.toLowerCase()).not.toContain("bientôt");
+    expect(set.screenTime.hardLockHint).toContain("douceur");
+    expect(set.screenTime.hardLockHint).toContain("lendemain");
+    expect(set.screenTime.nudgeHint.toLowerCase()).toContain("bientôt");
     // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant.
     const settingsText =
       `${set.intro} ${set.theme.hint} ${set.worlds.hint} ${set.screenTime.hardLockHint} ${set.errors.UNAUTHORIZED}`.toLowerCase();

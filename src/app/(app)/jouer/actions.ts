@@ -5,6 +5,7 @@ import {
   getEconomyConfig,
   getEngineConfig,
   getMapConfig,
+  getRegularityConfig,
   type EngineConfig,
 } from "@/config/server-config";
 import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
@@ -23,6 +24,8 @@ import { finishLevel, type FinishLevelError, type GrantedLegendary } from "@/lib
 import { baseNodeTypeAt } from "@/lib/game/map";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
+import { evaluateScreenTimeLock } from "@/lib/parent/screen-time-lock";
+import { readHouseholdSettings } from "@/lib/parent/settings";
 
 /**
  * Server actions du jeu (ENGINE §3/§4/§10, SYNC §1/§2). Adaptateurs **minces** au-dessus
@@ -53,12 +56,31 @@ import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unl
 export interface StartLevelActionResult {
   readonly level: Level | null;
   readonly starThresholds: EngineConfig["starThresholds"];
+  /**
+   * **Verrou dur temps d'écran** (DETAILS §27, story 7.8 #229) : `true` si l'entrée dans ce
+   * NOUVEAU niveau est bloquée (parent l'a activé ET le temps joué aujourd'hui a atteint le
+   * seuil ⚙️, `lib/parent/screen-time-lock.ts`). `level` est alors `null` sans qu'il s'agisse
+   * d'une erreur d'authentification/réseau — le client (`PlayScreen`) distingue ce cas de
+   * l'écran d'erreur générique et affiche l'écran de blocage doux (voix Teddy, jamais
+   * punitif). La partie **en cours** n'est jamais concernée : ce garde ne s'exécute qu'ICI, au
+   * démarrage d'un niveau — jamais dans `submitAttemptAction`/`finishLevelAction` (no-fail
+   * préservé, ENGINE §9).
+   */
+  readonly locked: boolean;
 }
 
 /**
  * Démarre un niveau pour la session enfant courante. Lecture seule (aucune écriture au
  * démarrage). `level: null` si pas de session enfant valide (`starThresholds` renvoyé
  * quand même — valeur ⚙️ publique, pas liée à l'auth — pour un contrat de retour stable).
+ *
+ * **Verrou dur temps d'écran (DETAILS §27, story 7.8 #229)** : AVANT toute résolution de
+ * cible/niveau, la garde `evaluateScreenTimeLock` (foyer + temps joué aujourd'hui dérivé de
+ * `lib/parent/regularity.ts`, 7.4) tranche si l'entrée dans un NOUVEAU niveau doit être
+ * bloquée. Court-circuite au cas commun (verrou désactivé, défaut) sans lecture DB
+ * supplémentaire. Bloqué ⇒ `{ level: null, locked: true }`, **aucun** appel à
+ * `resolveCurrentLevelTarget`/`startLevel` (le serveur ne résout/ne compose jamais un niveau
+ * qu'il s'apprête à refuser).
  *
  * **Boss = niveau plus long (MAP §6)** : le serveur résout — **sans faire confiance au
  * client** (SYNC §1) — le nœud courant (`resolveCurrentLevelTarget`) et **dérive son type**
@@ -73,10 +95,19 @@ export async function startLevelAction(): Promise<StartLevelActionResult> {
   const config = getEngineConfig();
   const profileId = await getCurrentChildProfileId();
   if (profileId === null) {
-    return { level: null, starThresholds: config.starThresholds };
+    return { level: null, starThresholds: config.starThresholds, locked: false };
   }
   const db = getDb();
   const mapConfig = getMapConfig();
+
+  // Verrou dur temps d'écran (DETAILS §27, story 7.8 #229) : bloque l'ENTRÉE dans ce nouveau
+  // niveau si le parent l'a activé ET le temps joué aujourd'hui a atteint le seuil ⚙️. Posé
+  // AVANT toute résolution de cible — la partie en cours n'est jamais concernée (no-fail).
+  const householdSettings = readHouseholdSettings(db);
+  if (evaluateScreenTimeLock(db, profileId, householdSettings, getRegularityConfig(), Date.now())) {
+    return { level: null, starThresholds: config.starThresholds, locked: true };
+  }
+
   // Cible **résolue serveur** (jamais transmise par le client, SYNC §1) : dernier monde
   // débloqué + nœud courant → type de nœud dérivé de la géométrie (source de vérité serveur,
   // même dérivation que `finishLevelAction`). Boss ⇒ taille `bossQuestionCount`.
@@ -84,7 +115,7 @@ export async function startLevelAction(): Promise<StartLevelActionResult> {
   const isBoss = baseNodeTypeAt(target.levelIndex, mapConfig) === "boss";
   const size = isBoss ? mapConfig.bossQuestionCount : LEVEL_SIZE;
   const level = startLevel(db, profileId, config, Date.now(), Math.random, { size });
-  return { level, starThresholds: config.starThresholds };
+  return { level, starThresholds: config.starThresholds, locked: false };
 }
 
 /** Réponse de soumission — neutre : succès/échec + maîtrise à jour du fait (ou `null`). */

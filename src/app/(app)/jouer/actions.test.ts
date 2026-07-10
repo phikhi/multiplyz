@@ -11,6 +11,8 @@ import { selectDiagnostic } from "@/lib/engine/diagnostic";
 import { finishLevel, type FinishLevelResult } from "@/lib/game/finish-level";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
+import { evaluateScreenTimeLock } from "@/lib/parent/screen-time-lock";
+import { readHouseholdSettings } from "@/lib/parent/settings";
 import {
   diagnosticPlanAction,
   finishLevelAction,
@@ -46,12 +48,30 @@ const FAKE_ECONOMY_CONFIG = {
   bossBonusCoins: 50,
 };
 
+/** Config régularité de test (story 7.4, ⚙️ transmis à `evaluateScreenTimeLock`). */
+const FAKE_REGULARITY_CONFIG = {
+  dayTimeZone: "Europe/Paris",
+  maxDayAmplitudeMinutes: 240,
+  streakBreakGapDays: 2,
+  respectWindowMinMinutes: 15,
+  respectWindowMaxMinutes: 20,
+};
+/** Réglages foyer de test (story 7.3) — verrou dur DÉSACTIVÉ par défaut (opt-in). */
+const FAKE_HOUSEHOLD_SETTINGS = {
+  theme: "system" as const,
+  parentWorldValidation: false,
+  screenTimeNudgeMinutes: 20,
+  screenTimeHardLockEnabled: false,
+  screenTimeHardLockMinutes: 45,
+};
+
 vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => "DB") }));
 vi.mock("@/config/server-config", () => ({
   getEngineConfig: vi.fn(() => FAKE_CONFIG),
   getMapConfig: vi.fn(() => FAKE_MAP_CONFIG),
   getEconomyConfig: vi.fn(() => FAKE_ECONOMY_CONFIG),
+  getRegularityConfig: vi.fn(() => FAKE_REGULARITY_CONFIG),
 }));
 vi.mock("@/lib/engine/service", () => ({
   startLevel: vi.fn(),
@@ -65,6 +85,8 @@ vi.mock("@/lib/game/unlock", () => ({
   getUnlockedWorldCount: vi.fn(),
   resolveCurrentLevelTarget: vi.fn(),
 }));
+vi.mock("@/lib/parent/settings", () => ({ readHouseholdSettings: vi.fn() }));
+vi.mock("@/lib/parent/screen-time-lock", () => ({ evaluateScreenTimeLock: vi.fn() }));
 
 const profileMock = vi.mocked(getCurrentChildProfileId);
 const startLevelMock = vi.mocked(startLevel);
@@ -75,6 +97,8 @@ const selectDiagnosticMock = vi.mocked(selectDiagnostic);
 const finishLevelMock = vi.mocked(finishLevel);
 const getUnlockedWorldCountMock = vi.mocked(getUnlockedWorldCount);
 const resolveTargetMock = vi.mocked(resolveCurrentLevelTarget);
+const readHouseholdSettingsMock = vi.mocked(readHouseholdSettings);
+const evaluateScreenTimeLockMock = vi.mocked(evaluateScreenTimeLock);
 
 /** Décomposition de gain factice (le service la renvoie ; l'action la transmet au client). */
 const FAKE_REWARD: RewardBreakdown = {
@@ -96,6 +120,10 @@ const FAKE_LEGENDARY = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Verrou dur temps d'écran : DÉSACTIVÉ/non bloquant par défaut (opt-in parent, story 7.8) —
+  // les tests hors-scope du verrou n'ont pas à le paramétrer explicitement.
+  readHouseholdSettingsMock.mockReturnValue(FAKE_HOUSEHOLD_SETTINGS);
+  evaluateScreenTimeLockMock.mockReturnValue(false);
 });
 
 describe("startLevelAction", () => {
@@ -104,8 +132,12 @@ describe("startLevelAction", () => {
     await expect(startLevelAction()).resolves.toEqual({
       level: null,
       starThresholds: FAKE_CONFIG.starThresholds,
+      locked: false,
     });
     expect(startLevelMock).not.toHaveBeenCalled();
+    // Le verrou temps d'écran n'a même pas de session à évaluer (garde d'auth en amont).
+    expect(readHouseholdSettingsMock).not.toHaveBeenCalled();
+    expect(evaluateScreenTimeLockMock).not.toHaveBeenCalled();
   });
 
   it("authentifié → compose le niveau du profil de session (horloge + RNG injectés) + starThresholds", async () => {
@@ -117,6 +149,7 @@ describe("startLevelAction", () => {
     await expect(startLevelAction()).resolves.toEqual({
       level,
       starThresholds: FAKE_CONFIG.starThresholds,
+      locked: false,
     });
     // Profil de session (7), config + db mockés ; now = number, rng = fonction.
     expect(startLevelMock).toHaveBeenCalledTimes(1);
@@ -154,6 +187,54 @@ describe("startLevelAction", () => {
     await startLevelAction();
     const options = startLevelMock.mock.calls[0][5];
     expect(options).toEqual({ size: FAKE_MAP_CONFIG.bossQuestionCount }); // 13, PAS 10
+  });
+
+  // ── Verrou dur temps d'écran (story 7.8 #229, DETAILS §27) — wiring du call-site ──
+  // La borne exacte (seuil atteint bloque, juste sous passe) est mutation-prouvée sur base
+  // réelle dans `lib/parent/screen-time-lock.test.ts` ; ici on prouve le CÂBLAGE au call-site :
+  // le résultat de `evaluateScreenTimeLock` détermine si `startLevelAction` résout/compose un
+  // niveau, et les bons arguments (foyer + config régularité + horloge) lui sont transmis.
+
+  it("verrou ACTIF (evaluateScreenTimeLock→true) ⇒ { level: null, locked: true }, AUCUNE résolution/composition de niveau", async () => {
+    profileMock.mockResolvedValue(7);
+    evaluateScreenTimeLockMock.mockReturnValue(true);
+    await expect(startLevelAction()).resolves.toEqual({
+      level: null,
+      starThresholds: FAKE_CONFIG.starThresholds,
+      locked: true,
+    });
+    // ROUGE si le court-circuit était retiré : le serveur ne doit jamais résoudre/composer un
+    // niveau qu'il s'apprête à refuser (pas de fuite de la géométrie de carte).
+    expect(resolveTargetMock).not.toHaveBeenCalled();
+    expect(startLevelMock).not.toHaveBeenCalled();
+  });
+
+  it("verrou évalué avec le foyer + la config régularité + une horloge (câblage des arguments)", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
+    startLevelMock.mockReturnValue({ questions: [] });
+    await startLevelAction();
+    expect(readHouseholdSettingsMock).toHaveBeenCalledWith("DB");
+    expect(evaluateScreenTimeLockMock).toHaveBeenCalledTimes(1);
+    const [dbArg, profileArg, settingsArg, regularityArg, nowArg] =
+      evaluateScreenTimeLockMock.mock.calls[0];
+    expect(dbArg).toBe("DB");
+    expect(profileArg).toBe(7);
+    expect(settingsArg).toBe(FAKE_HOUSEHOLD_SETTINGS);
+    expect(regularityArg).toBe(FAKE_REGULARITY_CONFIG);
+    expect(typeof nowArg).toBe("number");
+  });
+
+  it("verrou INACTIF (défaut) ⇒ le niveau se compose normalement (non-régression du chemin nominal)", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
+    const level = { questions: [] };
+    startLevelMock.mockReturnValue(level);
+    await expect(startLevelAction()).resolves.toEqual({
+      level,
+      starThresholds: FAKE_CONFIG.starThresholds,
+      locked: false,
+    });
   });
 });
 

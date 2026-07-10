@@ -154,6 +154,19 @@ export const fr = {
     loadErrorRetry: "Réessayer",
     /** Cas défensif « niveau vide » (structurellement improbable, ENGINE §4). */
     emptyLevel: "Pas de calcul à te proposer pour l'instant — reviens un peu plus tard !",
+    /**
+     * **Verrou dur temps d'écran** (DETAILS §27, story 7.8 #229 — garde-fou bien-être **opt-in
+     * parent**, jamais punitif). Affiché quand `startLevelAction` refuse l'entrée dans un
+     * NOUVEAU niveau (seuil quotidien ⚙️ atteint) — la partie qui vient de se terminer n'est
+     * jamais remise en cause (no-fail, ENGINE §9). Voix de Teddy, tutoiement, posture croissance
+     * (jamais « faux »/« erreur ») — même famille que le nudge de fin de session (COPY §3
+     * « Reviens demain, je t'attends 🌙🍯 »), texte **distinct** car ce n'est pas un rappel mais
+     * un arrêt du jour (pas de bouton « Réessayer » : rejouer ne change rien avant demain).
+     */
+    screenTimeLocked: {
+      title: "On reprend demain ! 🌙",
+      hint: "Tu as bien joué aujourd'hui. Je garde un poisson au miel pour toi, à demain ! 🍯",
+    },
     /** Diagnostic de départ (déguisé, ENGINE §3, COPY §3 : cadre sans pression). */
     diagnostic: {
       intro: "On commence par un petit défi pour préparer ta carte !",
@@ -725,10 +738,11 @@ export const fr = {
         /** Libellé du réglage de pause suggérée (nudge doux). */
         nudgeLabel: "Pause suggérée après",
         /**
-         * Consigne du nudge. **Copy « bientôt »** (idiome de `language.hint`) : le réglage est
-         * STOCKÉ seulement, l'enforcement runtime = story 7.8 #229 (bloquée par 7.4 #217). Ne PAS
-         * affirmer un effet actif tant que 7.8 n'est pas mergée (sinon fausse promesse au parent).
-         * Texte final fidèle DETAILS §27 (« invitation douce ») à restaurer quand 7.8 câble l'effet.
+         * Consigne du nudge. **Copy « bientôt »** (idiome de `language.hint`) toujours de mise :
+         * le réglage est **STOCKÉ seulement** — le nudge doux reste un axe **distinct** du verrou
+         * dur (story 7.8 #229 AC 2, « ne pas les coupler ») et son enforcement runtime (bandeau/
+         * rappel in-app) n'a **pas** de story planifiée. Ne PAS affirmer un effet actif tant que ce
+         * câblage n'existe pas (sinon fausse promesse au parent).
          */
         nudgeHint: "Bientôt : une invitation douce à faire une pause, sans jamais bloquer.",
         /** Libellé accessible d'une durée en minutes (gabarit). */
@@ -736,14 +750,16 @@ export const fr = {
         /** Libellé du toggle du verrou dur optionnel. */
         hardLockToggle: "Limite quotidienne",
         /**
-         * Consigne du verrou dur. **Copy « bientôt »** (idiome de `language.hint`) : le seuil est
-         * STOCKÉ + validé seulement, l'enforcement (mise en pause de l'app) = story 7.8 #229 (bloquée
-         * par 7.4 #217). Ne PAS affirmer au présent que l'app « se met en pause » — un parent le
-         * croirait actif alors que rien ne se passe avant 7.8. Texte final fidèle DETAILS §27
-         * (« l'app se verrouille en douceur jusqu'au lendemain ») à restaurer quand 7.8 câble l'effet.
+         * Consigne du verrou dur. **Texte final** (story 7.8 #229 : enforcement câblé côté jeu
+         * enfant — `evaluateScreenTimeLock`, `app/(app)/jouer/actions.ts`) — écho **fidèle**
+         * DETAILS §27 (« l'app se verrouille en douceur jusqu'au lendemain »). Remplace le
+         * précédent « Bientôt » (7.3, réglage alors seulement stocké, jamais enforcé) : ce
+         * réglage AGIT désormais réellement sur le jeu de l'enfant, la copie doit le refléter au
+         * présent — un « Bientôt » resté ici après 7.8 mentirait au parent (CLAUDE.md, tell
+         * commentaire↔code).
          */
         hardLockHint:
-          "Bientôt : au-delà de cette limite, l'application invitera à s'arrêter en douceur jusqu'au lendemain.",
+          "Au-delà de cette limite, l'application se verrouille en douceur jusqu'au lendemain.",
         /** Libellé du réglage de seuil du verrou dur. */
         hardLockLabel: "Limite par jour",
       },
