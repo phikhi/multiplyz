@@ -58,6 +58,14 @@ type ScreenState =
   | { readonly kind: "error" }
   /** Niveau structurellement vide (défensif, ENGINE §4 — cf. brief #64). */
   | { readonly kind: "empty" }
+  /**
+   * **Verrou dur temps d'écran** (DETAILS §27, story 7.8 #229) : `startLevelAction` a refusé
+   * l'entrée dans un NOUVEAU niveau (parent l'a activé ET le temps joué aujourd'hui a atteint
+   * le seuil ⚙️). Distinct de `"error"` (pas un souci d'auth/réseau) — voix Teddy douce, jamais
+   * punitive (COPY §1/§3). La partie qui vient de se terminer n'est jamais remise en cause : on
+   * n'atteint cet état QUE via `fetchLevel` (chargement d'un niveau, jamais mid-partie).
+   */
+  | { readonly kind: "locked" }
   | { readonly kind: "diagnostic-intro"; readonly items: readonly DiagnosticItem[] }
   | {
       readonly kind: "playing";
@@ -123,6 +131,13 @@ export function PlayScreen() {
     }
     const result = await startLevelAction();
     setStarThresholds(result.starThresholds);
+    if (result.locked) {
+      // Verrou dur temps d'écran (story 7.8) : distinct de l'écran d'erreur — voix Teddy
+      // douce, jamais punitive. Vérifié AVANT `level === null` (les deux cas renvoient
+      // `level: null`, mais `locked` discrimine sans ambiguïté lequel des deux écrans afficher).
+      setScreen({ kind: "locked" });
+      return;
+    }
     if (result.level === null) {
       setScreen({ kind: "error" });
       return;
@@ -209,6 +224,20 @@ export function PlayScreen() {
 
   if (screen.kind === "empty") {
     return <StatusMessage text={strings.play.emptyLevel} />;
+  }
+
+  if (screen.kind === "locked") {
+    // Verrou dur temps d'écran (DETAILS §27, story 7.8) : écran plein, PAS un overlay
+    // superposé (même patron que "error"/"empty"/"loading" — StatusMessage remplace tout
+    // l'écran, aucun élément positionné/empilé à garder contre l'occlusion, #170/#190).
+    // Aucun bouton « Réessayer » (rejouer ne changerait rien avant demain) — seule sortie :
+    // changer de joueur (LogoutButton, déjà porté par StatusMessage).
+    return (
+      <StatusMessage
+        text={strings.play.screenTimeLocked.title}
+        hint={strings.play.screenTimeLocked.hint}
+      />
+    );
   }
 
   if (screen.kind === "diagnostic-intro") {

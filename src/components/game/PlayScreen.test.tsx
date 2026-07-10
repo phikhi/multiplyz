@@ -103,13 +103,18 @@ describe("PlayScreen — chargement", () => {
     startLevelMock.mockResolvedValueOnce({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     fireEvent.click(screen.getByRole("button", { name: strings.play.loadErrorRetry }));
     await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
   });
 
   it("niveau structurellement vide → message dédié (cas défensif ENGINE §4)", async () => {
-    startLevelMock.mockResolvedValue({ level: { questions: [] }, starThresholds: STAR_THRESHOLDS });
+    startLevelMock.mockResolvedValue({
+      level: { questions: [] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
     render(<PlayScreen />);
     await waitFor(() =>
       expect(
@@ -119,13 +124,64 @@ describe("PlayScreen — chargement", () => {
   });
 
   it("session invalide au démarrage de niveau (level:null) → écran d'erreur", async () => {
-    startLevelMock.mockResolvedValue({ level: null, starThresholds: STAR_THRESHOLDS });
+    startLevelMock.mockResolvedValue({
+      level: null,
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
     render(<PlayScreen />);
     await waitFor(() =>
       expect(
         screen.getByRole("heading", { level: 1, name: strings.play.loadError }),
       ).toBeInTheDocument(),
     );
+  });
+});
+
+describe("PlayScreen — verrou dur temps d'écran (story 7.8 #229, DETAILS §27)", () => {
+  // `level: null` est renvoyé à la fois par le refus d'auth ET par le verrou — la garde
+  // discrimine sur `locked`, jamais sur `level === null` seul (les deux tests ci-dessus/dessous
+  // prouvent les DEUX branches restent distinctes : rouge si `locked` était ignoré).
+  it("verrou ACTIF (locked:true) → écran de blocage dédié, voix Teddy, DISTINCT de l'écran d'erreur", async () => {
+    startLevelMock.mockResolvedValue({
+      level: null,
+      starThresholds: STAR_THRESHOLDS,
+      locked: true,
+    });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.screenTimeLocked.title }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(strings.play.screenTimeLocked.hint)).toBeInTheDocument();
+    // JAMAIS l'écran d'erreur générique (deux causes distinctes, deux écrans distincts).
+    expect(
+      screen.queryByRole("heading", { level: 1, name: strings.play.loadError }),
+    ).not.toBeInTheDocument();
+    // Aucun bouton « Réessayer » : rejouer ne change rien avant demain (pas un souci réseau).
+    expect(
+      screen.queryByRole("button", { name: strings.play.loadErrorRetry }),
+    ).not.toBeInTheDocument();
+    // Sortie possible : changer de joueur (jamais bloqué HORS du jeu, seulement l'entrée en niveau).
+    expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument();
+  });
+
+  it("verrou INACTIF (locked:false, level:null) → reste l'écran d'erreur générique (non-régression)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: null,
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.loadError }),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("heading", { level: 1, name: strings.play.screenTimeLocked.title }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -152,6 +208,7 @@ describe("PlayScreen — diagnostic de départ (ENGINE §3, 1re session)", () =>
     startLevelMock.mockResolvedValue({
       level: { questions: [question("add_3+8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
 
     render(<PlayScreen />);
@@ -191,6 +248,7 @@ describe("PlayScreen — diagnostic de départ (ENGINE §3, 1re session)", () =>
     startLevelMock.mockResolvedValue({
       level: { questions: [question("add_3+8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
 
     render(<PlayScreen />);
@@ -235,6 +293,7 @@ describe("PlayScreen — niveau normal, QCM, no-fail (ENGINE §9)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8"), question("add_3+8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
 
@@ -260,6 +319,7 @@ describe("PlayScreen — niveau normal, QCM, no-fail (ENGINE §9)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 0 });
 
@@ -313,6 +373,7 @@ describe("PlayScreen — niveau normal, QCM, no-fail (ENGINE §9)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 0 });
 
@@ -331,6 +392,7 @@ describe("PlayScreen — niveau normal, format pavé", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("add_3+8", "pave")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 3 });
 
@@ -355,6 +417,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
 
@@ -385,6 +448,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
     // Le serveur tranche le gain (base + étoiles) → solde 25 pièces (barème mocké).
@@ -429,6 +493,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
     finishLevelActionMock.mockResolvedValue({
@@ -469,6 +534,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
 
@@ -490,6 +556,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("add_3+8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     fireEvent.click(screen.getByRole("button", { name: strings.play.results.continue }));
     await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
@@ -511,6 +578,7 @@ describe("PlayScreen — déconnexion accessible à tout écran", () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
+      locked: false,
     });
     render(<PlayScreen />);
     await waitFor(() =>
