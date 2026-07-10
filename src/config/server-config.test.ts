@@ -9,6 +9,7 @@ import {
   getEngineConfig,
   getMapConfig,
   getParentControlsConfig,
+  getRegularityConfig,
   getReportingConfig,
   getWorldGenConfig,
   loadAuthConfig,
@@ -17,6 +18,7 @@ import {
   loadEngineConfig,
   loadMapConfig,
   loadParentControlsConfig,
+  loadRegularityConfig,
   loadReportingConfig,
   loadWorldGenConfig,
   resetConfigCache,
@@ -806,6 +808,81 @@ describe("getReportingConfig — accès mémoïsé", () => {
 
   it("expose le bloc reporting de la config applicative", () => {
     expect(getReportingConfig()).toBe(getConfig().reporting);
+  });
+});
+
+describe("loadRegularityConfig — défauts ⚙️ (PLAN §Espace parent :83, ADR 0014)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadRegularityConfig({})).toEqual(CONFIG_DEFAULTS.regularity);
+  });
+
+  it("fuseau Europe/Paris, amplitude 240 min, écart de rupture 2 j, fenêtre 15-20 min", () => {
+    const r = loadRegularityConfig({});
+    expect(r.dayTimeZone).toBe("Europe/Paris");
+    expect(r.maxDayAmplitudeMinutes).toBe(240);
+    expect(r.streakBreakGapDays).toBe(2);
+    expect(r.respectWindowMinMinutes).toBe(15);
+    expect(r.respectWindowMaxMinutes).toBe(20);
+  });
+});
+
+describe("loadRegularityConfig — surcharges ⚙️ par env", () => {
+  it("surcharge les cinq paramètres de régularité", () => {
+    const r = loadRegularityConfig({
+      REGULARITY_DAY_TIME_ZONE: "UTC",
+      REGULARITY_MAX_DAY_AMPLITUDE_MIN: "120",
+      REGULARITY_STREAK_BREAK_GAP_DAYS: "3",
+      REGULARITY_RESPECT_WINDOW_MIN_MIN: "10",
+      REGULARITY_RESPECT_WINDOW_MAX_MIN: "30",
+    });
+    expect(r).toEqual({
+      dayTimeZone: "UTC",
+      maxDayAmplitudeMinutes: 120,
+      streakBreakGapDays: 3,
+      respectWindowMinMinutes: 10,
+      respectWindowMaxMinutes: 30,
+    });
+  });
+
+  it("fuseau : une valeur IANA valide est retenue, un fuseau inconnu ou vide retombe sur le défaut", () => {
+    const d = CONFIG_DEFAULTS.regularity;
+    // Valeur IANA valide (autre que le défaut) retenue.
+    expect(loadRegularityConfig({ REGULARITY_DAY_TIME_ZONE: "America/New_York" }).dayTimeZone).toBe(
+      "America/New_York",
+    );
+    // Fuseau inexistant (typo) → `Intl` lève → défaut.
+    expect(loadRegularityConfig({ REGULARITY_DAY_TIME_ZONE: "Not/AZone" }).dayTimeZone).toBe(
+      d.dayTimeZone,
+    );
+    // Chaîne vide / espaces → défaut.
+    expect(loadRegularityConfig({ REGULARITY_DAY_TIME_ZONE: "   " }).dayTimeZone).toBe(
+      d.dayTimeZone,
+    );
+  });
+
+  it("les seuils numériques ≥ 1 : 0 / négatif / non numérique retombent sur le défaut", () => {
+    const d = CONFIG_DEFAULTS.regularity;
+    expect(
+      loadRegularityConfig({ REGULARITY_MAX_DAY_AMPLITUDE_MIN: "0" }).maxDayAmplitudeMinutes,
+    ).toBe(d.maxDayAmplitudeMinutes);
+    expect(
+      loadRegularityConfig({ REGULARITY_STREAK_BREAK_GAP_DAYS: "-1" }).streakBreakGapDays,
+    ).toBe(d.streakBreakGapDays);
+    expect(
+      loadRegularityConfig({ REGULARITY_RESPECT_WINDOW_MIN_MIN: "x" }).respectWindowMinMinutes,
+    ).toBe(d.respectWindowMinMinutes);
+    expect(
+      loadRegularityConfig({ REGULARITY_RESPECT_WINDOW_MAX_MIN: "0" }).respectWindowMaxMinutes,
+    ).toBe(d.respectWindowMaxMinutes);
+  });
+});
+
+describe("getRegularityConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc régularité de la config applicative", () => {
+    expect(getRegularityConfig()).toBe(getConfig().regularity);
   });
 });
 

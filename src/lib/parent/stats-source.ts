@@ -25,6 +25,7 @@ import { eq } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { attempts } from "@/lib/db/schema";
 import { loadScope } from "@/lib/engine/persistence";
+import { computeRegularityStats } from "./regularity";
 import {
   computeAccuracyStats,
   computeMasteryMap,
@@ -72,13 +73,15 @@ function loadAttemptRecords(db: ReadonlyStatsDb, profileId: number): AttemptReco
 
 /**
  * **Agrégats complets de l'espace parent** pour un profil (justesse, rapidité, carte de maîtrise, à
- * revoir). Lit `attempts` + le périmètre de maîtrise (`loadScope`, réutilisé — la définition de
- * maîtrise n'est jamais réinventée), puis compose les fonctions pures de `stats.ts`. **Lecture
- * seule** : aucune écriture DB.
+ * revoir, **régularité**). Lit `attempts` + le périmètre de maîtrise (`loadScope`, réutilisé — la
+ * définition de maîtrise n'est jamais réinventée), puis compose les fonctions pures de `stats.ts`
+ * (justesse/rapidité/maîtrise/à-revoir) et `regularity.ts` (jours joués/temps/série/respect).
+ * **Lecture seule** : aucune écriture DB.
  *
  * @param db connexion applicative (source de vérité serveur).
  * @param profileId profil **de la session parent** (jamais un profil client).
- * @param config `⚙️` combinés (`EngineConfig` moteur + `ReportingConfig` reporting, ADR 0012).
+ * @param config `⚙️` combinés (`EngineConfig` moteur + `ReportingConfig` ADR 0012 + `RegularityConfig`
+ *   ADR 0014).
  * @param now instant serveur injecté (epoch ms, jamais un `Date.now()` interne).
  */
 export function loadParentStats(
@@ -94,5 +97,8 @@ export function loadParentStats(
     speed: computeSpeedStats(records, config, now),
     masteryMap: computeMasteryMap(scope, config),
     reviewList: computeReviewList(scope, config),
+    // Régularité (story 7.4, ADR 0014) : dérivée du MÊME journal `attempts`, mais compte TOUTES les
+    // réponses (engagement, re-essais inclus) — la couche pure filtre ce dont elle a besoin.
+    regularity: computeRegularityStats(records, config.regularity, now),
   };
 }

@@ -440,6 +440,57 @@ export interface ReportingConfig {
 }
 
 /**
+ * ⚙️ **Sémantiques de régularité de l'espace parent** (PLAN §Espace parent :83, WIREFRAMES §7,
+ * story 7.4, ADR 0014). **Posés ET consommés** par les agrégats read-only `lib/parent/regularity.ts`
+ * (jours joués, temps de jeu/jour, série de jours, respect des 15-20 min) — chaque valeur AGIT sur
+ * un agrégat testé.
+ *
+ * ⚠️ Ce sont des **définitions de reporting DÉRIVÉES** de `attempts.createdAt` (aucune table de
+ * sessions, aucune écriture runtime — ADR 0014, Option A). Elles décrivent COMMENT présenter au
+ * parent la régularité **observée** de l'enfant, **sans changer aucune décision ENGINE/PLAN/SYNC
+ * verrouillée** et **sans rien enforcer** : le respect des 15-20 min et le temps/jour sont un
+ * **repère de reporting**, pas un plafond. Le nudge/verrou de temps d'écran (`ParentControlsConfig`,
+ * stocké par foyer en 7.3) et son **enforcement** (story 7.8 #229) sont un **axe distinct** — ces
+ * ⚙️ ne pilotent **que** l'affichage parent.
+ */
+export interface RegularityConfig {
+  /**
+   * **Fuseau horaire IANA** définissant le **jour calendaire** (jours joués + séries). Un instant est
+   * rattaché à sa date **locale** dans ce fuseau (jamais UTC brut), fidèle au vrai jour vécu de
+   * l'enfant (famille française). Défaut `"Europe/Paris"`. Une valeur non reconnue par `Intl`
+   * retombe sur le défaut (jamais de fuseau invalide propagé au calcul).
+   */
+  dayTimeZone: string;
+  /**
+   * **Plafond d'amplitude** du temps de jeu **par jour**, en minutes (ADR 0014 : temps/jour ≈
+   * `min(dernier − premier attempt du jour, ce plafond)`). Borne l'approximation par amplitude pour
+   * qu'une réponse isolée du matin + une du soir ne gonfle pas le temps mesuré. Défaut `240` (4 h).
+   * ≥ 1 (`parsePositiveInt`) — un plafond `0` mesurerait toujours 0 (dégénéré → retombe sur le défaut).
+   */
+  maxDayAmplitudeMinutes: number;
+  /**
+   * **Écart (en jours calendaires) qui ROMPT une série** : deux jours joués appartiennent à la même
+   * série si leur écart est **strictement inférieur** à ce seuil ; un écart `≥ ce seuil` la rompt.
+   * Défaut `2` (jours **consécutifs** stricts : écart 1 continue, écart 2 rompt). ≥ 1 (`parsePositiveInt`)
+   * — une valeur `1` est dégénérée (aucune série > 1 jour possible) mais non fatale → à garder ≥ 2.
+   */
+  streakBreakGapDays: number;
+  /**
+   * **Borne basse** (min) de la fenêtre saine de temps de jeu quotidien (« respect des 15-20 min »,
+   * PLAN §Espace parent :83, DETAILS §27). Un jour dont le temps mesuré est `< ce seuil` est classé
+   * **en-dessous**. Défaut `15`. ≥ 1 (`parsePositiveInt`).
+   */
+  respectWindowMinMinutes: number;
+  /**
+   * **Borne haute** (max) de la fenêtre saine de temps de jeu quotidien. Un jour dont le temps
+   * mesuré est `> ce seuil` est classé **au-dessus** ; entre les deux bornes **incluses** → **dans la
+   * fenêtre**. Défaut `20`. ≥ 1 (`parsePositiveInt`). Attendu `≥ respectWindowMinMinutes`, mais la
+   * classification reste déterministe même si l'env les inverse.
+   */
+  respectWindowMaxMinutes: number;
+}
+
+/**
  * ⚙️ **Contrôles parentaux — temps d'écran** (DETAILS §27, PRODUCT §1.4, story 7.3). Source unique
  * des **défauts + bornes** ⚙️ des réglages de temps d'écran que le parent calibre depuis l'espace
  * parent (persistés par foyer dans `household_settings`, `lib/parent/settings.ts`).
@@ -477,6 +528,7 @@ export interface AppConfig {
   economy: EconomyConfig;
   worldgen: WorldGenConfig;
   reporting: ReportingConfig;
+  regularity: RegularityConfig;
   parentControls: ParentControlsConfig;
 }
 
@@ -638,6 +690,17 @@ export const CONFIG_DEFAULTS = {
     inProgressMinRatio: 0.4,
     // Top 5 calculs « à revoir » (PLAN §Espace parent).
     reviewListSize: 5,
+  },
+  regularity: {
+    // Jour calendaire dans le fuseau de la famille (français) — jamais UTC brut (ADR 0014).
+    dayTimeZone: "Europe/Paris",
+    // Plafond d'amplitude du temps/jour : 4 h (borne l'approximation par amplitude).
+    maxDayAmplitudeMinutes: 240,
+    // Série rompue dès un écart de 2 jours calendaires (jours consécutifs stricts).
+    streakBreakGapDays: 2,
+    // Fenêtre saine de temps de jeu quotidien : 15-20 min (PLAN §Espace parent, DETAILS §27).
+    respectWindowMinMinutes: 15,
+    respectWindowMaxMinutes: 20,
   },
   parentControls: {
     // Temps d'écran (DETAILS §27) — défauts + bornes ⚙️. STOCKÉS/validés en 7.3, ENFORCÉS en 7.8 #229.
@@ -921,6 +984,58 @@ export function loadReportingConfig(env: Env): ReportingConfig {
 }
 
 /**
+ * Parse un **fuseau horaire IANA** (⚙️ régularité). Une valeur reconnue par `Intl` (ex.
+ * `"Europe/Paris"`, `"UTC"`) est retenue ; toute valeur non reconnue (typo, fuseau inexistant) fait
+ * lever `Intl.DateTimeFormat` (`RangeError`) → **retombe sur le défaut** (jamais de fuseau invalide
+ * propagé au calcul de jour, qui le consomme réellement — `lib/parent/regularity.ts`).
+ */
+function parseTimeZone(raw: string | undefined, fallback: string): string {
+  const v = raw?.trim();
+  if (!v) return fallback;
+  try {
+    // Construit un formateur avec ce fuseau : lève RangeError si le fuseau est inconnu.
+    new Intl.DateTimeFormat("en-CA", { timeZone: v });
+    return v;
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Bloc **régularité espace parent** de la config (PLAN §Espace parent :83, ADR 0014), isolé en
+ * fonction pure (mêmes conventions que `loadReportingConfig`). Source unique des ⚙️ de **sémantique
+ * de régularité** — fuseau du jour calendaire, plafond d'amplitude du temps/jour, écart de rupture
+ * de série, fenêtre saine de temps de jeu — **consommés** par `lib/parent/regularity.ts`. Aucun
+ * secret : réglages purs.
+ *
+ * `parsePositiveInt` (≥ 1) pour les quatre valeurs numériques : un plafond d'amplitude, un écart de
+ * rupture ou une borne de fenêtre `0`/négatif n'a pas de sens (retombe sur le défaut). `parseTimeZone`
+ * valide le fuseau via `Intl` (un fuseau inconnu retombe sur `"Europe/Paris"`).
+ */
+export function loadRegularityConfig(env: Env): RegularityConfig {
+  const d = CONFIG_DEFAULTS.regularity;
+  return {
+    dayTimeZone: parseTimeZone(env.REGULARITY_DAY_TIME_ZONE, d.dayTimeZone),
+    maxDayAmplitudeMinutes: parsePositiveInt(
+      env.REGULARITY_MAX_DAY_AMPLITUDE_MIN,
+      d.maxDayAmplitudeMinutes,
+    ),
+    streakBreakGapDays: parsePositiveInt(
+      env.REGULARITY_STREAK_BREAK_GAP_DAYS,
+      d.streakBreakGapDays,
+    ),
+    respectWindowMinMinutes: parsePositiveInt(
+      env.REGULARITY_RESPECT_WINDOW_MIN_MIN,
+      d.respectWindowMinMinutes,
+    ),
+    respectWindowMaxMinutes: parsePositiveInt(
+      env.REGULARITY_RESPECT_WINDOW_MAX_MIN,
+      d.respectWindowMaxMinutes,
+    ),
+  };
+}
+
+/**
  * Bloc **contrôles parentaux** de la config (DETAILS §27, story 7.3), isolé en fonction pure (mêmes
  * conventions que `loadEngineConfig`). Source unique des ⚙️ **défauts + bornes** de temps d'écran —
  * **consommés** par `lib/parent/settings.ts` (défauts d'un foyer neuf + validation de borne). Aucun
@@ -1077,6 +1192,7 @@ export function loadConfig(env: Env): AppConfig {
     economy: loadEconomyConfig(env),
     worldgen: loadWorldGenConfig(env),
     reporting: loadReportingConfig(env),
+    regularity: loadRegularityConfig(env),
     parentControls: loadParentControlsConfig(env),
   };
 }
@@ -1139,6 +1255,15 @@ export function getWorldGenConfig(): WorldGenConfig {
  */
 export function getReportingConfig(): ReportingConfig {
   return getConfig().reporting;
+}
+
+/**
+ * Bloc **régularité espace parent** de la config applicative (mémoïsé). Consommé par les agrégats
+ * read-only de régularité (`lib/parent/regularity.ts`, story 7.4) — jours joués, temps de jeu/jour,
+ * série de jours, respect des 15-20 min. Source unique des ⚙️ de sémantique de régularité (ADR 0014).
+ */
+export function getRegularityConfig(): RegularityConfig {
+  return getConfig().regularity;
 }
 
 /**

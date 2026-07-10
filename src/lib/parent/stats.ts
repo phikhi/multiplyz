@@ -24,9 +24,10 @@
  * dans `stats-source.ts`). Il ne consomme que des structures de données pures.
  */
 
-import type { EngineConfig, ReportingConfig } from "../../config/server-config";
+import type { EngineConfig, RegularityConfig, ReportingConfig } from "../../config/server-config";
 import { SKILLS, type Skill } from "../engine/domain";
 import type { ScopeEntry } from "../engine/level";
+import type { RegularityStats } from "./regularity";
 import {
   INITIAL_BOX,
   isFactMastered,
@@ -56,13 +57,16 @@ export interface AttemptRecord {
 }
 
 /**
- * Config combinée des agrégats : le moteur (`EngineConfig`, réutilisé pour maîtrise/fluence) + le
- * reporting (`ReportingConfig`, sémantiques d'affichage, ADR 0012). Bundle passé aux fonctions
- * pures pour rester une **source unique** sans multiplier les paramètres.
+ * Config combinée des agrégats de l'espace parent : le moteur (`EngineConfig`, réutilisé pour
+ * maîtrise/fluence) + le reporting justesse/rapidité/maîtrise/à-revoir (`ReportingConfig`, ADR 0012)
+ * + la régularité (`RegularityConfig`, ADR 0014 : fuseau du jour, temps/jour, série, respect 15-20
+ * min). Bundle passé aux fonctions pures pour rester une **source unique** sans multiplier les
+ * paramètres.
  */
 export interface StatsConfig {
   readonly engine: EngineConfig;
   readonly reporting: ReportingConfig;
+  readonly regularity: RegularityConfig;
 }
 
 /** Sens d'une tendance, **interprété au regard du bien-fondé** de l'indicateur (ADR 0012). */
@@ -160,6 +164,7 @@ export interface ParentStats {
   readonly speed: SpeedStats;
   readonly masteryMap: MasteryMap;
   readonly reviewList: readonly ReviewItem[];
+  readonly regularity: RegularityStats;
 }
 
 /** Justesse d'un lot de réponses : `justes / total`, ou `null` si le lot est vide. */
