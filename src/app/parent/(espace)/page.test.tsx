@@ -24,4 +24,10 @@ describe("ParentDashboardPage — stub de fondation (story 7.1)", () => {
     const link = screen.getByRole("link", { name: strings.parent.dashboard.manageLink });
     expect(link).toHaveAttribute("href", "/parent/profils");
   });
+
+  it("expose le lien « Réglages » vers /parent/reglages (story 7.3)", () => {
+    render(<ParentDashboardPage />);
+    const link = screen.getByRole("link", { name: strings.parent.dashboard.settingsLink });
+    expect(link).toHaveAttribute("href", "/parent/reglages");
+  });
 });

@@ -132,8 +132,9 @@ describe("runMigrations", () => {
     // ledger/wallet/progress ; collection 0007 : collection/characters — `collection`
     // référence `characters` par FK, donc drop dans cet ordre ; index UNIQUE 0008 sur
     // `attempts` — celui du `ledger` part avec son DROP TABLE ; tables worldgen 0009 :
-    // worlds/jobs — sans FK, drop libre ; socle 0012 : socle_worlds — sans FK — pour que
-    // leur `CREATE TABLE` puisse rejouer).
+    // worlds/jobs — sans FK, drop libre ; socle 0012 : socle_worlds ; réglages 0013 :
+    // household_settings — sans FK — pour que leur `CREATE TABLE` puisse rejouer).
+    seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
     seed.run(sql`DROP TABLE jobs`);
@@ -197,8 +198,9 @@ describe("runMigrations", () => {
     // Retour à l'état pré-0008 : retirer les deux index + dé-journaliser 0008 (9ᵉ
     // migration, ordinal 8 dans l'ordre chronologique — robuste à l'ajout ultérieur de
     // migrations, comme la régression #105). La dé-journalisation `>= OFFSET 8` retire
-    // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets) et 0012 (socle_worlds) → on
-    // drope ces tables pour que leur `CREATE TABLE` rejoue.
+    // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets), 0012 (socle_worlds) et 0013
+    // (household_settings) → on drope ces tables pour que leur `CREATE TABLE` rejoue.
+    seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
     seed.run(sql`DROP TABLE jobs`);
@@ -242,6 +244,28 @@ describe("runMigrations", () => {
     // Les lignes NULL préexistantes ont survécu (NULL distincts en SQLite — pas de dédoublonnage).
     expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM attempts`)?.n).toBe(4);
     expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM ledger`)?.n).toBe(4);
+  });
+
+  // Story 7.3 (#216) : la migration 0013 (ADDITIVE) crée `household_settings` (table NEUVE →
+  // `NOT NULL` + défauts sans le piège #105). Garde observable sur les colonnes RENDUES (PRAGMA,
+  // cohérence schema.ts↔snapshot↔SQL) : rouge si une colonne disparaît / le SQL diverge. La table
+  // est vide au 1er lancement (foyer neuf) → le repli défauts de `readHouseholdSettings` s'applique.
+  it("0013 : household_settings créée (colonnes attendues) + vide au 1er lancement (#216)", () => {
+    const db = createDatabase(":memory:");
+    runMigrations(db);
+    const cols = db
+      .all<{ name: string }>(sql`PRAGMA table_info(household_settings)`)
+      .map((c) => c.name);
+    expect(cols).toEqual([
+      "id",
+      "theme",
+      "parent_world_validation",
+      "screen_time_nudge_minutes",
+      "screen_time_hard_lock_enabled",
+      "screen_time_hard_lock_minutes",
+      "updated_at",
+    ]);
+    expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM household_settings`)?.n).toBe(0);
   });
 });
 

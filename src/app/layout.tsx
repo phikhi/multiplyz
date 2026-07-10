@@ -2,10 +2,19 @@ import type { Metadata, Viewport } from "next";
 import { BRAND_NAME } from "@/config/brand";
 import { PWA_THEME_COLOR } from "@/config/pwa";
 import { LOCALE, strings } from "@/strings";
+import { getDb } from "@/lib/db";
+import { dataThemeAttr, readHouseholdSettings } from "@/lib/parent/settings";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { Baloo_2, Nunito } from "next/font/google";
 import "./globals.css";
+
+// Le layout racine lit le **thème du foyer** (source de vérité serveur, story 7.3) à CHAQUE requête
+// pour poser `data-theme` sur `<html>` → jamais prérendu au build (sinon ouverture SQLite au build).
+// Runtime Node explicite (better-sqlite3, pas edge). Réglage `system` → aucun attribut (le
+// média-query `prefers-color-scheme` de `tokens.css` décide) ; `light`/`dark` → attribut posé.
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const baloo2 = Baloo_2({
   subsets: ["latin"],
@@ -47,9 +56,12 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Thème du foyer (7.3) → `data-theme` app-wide. `system` = `undefined` → attribut omis par React.
+  const themeAttr = dataThemeAttr(readHouseholdSettings(getDb()).theme);
   return (
     <html
       lang={LOCALE}
+      data-theme={themeAttr}
       className={`${baloo2.variable} ${nunito.variable}`}
       suppressHydrationWarning
     >

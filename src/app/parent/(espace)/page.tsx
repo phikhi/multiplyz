@@ -69,6 +69,9 @@ export default function ParentDashboardPage() {
         <Link href="/parent/profils" style={manageLinkStyle} className="mz-focusable">
           {strings.parent.dashboard.manageLink}
         </Link>
+        <Link href="/parent/reglages" style={manageLinkStyle} className="mz-focusable">
+          {strings.parent.dashboard.settingsLink}
+        </Link>
         <ParentExitButton />
       </div>
     </main>

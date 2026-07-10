@@ -216,14 +216,14 @@ describe("defaultInspector — fail-closed (seam non branché, échec loud & act
   });
 });
 
-// ───────────────────────────── moderatedStatusAfterQaPass (toggle validation parent) ─────────────────────────────
+// ───────────────────────────── moderatedStatusAfterQaPass (validation parent) ─────────────────────────────
 
-describe("moderatedStatusAfterQaPass — toggle validation parent ⚙️ (WORLDGEN §6)", () => {
-  it("toggle OFF ⇒ `active` auto après QA (muter le toggle rougit)", () => {
-    expect(moderatedStatusAfterQaPass(qaCfg({ parentValidationEnabled: false }))).toBe("active");
+describe("moderatedStatusAfterQaPass — validation parent (WORLDGEN §6, booléen source de vérité 7.3)", () => {
+  it("validation OFF ⇒ `active` auto après QA (muter l'argument rougit)", () => {
+    expect(moderatedStatusAfterQaPass(false)).toBe("active");
   });
 
-  it("toggle ON ⇒ reste `buffered` (attend l'approbation parent)", () => {
-    expect(moderatedStatusAfterQaPass(qaCfg({ parentValidationEnabled: true }))).toBe("buffered");
+  it("validation ON ⇒ reste `buffered` (attend l'approbation parent)", () => {
+    expect(moderatedStatusAfterQaPass(true)).toBe("buffered");
   });
 });

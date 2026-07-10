@@ -471,6 +471,8 @@ export const fr = {
       placeholder: "Le tableau de bord des progrès arrive bientôt.",
       /** Lien vers l'écran « Gérer les profils » (story 7.5, DETAILS §3). */
       manageLink: "Gérer les profils",
+      /** Lien vers l'écran « Réglages » (story 7.3, DETAILS §3). */
+      settingsLink: "Réglages",
       /** Bouton de sortie (✕ du wireframe §7) → révoque la session parent, retour au sélecteur. */
       exit: "Quitter l'espace parent",
     },
@@ -549,6 +551,91 @@ export const fr = {
         PARENT_PIN_SAME: "Le code enfant doit être différent du code parent.",
         PROFILE_NOT_FOUND: "Ce profil est introuvable.",
         OWNER_UNDELETABLE: "Le compte parent ne peut pas être supprimé.",
+        UNAUTHORIZED: "Votre session parent a expiré. Reconnectez-vous.",
+        GENERIC: "Une erreur est survenue. Réessayez.",
+      },
+    },
+    /**
+     * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, PRODUCT §1.4,
+     * WIREFRAMES §7). Registre **neutre/vouvoiement** (COPY §5, pas la voix de Teddy). Le gabarit
+     * `{min}` (minutes) est interpolé côté composant. Aucun texte en dur ailleurs.
+     */
+    settings: {
+      /** Titre de l'écran (h1). */
+      title: "Réglages",
+      /** Consigne neutre sous le titre. */
+      intro: "Personnalisez l'apparence et fixez des limites de temps.",
+      /** Retour vers le tableau de bord parent. */
+      back: "Retour au tableau de bord",
+      /** Confirmation neutre après enregistrement d'un réglage (auto-save). */
+      saved: "Réglage enregistré.",
+      /** **Thème** (DETAILS §3 « Thème clair/sombre »). */
+      theme: {
+        /** Légende du groupe (fieldset). */
+        legend: "Thème",
+        /** Consigne neutre du groupe. */
+        hint: "Choisissez l'apparence de l'application.",
+        /** Option « système » (suit le réglage de l'appareil, aucune surcharge). */
+        system: "Système",
+        /** Option « clair » (force le thème clair). */
+        light: "Clair",
+        /** Option « sombre » (force le thème sombre). */
+        dark: "Sombre",
+      },
+      /** **Validation des mondes** (DETAILS §30, WORLDGEN §6). */
+      worlds: {
+        /** Légende du groupe. */
+        legend: "Validation des mondes",
+        /** Consigne neutre : que fait le réglage. */
+        hint: "Choisissez si les nouveaux mondes s'affichent automatiquement ou après votre approbation.",
+        /** Option « auto » (le monde s'affiche dès qu'il est prêt). */
+        auto: "Automatique",
+        /** Option « approbation parent » (le monde attend votre validation). */
+        parent: "Votre approbation",
+      },
+      /** **Temps d'écran** (DETAILS §27) — nudge doux + verrou dur optionnel. */
+      screenTime: {
+        /** Légende du groupe. */
+        legend: "Temps d'écran",
+        /** Libellé du réglage de pause suggérée (nudge doux). */
+        nudgeLabel: "Pause suggérée après",
+        /**
+         * Consigne du nudge. **Copy « bientôt »** (idiome de `language.hint`) : le réglage est
+         * STOCKÉ seulement, l'enforcement runtime = story 7.8 #229 (bloquée par 7.4 #217). Ne PAS
+         * affirmer un effet actif tant que 7.8 n'est pas mergée (sinon fausse promesse au parent).
+         * Texte final fidèle DETAILS §27 (« invitation douce ») à restaurer quand 7.8 câble l'effet.
+         */
+        nudgeHint: "Bientôt : une invitation douce à faire une pause, sans jamais bloquer.",
+        /** Libellé accessible d'une durée en minutes (gabarit). */
+        minutesOption: "{min} minutes",
+        /** Libellé du toggle du verrou dur optionnel. */
+        hardLockToggle: "Limite quotidienne",
+        /**
+         * Consigne du verrou dur. **Copy « bientôt »** (idiome de `language.hint`) : le seuil est
+         * STOCKÉ + validé seulement, l'enforcement (mise en pause de l'app) = story 7.8 #229 (bloquée
+         * par 7.4 #217). Ne PAS affirmer au présent que l'app « se met en pause » — un parent le
+         * croirait actif alors que rien ne se passe avant 7.8. Texte final fidèle DETAILS §27
+         * (« l'app se verrouille en douceur jusqu'au lendemain ») à restaurer quand 7.8 câble l'effet.
+         */
+        hardLockHint:
+          "Bientôt : au-delà de cette limite, l'application invitera à s'arrêter en douceur jusqu'au lendemain.",
+        /** Libellé du réglage de seuil du verrou dur. */
+        hardLockLabel: "Limite par jour",
+      },
+      /** **Langue** (FR seule, grisée — DETAILS §5, future i18n). */
+      language: {
+        /** Légende du groupe. */
+        legend: "Langue",
+        /** Valeur affichée (français). */
+        value: "Français",
+        /** Consigne : d'autres langues plus tard (grisé). */
+        hint: "D'autres langues arriveront plus tard.",
+      },
+      /** Messages d'erreur (mappés depuis `SettingsValidationError` + session + repli). */
+      errors: {
+        THEME_INVALID: "Ce thème n'est pas valide.",
+        NUDGE_OUT_OF_RANGE: "Cette durée de pause n'est pas valide.",
+        HARD_LOCK_OUT_OF_RANGE: "Cette limite quotidienne n'est pas valide.",
         UNAUTHORIZED: "Votre session parent a expiré. Reconnectez-vous.",
         GENERIC: "Une erreur est survenue. Réessayez.",
       },

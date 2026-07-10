@@ -1296,6 +1296,78 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(page).toHaveURL(/\/$/);
   });
 
+  // ── Réglages parent (story 7.3, #216) : persistance bout-en-bout + thème app-wide (AC #4) ──
+  // Sérialisé DANS le même foyer (PIN parent encore 9876 ici — la récupération qui le change à 1111
+  // est le DERNIER test). Prouve : (a) thème AGIT immédiatement (data-theme sur <html>) ET persiste
+  // au reload (SSR depuis la DB, source de vérité) ET s'applique APP-WIDE (autre route) ; (b)
+  // validation des mondes + verrou dur persistés (rechargés depuis la DB).
+  const settings = strings.parent.settings;
+  test("réglages parent : thème AGIT + persiste app-wide, validation/verrou persistés (capture)", async ({
+    page,
+  }) => {
+    // Accès sous garde session parent (9876) → tableau de bord → Réglages.
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+    await page.getByRole("link", { name: strings.parent.dashboard.settingsLink }).click();
+    await expect(page).toHaveURL(/\/parent\/reglages$/);
+
+    // (a) Thème AGIT immédiatement : sélectionner « Sombre » pose data-theme=dark sur <html>.
+    await page.getByRole("button", { name: settings.theme.dark }).click();
+    await expect(page.getByText(settings.saved)).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.screenshot({ path: "docs/captures/7.3-reglages-sombre.png", fullPage: true });
+
+    // Persistance : reload → le serveur re-stampe data-theme=dark depuis la DB (source de vérité).
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.getByRole("button", { name: settings.theme.dark })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // App-wide : le thème s'applique AUSSI hors de l'espace parent (layout racine) — ici le sélecteur.
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.goto("/parent/reglages");
+
+    // Validation des mondes → « Votre approbation » (source de vérité du worker), persistée au reload.
+    await page.getByRole("button", { name: settings.worlds.parent }).click();
+    await expect(page.getByText(settings.saved)).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("button", { name: settings.worlds.parent })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    // Verrou dur : activer le switch fait APPARAÎTRE le sélecteur de limite ; persistance au reload.
+    await page.getByRole("switch", { name: settings.screenTime.hardLockToggle }).click();
+    await expect(page.getByText(settings.saved).first()).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: settings.screenTime.hardLockLabel }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(
+      page.getByRole("switch", { name: settings.screenTime.hardLockToggle }),
+    ).toHaveAttribute("aria-checked", "true");
+
+    // Revenir en thème clair pour la capture claire + laisser un état propre.
+    await page.getByRole("button", { name: settings.theme.light }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.screenshot({ path: "docs/captures/7.3-reglages-clair.png", fullPage: true });
+
+    // Responsive téléphone 375px (WIREFRAMES §8) : pills/selects wrap, AUCUN débordement horizontal.
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: settings.title })).toBeVisible();
+    const fitsWidth = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    );
+    expect(fitsWidth).toBe(true); // le contenu tient dans la largeur (pas de scroll horizontal)
+    await page.screenshot({ path: "docs/captures/7.3-reglages-mobile.png", fullPage: true });
+  });
+
   test("récupération PIN parent via code de secours → nouveau code (capture)", async ({ page }) => {
     const rec = strings.recovery;
     expect(recoveryCode).toMatch(/^[A-Z0-9]{8}$/); // capté à l'onboarding

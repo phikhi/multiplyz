@@ -19,6 +19,7 @@ import {
   upsertCandidate,
   type ReferenceAssetInput,
 } from "./reference-assets";
+import { writeHouseholdSettings } from "@/lib/parent/settings";
 import type { AssetInspection, WorldInspector } from "./qa";
 import {
   ACTIVE_JOB_STATUSES,
@@ -931,44 +932,35 @@ describe("processNextJob — QA kid-safe : asset rejeté ⇒ régénère, monde 
 
 // ───────────────────────────── processNextJob : TOGGLE VALIDATION PARENT (WORLDGEN §6, AC2) ─────────────────────────────
 
-describe("processNextJob — toggle validation parent ⚙️ AGIT sur le statut du monde QA-validé (WORLDGEN §6)", () => {
-  it("MUTATION-PROUVÉ : toggle ON ⇒ monde reste buffered (approvedBy null), jamais active auto", async () => {
+describe("processNextJob — validation des mondes (réglage parent DB) AGIT sur le statut du monde QA-validé (WORLDGEN §6, 7.3)", () => {
+  it("MUTATION-PROUVÉ : réglage parent ON (DB) ⇒ monde reste buffered (approvedBy null), jamais active auto", async () => {
     const db = freshDb();
+    // Source de vérité = réglage parent persisté (story 7.3) : le worker lit `household_settings`.
+    writeHouseholdSettings(db, { parentWorldValidation: true });
     const jobId = enqueueJob(db, 80);
     const { generate } = recordingGenerate(db);
-    const out = await processNextJob(
-      db,
-      baseDeps({ generate, config: cfgQa({ parentValidationEnabled: true }) }),
-    );
+    const out = await processNextJob(db, baseDeps({ generate }));
     expect(out).toMatchObject({ outcome: "done", worldIndex: 80 });
     const w = db.select().from(worlds).where(eq(worlds.index, 80)).get();
-    // QA passée MAIS validation parent activée ⇒ reste 'buffered' en attente d'approbation, approvedBy null.
-    // Muter `moderatedStatusAfterQaPass` (ignorer le toggle → toujours 'active') ⇒ ce test rougit.
+    // QA passée MAIS validation parent activée (DB) ⇒ reste 'buffered' en attente d'approbation, approvedBy null.
+    // Muter `moderatedStatusAfterQaPass` (ignorer l'argument → toujours 'active') OU muter la lecture
+    // `readHouseholdSettings(db).parentWorldValidation` (hardcode false) ⇒ ce test rougit.
     expect(w?.status).toBe("buffered");
     expect(w?.approvedBy).toBeNull();
     // Le job est quand même 'done' (généré + QA-validé) → preuve de QA pour l'approbation parent.
     expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("done");
   });
 
-  it("le toggle AGIT : MÊME monde ⇒ 'active' (OFF) vs 'buffered' (ON) (effet observable du ⚙️)", async () => {
+  it("le réglage parent (DB) AGIT : MÊME monde ⇒ 'active' (OFF) vs 'buffered' (ON) (effet observable)", async () => {
     const off = freshDb();
     const on = freshDb();
+    // Réglage parent persisté distinct par foyer : OFF (auto) vs ON (approbation) — même config par défaut.
+    writeHouseholdSettings(off, { parentWorldValidation: false });
+    writeHouseholdSettings(on, { parentWorldValidation: true });
     enqueueJob(off, 81);
     enqueueJob(on, 81);
-    await processNextJob(
-      off,
-      baseDeps({
-        generate: recordingGenerate(off).generate,
-        config: cfgQa({ parentValidationEnabled: false }),
-      }),
-    );
-    await processNextJob(
-      on,
-      baseDeps({
-        generate: recordingGenerate(on).generate,
-        config: cfgQa({ parentValidationEnabled: true }),
-      }),
-    );
+    await processNextJob(off, baseDeps({ generate: recordingGenerate(off).generate }));
+    await processNextJob(on, baseDeps({ generate: recordingGenerate(on).generate }));
     expect(off.select().from(worlds).where(eq(worlds.index, 81)).get()?.status).toBe("active");
     expect(on.select().from(worlds).where(eq(worlds.index, 81)).get()?.status).toBe("buffered");
   });
