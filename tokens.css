@@ -38,6 +38,12 @@
   --color-status-warning:    #FFB020;
   --color-status-error:      #FF6B6B; /* corail doux, jamais agressif */
   --color-status-info:       #4DA3FF;
+  /* Pastel doux du statut erreur (3ᵉ famille de badge, après success-bg/retry-bg) — story 7.7,
+     carte de maîtrise « à renforcer ». Même luminosité approximative que
+     --color-feedback-correct-bg/--color-feedback-retry-bg (badge fond clair constant + glyphe
+     texte fort, jamais --color-status-error directement comme texte — piège #94/#104, ~2.7:1
+     sur --color-bg-secondary en light, sous 4.5:1). */
+  --color-status-error-bg:   #FFE8E6;
   /* Texte sur fond warning (ambre clair dans les 2 thèmes) — valeur sombre fixe,
      ne suit pas le thème. Assure le contraste AA (≥ 4.5:1) sur fond ambre. */
   --color-on-warning:        #29243D;
@@ -361,6 +367,57 @@
   --results-star-filled:  var(--color-text-primary);
   --results-star-empty:   var(--color-text-secondary);
 
+  /* ---------- ESPACE PARENT — TABLEAU DE BORD (story 7.7, WIREFRAMES §7,
+     PLAN §Espace parent) ----------
+     Assemblage des agrégats read-only 7.2/7.4 (justesse/rapidité/maîtrise/à-revoir/
+     régularité). AUCUN élément superposé/positionné (pas d'`absolute`, pas de z-index) :
+     barres et cellules sont des frères en flux normal → hors du périmètre occlusion #170
+     par construction. Chaque glyphe/trait distinct référencé ci-dessous a son propre test
+     de contraste résolu (garde CLAUDE.md #104/#125/#126). */
+  /* Barres « par compétence » (justesse, WIREFRAMES §7 « Compléments ███████░ 88% ») :
+     le POURCENTAGE (texte) est TOUJOURS rendu à côté, sur --card-bg, avec un token texte
+     déjà prouvé ≥4.5:1 — jamais À L'INTÉRIEUR de la barre (évite catégoriquement le piège
+     opacity/blend #226 et le piège texte-sur-accent #94/#104). La barre elle-même est un
+     élément NON-TEXTE (WCAG 1.4.11, ≥3:1 fill vs track). */
+  --parent-bar-track-bg:    var(--color-bg-tertiary);
+  --parent-bar-fill-bg:     var(--color-accent-primary);
+  --parent-bar-height:      var(--space-3); /* 12px */
+  --parent-bar-radius:      var(--border-radius-full);
+  /* Carte de maîtrise (heatmap maîtrisé/en-cours/à-renforcer, PLAN §Espace parent) : même
+     patron que les badges de nœud de carte (`--map-node-completed-*`) — fond PASTEL
+     constant (2 thèmes) + bordure de statut + GLYPHE = texte fort (`--color-text-primary`),
+     jamais le token de statut directement comme texte (piège #94/#104 récurrent : les
+     accents/status ne passent pas 4.5:1 sur un fond clair). 3 glyphes DISTINCTS (✓/~/!) —
+     jamais la couleur seule (a11y daltonisme), doublés du mot (Maîtrisé/En cours/À renforcer). */
+  --parent-mastery-mastered-bg:      var(--color-feedback-correct-bg);
+  --parent-mastery-mastered-border:  var(--color-feedback-correct);
+  --parent-mastery-mastered-glyph:   var(--color-text-primary);
+  --parent-mastery-inprogress-bg:     var(--color-feedback-retry-bg);
+  --parent-mastery-inprogress-border: var(--color-feedback-retry);
+  --parent-mastery-inprogress-glyph:  var(--color-text-primary);
+  --parent-mastery-weak-bg:     var(--color-status-error-bg);
+  --parent-mastery-weak-border: var(--color-status-error);
+  --parent-mastery-weak-glyph:  var(--color-text-primary);
+  --parent-mastery-badge-size:  var(--space-6); /* 32px */
+  /* Graphique de régularité (minutes/jour, derniers jours — réalise honnêtement la
+     métaphore « sparkline » du wireframe avec de VRAIES données journalières régularity.days,
+     jamais une justesse quotidienne fabriquée : `AccuracyStats` n'expose qu'un point courant +
+     un point précédent, pas une série par jour — cf. corps de PR). Barres verticales en flux
+     (`flex`, jamais `position:absolute`) → aucune garde d'occlusion requise par construction. */
+  --parent-chart-track-bg:   var(--color-bg-tertiary);
+  /* `--color-accent-secondary` (turquoise) n'atteint QUE ~1.9:1 sur `--color-bg-tertiary` en light
+     (trop clair/saturé pour un remplissage non-texte, piège #104/#125 générique aux accents vifs
+     sur fond pastel) → même paire ÉPROUVÉE que la barre de justesse (`--parent-bar-fill-bg`,
+     ≥3:1 résolu 2 thèmes, `ParentDashboard.test.tsx`), variante -active pour une nuance distincte
+     visuellement de la barre de justesse tout en gardant le contraste. */
+  --parent-chart-fill-bg:    var(--color-accent-primary-active);
+  --parent-chart-bar-width:  var(--space-3);
+  --parent-chart-max-height: var(--space-8); /* 64px */
+  /* Puce « à revoir » (chip de calcul à réviser en priorité, WIREFRAMES §7). */
+  --parent-review-chip-bg:     var(--color-bg-tertiary);
+  --parent-review-chip-text:   var(--color-text-primary);
+  --parent-review-chip-radius: var(--border-radius-full);
+
   /* ---------- COLLECTION (Pokédex, story 5.6, WIREFRAMES §5/§8) ----------
      Écran collection : cartes de créatures possédées + fiche + renommage.
      Chaque glyphe/texte rendu utilise un token TEXTE fiable (≥4.5:1 sur son fond
@@ -450,6 +507,7 @@
   --color-status-success:    #4ECB73;
   --color-status-warning:    #FFC04D;
   --color-status-error:      #FF8A8A;
+  --color-status-error-bg:   #3A211E;
   --color-status-info:       #6FB4FF;
 
   --color-surface-overlay:   rgba(8, 6, 16, 0.60);
@@ -504,6 +562,7 @@
     --color-status-success:    #4ECB73;
     --color-status-warning:    #FFC04D;
     --color-status-error:      #FF8A8A;
+    --color-status-error-bg:   #3A211E;
     --color-status-info:       #6FB4FF;
 
     --color-surface-overlay:   rgba(8, 6, 16, 0.60);

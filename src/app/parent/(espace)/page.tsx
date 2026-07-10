@@ -1,79 +1,93 @@
-import Link from "next/link";
-import { strings } from "@/strings";
-import { ParentExitButton } from "@/components/ParentExitButton";
+import { redirect } from "next/navigation";
+import { getDb } from "@/lib/db";
+import {
+  getEngineConfig,
+  getMapConfig,
+  getRegularityConfig,
+  getReportingConfig,
+} from "@/config/server-config";
+import { getCurrentParentSession } from "@/lib/auth/current-session";
+import { listManagedProfiles } from "@/lib/parent/profiles";
+import { loadParentStats } from "@/lib/parent/stats-source";
+import type { StatsConfig } from "@/lib/parent/stats";
+import { loadProgressionSummary, type ProgressionSummary } from "@/lib/parent/progression";
+import { SocleUnavailableError } from "@/lib/worldgen/socle";
+import { ParentDashboard, type ParentDashboardProps } from "./ParentDashboard";
 
 // Rendu dynamique (route gardée par `(espace)/layout.tsx` qui lit la session à chaque
 // requête) → jamais prérendu au build. Runtime Node explicite (cohérence épic auth).
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const cardStyle = {
-  maxWidth: "var(--max-width-play)",
-  width: "100%",
-  margin: "0 auto",
-  padding: "var(--space-6)",
-  backgroundColor: "var(--card-bg)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--card-shadow)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "var(--space-5)",
-} as const;
+/**
+ * Charge + compose tout ce que `ParentDashboard` a besoin d'afficher pour un profil (7.2/7.4/7.7,
+ * lecture seule). **Fonction régulière** (pas un composant) : c'est ICI, à la frontière
+ * serveur/données, que l'horloge (`Date.now()`) est légitimement lue UNE fois et **injectée**
+ * dans les fonctions pures en aval — jamais un `Date.now()` interne à un composant (règle de
+ * pureté React 19 des Server Components, en plus de la discipline horloge-injectée CLAUDE.md).
+ *
+ * **Résilience du bloc progression** : `loadProgressionSummary` peut lever
+ * `SocleUnavailableError` (socle de secours non amorcé, 6.6/6.7) — interceptée ICI pour que SEUL
+ * ce bloc affiche un repli neutre (`ParentDashboard` gère `progression: null`), jamais tout le
+ * tableau de bord (même discipline que l'écran carte, `carte/actions.ts`, story 6.7).
+ */
+async function loadDashboardProps(profileId: number): Promise<ParentDashboardProps> {
+  const db = getDb();
+  const now = Date.now();
 
-const titleStyle = {
-  fontFamily: "var(--font-family-display)",
-  fontSize: "var(--font-size-xl)",
-  fontWeight: "var(--font-weight-bold)",
-  color: "var(--color-text-primary)",
-  margin: 0,
-} as const;
+  const statsConfig: StatsConfig = {
+    engine: getEngineConfig(),
+    reporting: getReportingConfig(),
+    regularity: getRegularityConfig(),
+  };
+  const stats = loadParentStats(db, profileId, statsConfig, now);
 
-const placeholderStyle = {
-  margin: 0,
-  color: "var(--color-text-secondary)",
-  fontFamily: "var(--font-family-body)",
-  fontSize: "var(--font-size-base)",
-} as const;
+  const profiles = listManagedProfiles(db);
+  const displayName = profiles.find((p) => p.id === profileId)?.name ?? "";
 
-// Lien « Gérer les profils » (story 7.5) — cible tactile ≥ 44 px, registre neutre. Texte fort
-// `--color-text-primary` sur `--card-bg` (contraste WCAG résolu, testé), bordure neutre.
-const manageLinkStyle = {
-  alignSelf: "flex-start",
-  display: "inline-flex",
-  alignItems: "center",
-  minHeight: "var(--tap-target-min)",
-  padding: "var(--space-3) var(--space-5)",
-  fontFamily: "var(--font-family-body)",
-  fontSize: "var(--font-size-base)",
-  fontWeight: "var(--font-weight-semibold)",
-  color: "var(--color-text-primary)",
-  backgroundColor: "transparent",
-  border: "1px solid var(--color-border-primary)",
-  borderRadius: "var(--border-radius-full)",
-  textDecoration: "none",
-} as const;
+  const mapConfig = getMapConfig();
+  let progression: ProgressionSummary | null = null;
+  try {
+    progression = loadProgressionSummary(
+      db,
+      profileId,
+      mapConfig,
+      statsConfig.engine,
+      statsConfig.regularity,
+      now,
+    );
+  } catch (error) {
+    if (!(error instanceof SocleUnavailableError)) throw error;
+    // Socle non amorcé → `progression` reste `null`, `ParentDashboard` affiche un repli neutre
+    // pour CE bloc seulement (le reste du tableau de bord ne dépend pas de la carte/collection).
+  }
+
+  return {
+    displayName,
+    stats,
+    progression,
+    respectWindowMinMinutes: statsConfig.regularity.respectWindowMinMinutes,
+    respectWindowMaxMinutes: statsConfig.regularity.respectWindowMaxMinutes,
+  };
+}
 
 /**
- * **Espace parent — stub de fondation** (story 7.1, WIREFRAMES §7, AUTH.md §2). Accessible
- * uniquement avec une **session parent valide** (garde `(espace)/layout.tsx`). Registre
- * **neutre** (COPY §5, pas la voix de Teddy). Le vrai tableau de bord (justesse par
- * compétence, temps de jeu, à revoir) = **story 7.7** ; ici, seulement le bandeau + un
- * placeholder + la sortie (révoque la session parent). Zéro texte en dur (strings).
+ * **Tableau de bord parent** (story 7.7, WIREFRAMES §7). Charge le **profil de la session
+ * parent** (jamais un profil client) et délègue l'assemblage à `loadDashboardProps`, puis rend
+ * `ParentDashboard` (composant de présentation pur, testé isolément).
+ *
+ * **Garde répétée** (défense en profondeur, même patron que les server actions) : le groupe
+ * `(espace)/layout.tsx` redirige déjà sans session parent valide, mais cette page **relit** la
+ * session pour obtenir le `profileId` — un `null` ici (session révoquée entre le layout et la
+ * page, course rarissime) redirige à nouveau plutôt que de planter.
  */
-export default function ParentDashboardPage() {
-  return (
-    <main className="bg-bg text-text" style={{ minHeight: "100dvh", padding: "var(--space-6)" }}>
-      <div style={cardStyle}>
-        <h1 style={titleStyle}>{strings.parent.dashboard.title}</h1>
-        <p style={placeholderStyle}>{strings.parent.dashboard.placeholder}</p>
-        <Link href="/parent/profils" style={manageLinkStyle} className="mz-focusable">
-          {strings.parent.dashboard.manageLink}
-        </Link>
-        <Link href="/parent/reglages" style={manageLinkStyle} className="mz-focusable">
-          {strings.parent.dashboard.settingsLink}
-        </Link>
-        <ParentExitButton />
-      </div>
-    </main>
-  );
+export default async function ParentDashboardPage() {
+  const session = await getCurrentParentSession();
+  if (session === null) {
+    redirect("/");
+    return null; // inatteignable en prod (`redirect` lève) ; garde le contrôle de flux testable
+  }
+
+  const props = await loadDashboardProps(session.profileId);
+  return <ParentDashboard {...props} />;
 }
