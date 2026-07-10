@@ -551,8 +551,16 @@ export const collection = sqliteTable("collection", {
 // profil, pas de cascade RGPD : ce ne sont pas des données enfant).
 // ============================================================================
 
-/** Statut d'un monde généré (WORLDGEN §3) : en tampon (QA) ou actif (jouable). */
-export type WorldStatus = "buffered" | "active";
+/**
+ * Statut d'un monde généré (WORLDGEN §3/§6) : en tampon (QA) | actif (jouable) | **rejeté par un
+ * parent** (`rejected`, story 7.9, ADR 0015). `rejected` est un état **terminal** (jamais
+ * réactivé) — additif pur au contrat TS, **zéro migration** (`status` est une colonne `text` SANS
+ * contrainte `CHECK` SQL : `$type<>` n'est qu'un contrat TypeScript, jamais sérialisé dans le
+ * snapshot/SQL généré par drizzle-kit, `db:generate` reste un no-op). `resolveWorld` (socle.ts)
+ * filtre déjà strictement `status = active` → un monde `rejected` retombe automatiquement sur le
+ * socle de secours, exactement comme un monde resté `buffered` indéfiniment (aucune branche neuve).
+ */
+export type WorldStatus = "buffered" | "active" | "rejected";
 
 /**
  * **Mondes générés** (WORLDGEN §5, PLAN §Modèle de données). Une ligne par monde,
@@ -595,12 +603,16 @@ export const worlds = sqliteTable("worlds", {
   prompt: text("prompt").notNull(),
   /** Seed du modèle (reproductibilité à l'identique, WORLDGEN §5/§7). */
   seed: text("seed").notNull(),
-  /** `buffered` (en QA) | `active` (jouable après QA + validation parent). Défaut `buffered`. */
+  /**
+   * `buffered` (en QA) | `active` (jouable après QA + validation parent) | `rejected` (refusé
+   * par un parent, story 7.9, ADR 0015 — terminal, jamais réactivé). Défaut `buffered`.
+   */
   status: text("status").$type<WorldStatus>().notNull().default("buffered"),
   /**
    * Identité de l'approbateur parent (nullable) — renseigné **uniquement** si la
    * validation parent est activée et qu'un parent a approuvé le monde (WORLDGEN §6).
-   * Un monde auto-validé (toggle off) reste `NULL`.
+   * Un monde auto-validé (toggle off) OU **rejeté** (7.9 — aucune identité stockée pour un
+   * rejet, ADR 0015) reste `NULL`.
    */
   approvedBy: text("approved_by"),
   /** Instant serveur de la génération. */

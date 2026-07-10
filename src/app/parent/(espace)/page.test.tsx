@@ -5,6 +5,7 @@ import { getCurrentParentSession } from "@/lib/auth/current-session";
 import { listManagedProfiles } from "@/lib/parent/profiles";
 import { loadParentStats } from "@/lib/parent/stats-source";
 import { loadProgressionSummary } from "@/lib/parent/progression";
+import { countPendingWorlds } from "@/lib/parent/world-approval";
 import { SocleUnavailableError } from "@/lib/worldgen/socle";
 import type { ParentDashboardProps } from "./ParentDashboard";
 import ParentDashboardPage from "./page";
@@ -29,6 +30,7 @@ vi.mock("@/lib/auth/current-session", () => ({ getCurrentParentSession: vi.fn() 
 vi.mock("@/lib/parent/profiles", () => ({ listManagedProfiles: vi.fn() }));
 vi.mock("@/lib/parent/stats-source", () => ({ loadParentStats: vi.fn() }));
 vi.mock("@/lib/parent/progression", () => ({ loadProgressionSummary: vi.fn() }));
+vi.mock("@/lib/parent/world-approval", () => ({ countPendingWorlds: vi.fn() }));
 vi.mock("./ParentDashboard", () => ({
   ParentDashboard: (props: ParentDashboardProps) => (
     <div
@@ -37,6 +39,7 @@ vi.mock("./ParentDashboard", () => ({
       data-progression={props.progression === null ? "null" : "set"}
       data-min={props.respectWindowMinMinutes}
       data-max={props.respectWindowMaxMinutes}
+      data-pending={props.pendingWorldsCount}
     />
   ),
 }));
@@ -46,6 +49,7 @@ const sessionMock = vi.mocked(getCurrentParentSession);
 const profilesMock = vi.mocked(listManagedProfiles);
 const statsMock = vi.mocked(loadParentStats);
 const progressionMock = vi.mocked(loadProgressionSummary);
+const pendingWorldsMock = vi.mocked(countPendingWorlds);
 
 const SESSION = { token: "tok", profileId: 7, kind: "parent" as const, expiresAt: new Date() };
 const STATS = { fake: "stats" } as unknown as ReturnType<typeof loadParentStats>;
@@ -60,6 +64,7 @@ beforeEach(() => {
   ]);
   statsMock.mockReturnValue(STATS);
   progressionMock.mockReturnValue(PROGRESSION);
+  pendingWorldsMock.mockReturnValue(0);
 });
 
 describe("ParentDashboardPage — câblage serveur (story 7.7)", () => {
@@ -120,6 +125,14 @@ describe("ParentDashboardPage — câblage serveur (story 7.7)", () => {
     expect(screen.getByTestId("dashboard")).toHaveAttribute("data-progression", "null");
     // Les stats (indépendantes de la progression) ont quand même été chargées.
     expect(statsMock).toHaveBeenCalled();
+  });
+
+  it("transmet le compte de mondes en attente (foyer, story 7.9) au composant de présentation", async () => {
+    pendingWorldsMock.mockReturnValue(3);
+    const ui = await ParentDashboardPage();
+    render(ui);
+    expect(pendingWorldsMock).toHaveBeenCalledWith(FAKE_DB);
+    expect(screen.getByTestId("dashboard")).toHaveAttribute("data-pending", "3");
   });
 
   it("propage toute AUTRE erreur (invariant serveur) — ne masque que `SocleUnavailableError`", async () => {

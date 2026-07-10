@@ -702,6 +702,49 @@ export function approveWorld(db: AppDatabase, worldId: string, approvedBy: strin
   db.update(worlds).set({ status: "active", approvedBy: who }).where(eq(worlds.id, worldId)).run();
 }
 
+/**
+ * **Rejet parent** d'un monde en attente (story 7.9, WORLDGEN §6, ADR 0015). Transitionne un monde
+ * `buffered` → `rejected` (état **terminal**, jamais réactivé — ce mécanisme minimal ne rejette
+ * jamais un monde déjà `active`, hors scope). Miroir d'`approveWorld`, en plus minimal :
+ *
+ * - **Aucune identité stockée** (pas de `rejectedBy` — ADR 0015, contrairement à `approvedBy` :
+ *   aucune colonne/migration ajoutée pour cette story, symétrique de `deleteProfile` qui ne trace
+ *   pas non plus l'agent de suppression).
+ * - **Pas de garde `worldPassedQa`** : contrairement à `approveWorld`, un monde `buffered` a
+ *   **toujours déjà passé la QA** (invariant posé par `processNextJob` — un job n'atteint `done`
+ *   qu'après QA réussie) → reposer cette garde serait une branche **redondante non-testable**
+ *   (CLAUDE.md « correct ≠ testable ≠ nécessaire », rétro #143), donc volontairement absente ici.
+ *
+ * Garde (mutation-prouvée) : le monde **existe** et est **`buffered`** — sinon `WorldModerationError`
+ * (monde inconnu, déjà `active`, ou déjà `rejected`). Pas d'idempotence silencieuse sur un second
+ * rejet (même comportement qu'`approveWorld` sur une 2ᵉ approbation).
+ *
+ * **Écriture unique** → aucun état partiel à annuler ⇒ pas de transaction (rétro #124).
+ *
+ * **N'affecte NI `resolveWorld` NI `ensureBuffer`** (ADR 0015) : un monde `rejected` retombe
+ * automatiquement sur le socle de secours (comme tout monde non-`active`) et son `world_index`
+ * n'est **jamais régénéré** (comportement identique à un monde resté `buffered` indéfiniment —
+ * pas une régression introduite ici). Ses assets ne sont **pas** purgés par
+ * `purgeFailedWorldAssets` (celle-ci ne cible que les jobs `failed` sans reprise/succès ; un monde
+ * `rejected` a par construction un job `done` → exclu par `hasNonFailedJobForWorld`, intentionnel).
+ */
+export function rejectWorld(db: AppDatabase, worldId: string): void {
+  const world = db
+    .select({ status: worlds.status })
+    .from(worlds)
+    .where(eq(worlds.id, worldId))
+    .get();
+  if (!world) {
+    throw new WorldModerationError(`rejet refusé : monde "${worldId}" inconnu.`);
+  }
+  if (world.status !== "buffered") {
+    throw new WorldModerationError(
+      `rejet refusé : monde "${worldId}" pas en attente d'approbation (statut ${world.status}).`,
+    );
+  }
+  db.update(worlds).set({ status: "rejected" }).where(eq(worlds.id, worldId)).run();
+}
+
 // ============================================================================
 // Purge des assets de mondes définitivement rejetés (WORLDGEN §6, ART §6, #176)
 // ============================================================================

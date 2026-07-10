@@ -31,7 +31,9 @@ export default defineConfig({
     // ...puis amorce un profil frère/sœur (`Zoé`) + sa session (story 7.5 : prouver
     // suppression=purge+révocation sur un NON-propriétaire ; la création de frères/sœurs est v2,
     // pas d'UI) — DANS le même contexte que le serveur (cwd + DATABASE_PATH), comme les assets.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && pnpm dev --port ${PORT}`,
+    // ...puis amorce 2 mondes `buffered` en attente d'approbation (story 7.9, #231) — le worker
+    // daemon n'est jamais lancé en E2E, sans cet amorçage `/parent/mondes` resterait toujours vide.
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

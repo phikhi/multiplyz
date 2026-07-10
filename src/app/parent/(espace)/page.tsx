@@ -11,6 +11,7 @@ import { listManagedProfiles } from "@/lib/parent/profiles";
 import { loadParentStats } from "@/lib/parent/stats-source";
 import type { StatsConfig } from "@/lib/parent/stats";
 import { loadProgressionSummary, type ProgressionSummary } from "@/lib/parent/progression";
+import { countPendingWorlds } from "@/lib/parent/world-approval";
 import { SocleUnavailableError } from "@/lib/worldgen/socle";
 import { ParentDashboard, type ParentDashboardProps } from "./ParentDashboard";
 
@@ -30,6 +31,10 @@ export const runtime = "nodejs";
  * `SocleUnavailableError` (socle de secours non amorcé, 6.6/6.7) — interceptée ICI pour que SEUL
  * ce bloc affiche un repli neutre (`ParentDashboard` gère `progression: null`), jamais tout le
  * tableau de bord (même discipline que l'écran carte, `carte/actions.ts`, story 6.7).
+ *
+ * **`pendingWorldsCount` (story 7.9)** : lecture `countPendingWorlds(db)` **foyer** (pas
+ * `profileId`) — les mondes sont partagés entre profils (WORLDGEN §1, pas de FK profil sur
+ * `worlds`), même portée que le buffer lui-même.
  */
 async function loadDashboardProps(profileId: number): Promise<ParentDashboardProps> {
   const db = getDb();
@@ -68,6 +73,7 @@ async function loadDashboardProps(profileId: number): Promise<ParentDashboardPro
     progression,
     respectWindowMinMinutes: statsConfig.regularity.respectWindowMinMinutes,
     respectWindowMaxMinutes: statsConfig.regularity.respectWindowMaxMinutes,
+    pendingWorldsCount: countPendingWorlds(db),
   };
 }
 

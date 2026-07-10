@@ -37,6 +37,7 @@ import {
   processNextJob,
   purgeFailedWorldAssets,
   recoverStaleJobs,
+  rejectWorld,
   resolveWorkerDeps,
   runWorkerTick,
   serializeJobPayload,
@@ -1049,6 +1050,52 @@ describe("approveWorld — transition buffered→active + approvedBy parent (mé
     seedDoneJob(db, 93);
     approveWorld(db, "world:93", "papa"); // 1ʳᵉ approbation ⇒ active
     expect(() => approveWorld(db, "world:93", "papa")).toThrow(WorldModerationError); // déjà active
+  });
+});
+
+// ───────────────────────────── rejectWorld (rejet parent, story 7.9, ADR 0015) ─────────────────────────────
+
+describe("rejectWorld — transition buffered→rejected (mécanisme, épic #7 = UI)", () => {
+  it("rejette un monde buffered ⇒ status rejected, approvedBy reste NULL (aucune identité stockée, ADR 0015)", () => {
+    const db = freshDb();
+    seedWorld(db, 190);
+    seedDoneJob(db, 190); // QA passée (comme tout monde buffered) — pas requis par la garde, mais réaliste.
+    rejectWorld(db, "world:190");
+    const w = db.select().from(worlds).where(eq(worlds.index, 190)).get();
+    expect(w?.status).toBe("rejected");
+    expect(w?.approvedBy).toBeNull();
+  });
+
+  it("MUTATION-PROUVÉ : refuse de rejeter un monde inconnu (retirer la garde d'existence rendrait ceci un no-op silencieux)", () => {
+    const db = freshDb();
+    expect(() => rejectWorld(db, "world:999")).toThrow(WorldModerationError);
+  });
+
+  it("MUTATION-PROUVÉ : refuse de rejeter un monde déjà active (retirer la garde de statut le rejetterait après coup)", () => {
+    const db = freshDb();
+    seedWorld(db, 191);
+    seedDoneJob(db, 191);
+    approveWorld(db, "world:191", "maman"); // buffered → active
+    expect(() => rejectWorld(db, "world:191")).toThrow(WorldModerationError);
+    // Le statut actif est PRÉSERVÉ (pas rétrogradé silencieusement en rejected).
+    expect(db.select().from(worlds).where(eq(worlds.index, 191)).get()?.status).toBe("active");
+  });
+
+  it("MUTATION-PROUVÉ : refuse un second rejet (pas d'idempotence silencieuse, même comportement qu'approveWorld)", () => {
+    const db = freshDb();
+    seedWorld(db, 192);
+    rejectWorld(db, "world:192"); // 1er rejet ⇒ rejected
+    expect(() => rejectWorld(db, "world:192")).toThrow(WorldModerationError); // déjà rejected
+  });
+
+  it("un monde rejected retombe sur le fallback socle (resolveWorld INCHANGÉ, ADR 0015) — filtre status=active déjà couvert", () => {
+    const db = freshDb();
+    seedWorld(db, 193);
+    rejectWorld(db, "world:193");
+    // `resolveWorld` filtre `status = active` — un monde rejected n'est PAS ce statut, donc jamais
+    // servi (même garde préexistante que pour `buffered`, aucune branche neuve à ce module).
+    const w = db.select({ status: worlds.status }).from(worlds).where(eq(worlds.index, 193)).get();
+    expect(w?.status).not.toBe("active");
   });
 });
 

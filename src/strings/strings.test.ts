@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fr } from "./fr";
 import { LOCALE, strings } from "./index";
 import { AVATARS } from "@/config/avatars";
+import { pluralize } from "@/app/parent/(espace)/dashboard-format";
 
 describe("strings (i18n FR)", () => {
   it("expose la locale FR", () => {
@@ -288,6 +289,54 @@ describe("strings (i18n FR)", () => {
       "THEME_INVALID",
       "UNAUTHORIZED",
     ]);
+  });
+
+  it("mondes à valider (7.9) = registre NEUTRE/vouvoiement + gabarits {n}/{thème} + clés d'erreur", () => {
+    const wa = strings.parent.worldApproval;
+    // Lien depuis le tableau de bord (câblage vers /parent/mondes) — toujours affiché (#231).
+    expect(strings.parent.dashboard.worldApprovalLink.length).toBeGreaterThan(0);
+    // Repère de compte : patron singulier/pluriel EXISTANT (jamais un gabarit unique figé au
+    // pluriel — bug source #239 « 1 mondes »).
+    expect(strings.parent.dashboard.worldApprovalCount).toContain("{n}");
+    expect(strings.parent.dashboard.worldApprovalCountPlural).toContain("{n}");
+    expect(
+      pluralize(
+        0,
+        strings.parent.dashboard.worldApprovalCount,
+        strings.parent.dashboard.worldApprovalCountPlural,
+      ),
+    ).toBe(strings.parent.dashboard.worldApprovalCount);
+    expect(
+      pluralize(
+        1,
+        strings.parent.dashboard.worldApprovalCount,
+        strings.parent.dashboard.worldApprovalCountPlural,
+      ),
+    ).toBe(strings.parent.dashboard.worldApprovalCount);
+    expect(
+      pluralize(
+        2,
+        strings.parent.dashboard.worldApprovalCount,
+        strings.parent.dashboard.worldApprovalCountPlural,
+      ),
+    ).toBe(strings.parent.dashboard.worldApprovalCountPlural);
+    // Gabarits interpolables.
+    expect(wa.worldLabel).toContain("{n}");
+    expect(wa.worldLabel).toContain("{thème}");
+    expect(wa.worldNumber).toContain("{n}");
+    expect(wa.reject.confirmBody).toContain("{thème}");
+    // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant.
+    const worldApprovalText =
+      `${wa.intro} ${wa.reject.confirmBody} ${wa.errors.UNAUTHORIZED}`.toLowerCase();
+    expect(worldApprovalText).not.toMatch(/\btu\b/);
+    expect(worldApprovalText).not.toMatch(/\bte\b/);
+    expect(worldApprovalText).not.toMatch(/\bton\b/);
+    expect(worldApprovalText).not.toMatch(/\bta\b/);
+    // Rejet = action négative verbalisée « définitivement » (confirmation claire, sans jargon RGPD
+    // — un monde n'est pas une donnée enfant, contrairement à la suppression de profil 7.5).
+    expect(wa.reject.confirmBody.toLowerCase()).toContain("définitivement");
+    // Clés d'erreur = contrat UI↔serveur (`WorldApprovalActionResult`).
+    expect(Object.keys(wa.errors).sort()).toEqual(["GENERIC", "MODERATION_FAILED", "UNAUTHORIZED"]);
   });
 
   it("erreurs de récupération = clés RecoveryErrorCode + GENERIC (contrat UI↔serveur)", () => {
