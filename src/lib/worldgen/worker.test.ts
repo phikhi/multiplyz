@@ -1056,10 +1056,10 @@ describe("approveWorld — transition buffered→active + approvedBy parent (mé
 // ───────────────────────────── rejectWorld (rejet parent, story 7.9, ADR 0015) ─────────────────────────────
 
 describe("rejectWorld — transition buffered→rejected (mécanisme, épic #7 = UI)", () => {
-  it("rejette un monde buffered ⇒ status rejected, approvedBy reste NULL (aucune identité stockée, ADR 0015)", () => {
+  it("rejette un monde buffered QA-validé ⇒ status rejected, approvedBy reste NULL (aucune identité stockée, ADR 0015)", () => {
     const db = freshDb();
     seedWorld(db, 190);
-    seedDoneJob(db, 190); // QA passée (comme tout monde buffered) — pas requis par la garde, mais réaliste.
+    seedDoneJob(db, 190); // QA passée — REQUIS par la garde `worldPassedQa` (rétro Backend PR #247).
     rejectWorld(db, "world:190");
     const w = db.select().from(worlds).where(eq(worlds.index, 190)).get();
     expect(w?.status).toBe("rejected");
@@ -1084,18 +1084,76 @@ describe("rejectWorld — transition buffered→rejected (mécanisme, épic #7 =
   it("MUTATION-PROUVÉ : refuse un second rejet (pas d'idempotence silencieuse, même comportement qu'approveWorld)", () => {
     const db = freshDb();
     seedWorld(db, 192);
+    seedDoneJob(db, 192);
     rejectWorld(db, "world:192"); // 1er rejet ⇒ rejected
     expect(() => rejectWorld(db, "world:192")).toThrow(WorldModerationError); // déjà rejected
+  });
+
+  it("MUTATION-PROUVÉ : refuse de rejeter un monde buffered PAS ENCORE QA-validé — status=buffered SEUL ne suffit pas (rétro Backend PR #247)", () => {
+    const db = freshDb();
+    // `generateWorld` (6.3) écrit `status='buffered'` À LA GÉNÉRATION, AVANT que la QA ne soit
+    // évaluée (cf. JSDoc `processNextJob`) — aucun job `done` n'existe encore pour cet index.
+    seedWorld(db, 195); // buffered, AUCUN job done
+    expect(worldPassedQa(db, 195)).toBe(false); // confirme le pré-requis du scénario
+    // Retirer la garde `worldPassedQa` de rejectWorld laisserait ce monde mi-QA rejetable par le
+    // parent → test rouge (le monde deviendrait 'rejected' au lieu de lever).
+    expect(() => rejectWorld(db, "world:195")).toThrow(WorldModerationError);
+    expect(db.select().from(worlds).where(eq(worlds.index, 195)).get()?.status).toBe("buffered");
   });
 
   it("un monde rejected retombe sur le fallback socle (resolveWorld INCHANGÉ, ADR 0015) — filtre status=active déjà couvert", () => {
     const db = freshDb();
     seedWorld(db, 193);
+    seedDoneJob(db, 193);
     rejectWorld(db, "world:193");
     // `resolveWorld` filtre `status = active` — un monde rejected n'est PAS ce statut, donc jamais
     // servi (même garde préexistante que pour `buffered`, aucune branche neuve à ce module).
     const w = db.select({ status: worlds.status }).from(worlds).where(eq(worlds.index, 193)).get();
     expect(w?.status).not.toBe("active");
+  });
+
+  it("MUTATION-PROUVÉ (rétro Backend PR #247) : la finalisation d'un job QUI RÉUSSIT APRÈS COUP n'écrase PAS un monde déjà REJETÉ par le parent", async () => {
+    const db = freshDb();
+    const jobId = enqueueJob(db, 196);
+    const generate = vi.fn(async (): Promise<GeneratedWorld> => {
+      db.insert(worlds)
+        .values({
+          id: "world:196",
+          index: 196,
+          theme: "t",
+          palette: "{}",
+          assetRefs: "{}",
+          prompt: "p",
+          seed: "s",
+          status: "buffered",
+          createdAt: NOW,
+        })
+        .run();
+      // Simule la COURSE réelle (rétro Backend PR #247) : le parent rejette ce monde PENDANT que
+      // ce job traite encore sa QA (fenêtre pré-QA/mi-QA, `worlds.status='buffered'` posé par
+      // `generateWorld` AVANT l'évaluation QA de `processNextJob`).
+      db.update(worlds).set({ status: "rejected" }).where(eq(worlds.index, 196)).run();
+      return {
+        worldId: "world:196",
+        worldIndex: 196,
+        themeSlug: "ocean",
+        themeLabel: "Océan",
+        palette: "{}",
+        assetRefs: { background: "b", tiles: "t", teddy: "td" },
+        creatures: [],
+        seed: "s",
+        status: "buffered",
+        cost: { paidImageCalls: 11, estimatedEur: 0.4, monthlyBudgetEur: 20 },
+      };
+    });
+    const out = await processNextJob(db, baseDeps({ generate }));
+    // La QA réussit quand même (passInspector) → le job se ferme 'done' normalement.
+    expect(out).toEqual({ outcome: "done", jobId, worldIndex: 196 });
+    expect(db.select().from(jobs).where(eq(jobs.id, jobId)).get()?.status).toBe("done");
+    // MAIS le monde reste 'rejected' — retirer la garde `and(status='buffered')` de la finalisation
+    // (worker.ts, transaction de `processNextJob`) ferait rougir cet assert (le monde redeviendrait
+    // 'active', écrasant silencieusement la décision du parent).
+    expect(db.select().from(worlds).where(eq(worlds.index, 196)).get()?.status).toBe("rejected");
   });
 });
 

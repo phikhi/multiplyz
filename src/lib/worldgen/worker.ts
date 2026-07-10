@@ -419,12 +419,27 @@ export type ProcessResult =
  *
  * **Transaction multi-écritures** (#122/#124) : la génération (async) tourne **hors** transaction
  * (better-sqlite3 n'accepte pas d'`await` dans `db.transaction`) ; le générateur persiste déjà le
- * monde `worlds`/`characters` (6.3). La transaction du worker enveloppe les **≥2 écritures** de
- * **finalisation** (uniquement quand la QA a réussi) : (1) mise à jour du **statut de modération**
- * du monde (`active` auto OU `buffered` en attente d'approbation parent, selon le toggle ⚙️) puis
- * (2) mise à jour du job en `status = done`. Si la 2ᵉ (job `done`) échoue **après** la 1ʳᵉ, tout
- * rollback → pas d'état partiel « monde livré mais job jamais fermé ». Mutation-prouvé (test dédié).
- * Un **job `done`** ne survient donc **que** sur QA réussie ⇒ preuve de QA-validation (cf. `approveWorld`).
+ * monde `worlds`/`characters` (6.3) — **avec `status = buffered`** (défaut colonne), **AVANT** que
+ * cette fonction n'évalue la QA. Ce monde `buffered` pré-QA est donc **visible en base** (WAL) le
+ * temps de l'inspection/régénération, éventuellement sur plusieurs tentatives (`pending`↔`running`).
+ * La transaction du worker enveloppe les **≥2 écritures** de **finalisation** (uniquement quand la
+ * QA a réussi) : (1) mise à jour du **statut de modération** du monde (`active` auto OU `buffered`
+ * en attente d'approbation parent, selon le toggle ⚙️) puis (2) mise à jour du job en `status =
+ * done`. Si la 2ᵉ (job `done`) échoue **après** la 1ʳᵉ, tout rollback → pas d'état partiel « monde
+ * livré mais job jamais fermé ». Mutation-prouvé (test dédié). Un **job `done`** ne survient donc
+ * **que** sur QA réussie ⇒ preuve de QA-validation (cf. `approveWorld`).
+ *
+ * **Garde `status = buffered` sur l'écriture (1) — anti-écrasement d'un rejet parent** (story 7.9,
+ * rétro Backend PR #247) : un monde `buffered` **pré-QA ou mi-QA** (job pas encore `done`, cf.
+ * ci-dessus) peut, dans cette fenêtre, être exposé côté parent SI la garde de lecture
+ * (`world-approval.ts`) ou la garde directe (`rejectWorld`) sont contournées — le parent pourrait
+ * alors le **rejeter** (`status = rejected`) AVANT que ce même job ne finisse par réussir sa QA sur
+ * un retry ultérieur. Sans condition de statut sur l'UPDATE (1), cette finalisation **écraserait
+ * silencieusement** `rejected` → `active`/`buffered`, annulant la décision du parent sans erreur ni
+ * log. La garde `and(eq(index, worldIndex), eq(status, "buffered"))` rend l'UPDATE **sans effet**
+ * (0 ligne) si le monde n'est plus `buffered` (déjà `rejected`, ou déjà `active` par une exécution
+ * concurrente) — `rejected` reste **définitivement** `rejected` (ADR 0015, garantie terminale
+ * réalisée ICI, pas par un invariant supposé sur `rejectWorld`). Mutation-prouvé (test dédié).
  *
  * **Marquage `running` séparé** (avant l'await) : un job pris est immédiatement `running` (visible
  * par la reprise après crash) — cette écriture est **distincte** de la transaction de finalisation.
@@ -552,8 +567,15 @@ export async function processNextJob(
   const parentValidationEnabled = readHouseholdSettings(db).parentWorldValidation;
   const targetStatus = moderatedStatusAfterQaPass(parentValidationEnabled);
   db.transaction((tx) => {
-    // 1ʳᵉ écriture : statut de modération du monde QA-validé (WORLDGEN §6).
-    tx.update(worlds).set({ status: targetStatus }).where(eq(worlds.index, worldIndex)).run();
+    // 1ʳᵉ écriture : statut de modération du monde QA-validé (WORLDGEN §6). Gardée sur
+    // `status = buffered` (rétro Backend PR #247, story 7.9) : si le parent a déjà REJETÉ ce monde
+    // dans la fenêtre pré-QA/mi-QA (`rejected`), cette écriture devient un no-op (0 ligne) — jamais
+    // un écrasement silencieux de la décision parent. Sans effet sur le chemin normal (le monde est
+    // TOUJOURS `buffered` à ce point quand aucun rejet n'a eu lieu).
+    tx.update(worlds)
+      .set({ status: targetStatus })
+      .where(and(eq(worlds.index, worldIndex), eq(worlds.status, "buffered")))
+      .run();
     // 2ᵉ écriture (gardée) : fermer le job. Si elle échoue APRÈS la 1ʳᵉ → rollback complet.
     tx.update(jobs).set({ status: "done", updatedAt: now }).where(eq(jobs.id, job.id)).run();
   });
@@ -710,14 +732,20 @@ export function approveWorld(db: AppDatabase, worldId: string, approvedBy: strin
  * - **Aucune identité stockée** (pas de `rejectedBy` — ADR 0015, contrairement à `approvedBy` :
  *   aucune colonne/migration ajoutée pour cette story, symétrique de `deleteProfile` qui ne trace
  *   pas non plus l'agent de suppression).
- * - **Pas de garde `worldPassedQa`** : contrairement à `approveWorld`, un monde `buffered` a
- *   **toujours déjà passé la QA** (invariant posé par `processNextJob` — un job n'atteint `done`
- *   qu'après QA réussie) → reposer cette garde serait une branche **redondante non-testable**
- *   (CLAUDE.md « correct ≠ testable ≠ nécessaire », rétro #143), donc volontairement absente ici.
  *
- * Garde (mutation-prouvée) : le monde **existe** et est **`buffered`** — sinon `WorldModerationError`
- * (monde inconnu, déjà `active`, ou déjà `rejected`). Pas d'idempotence silencieuse sur un second
- * rejet (même comportement qu'`approveWorld` sur une 2ᵉ approbation).
+ * Gardes (mutation-prouvées) :
+ * - le monde **existe** et est **`buffered`** — sinon `WorldModerationError` (monde inconnu, déjà
+ *   `active`, ou déjà `rejected`). Pas d'idempotence silencieuse sur un second rejet (même
+ *   comportement qu'`approveWorld` sur une 2ᵉ approbation).
+ * - le monde a **passé la QA** (`worldPassedQa`) — **CORRIGÉ** (rétro Backend PR #247) : contrairement
+ *   à l'affirmation initiale de cette story, un monde `status = buffered` n'a **PAS toujours** déjà
+ *   passé la QA — `generateWorld` (6.3) écrit `status = buffered` **à la génération**, AVANT que
+ *   `processNextJob` n'évalue la QA (fenêtre pré-QA/mi-QA, cf. JSDoc `processNextJob`). Sans cette
+ *   garde, un parent pourrait rejeter un monde encore en cours de vérification. Défense en
+ *   profondeur du chemin d'appel **direct** (symétrique d'`approveWorld`) — la garde primaire contre
+ *   l'EXPOSITION de ces mondes au parent vit dans `world-approval.ts` (`listPendingWorlds`/
+ *   `countPendingWorlds` ne filtrent QUE les mondes QA-passés) ; celle-ci empêche en plus toute
+ *   régression future d'appeler `rejectWorld` directement sur un index mi-QA.
  *
  * **Écriture unique** → aucun état partiel à annuler ⇒ pas de transaction (rétro #124).
  *
@@ -725,12 +753,15 @@ export function approveWorld(db: AppDatabase, worldId: string, approvedBy: strin
  * automatiquement sur le socle de secours (comme tout monde non-`active`) et son `world_index`
  * n'est **jamais régénéré** (comportement identique à un monde resté `buffered` indéfiniment —
  * pas une régression introduite ici). Ses assets ne sont **pas** purgés par
- * `purgeFailedWorldAssets` (celle-ci ne cible que les jobs `failed` sans reprise/succès ; un monde
- * `rejected` a par construction un job `done` → exclu par `hasNonFailedJobForWorld`, intentionnel).
+ * `purgeFailedWorldAssets` : celle-ci ne cible que les jobs `failed` sans reprise/succès, et la
+ * garde `worldPassedQa` **ci-dessus** garantit désormais qu'un monde `rejected` a **toujours** un
+ * job `done` pour son index (jamais `failed` sans `done`) → **exclu** par `hasNonFailedJobForWorld`.
+ * Cette garantie est **réalisée par la garde**, pas un invariant préexistant de `processNextJob`
+ * (celui-ci pose seulement `buffered` à la génération, bien avant `done`).
  */
 export function rejectWorld(db: AppDatabase, worldId: string): void {
   const world = db
-    .select({ status: worlds.status })
+    .select({ index: worlds.index, status: worlds.status })
     .from(worlds)
     .where(eq(worlds.id, worldId))
     .get();
@@ -740,6 +771,12 @@ export function rejectWorld(db: AppDatabase, worldId: string): void {
   if (world.status !== "buffered") {
     throw new WorldModerationError(
       `rejet refusé : monde "${worldId}" pas en attente d'approbation (statut ${world.status}).`,
+    );
+  }
+  if (!worldPassedQa(db, world.index)) {
+    throw new WorldModerationError(
+      `rejet refusé : monde "${worldId}" pas encore QA-validé — un parent ne peut pas rejeter un ` +
+        `monde en cours de vérification (WORLDGEN §6).`,
     );
   }
   db.update(worlds).set({ status: "rejected" }).where(eq(worlds.id, worldId)).run();
@@ -814,11 +851,13 @@ function hasNonFailedJobForWorld(db: AppDatabase, worldIndex: number): boolean {
  * définitivement** laisse donc des **fichiers servables orphelins** sur disque : c'est ce que cette
  * purge supprime.
  *
- * **« Monde failed » sans statut `failed`** (le contrat `worlds.status` ne connaît que `buffered` /
- * `active`, aucun changement de data model ici) : un monde est **définitivement rejeté** ⟺ il a un job
- * `generate_world` **`failed`** (générateur épuisé après `maxRetries`, OU QA épuisée après
- * `qa.maxAttempts`) **et aucun** job non-`failed` pour le même index (pas de retry en file, jamais
- * réussi).
+ * **« Monde failed » sans statut `failed`** — terminologie **distincte** du statut parent `rejected`
+ * (story 7.9, ADR 0015) : `worlds.status` connaît `buffered` / `active` / `rejected` (rejet **parent**
+ * explicite, sur un monde QA-validé), mais AUCUN de ces trois n'encode le rejet **QA/générateur**
+ * ciblé ici (échec technique, jamais montré au parent). Un monde est **définitivement rejeté** au
+ * sens de CETTE purge ⟺ il a un job `generate_world` **`failed`** (générateur épuisé après
+ * `maxRetries`, OU QA épuisée après `qa.maxAttempts`) **et aucun** job non-`failed` pour le même
+ * index (pas de retry en file, jamais réussi) — indépendamment de `worlds.status`.
  *
  * **Scope vs GARDE (honnêteté #143)** : le filtre `status = 'failed'` de la 1ʳᵉ requête est le **SCOPE**
  * (l'ensemble candidat = « les mondes qui ont échoué » ; efficacité : ne scanne que ces lignes) —

@@ -1,8 +1,9 @@
-import { asc, count, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
 import { worlds } from "@/lib/db/schema";
 import { buildWorldTheme, type WorldTheme } from "@/lib/game/world-theme";
 import { PaletteError } from "@/lib/worldgen/palette";
+import { worldPassedQa } from "@/lib/worldgen/worker";
 
 /**
  * **Projection de lecture parent** des mondes en attente d'approbation (story 7.9, WORLDGEN §6).
@@ -12,9 +13,18 @@ import { PaletteError } from "@/lib/worldgen/palette";
  * `rejectWorld`) vivent dans `lib/worldgen/worker.ts` (épic #6, mécanisme de modération) — ce
  * module ne fait QUE la lecture de projection, même séparation que `lib/parent/profiles.ts`
  * (gestion) vs les tables du jeu.
+ *
+ * **CORRIGÉ (rétro Backend PR #247)** : `status = buffered` **SEUL** ne suffit PAS à identifier un
+ * monde « en attente d'approbation » — `generateWorld` (6.3) écrit `status = buffered` **à la
+ * génération**, AVANT que `processNextJob` (worker.ts) n'évalue la QA (fenêtre pré-QA/mi-QA, cf.
+ * JSDoc `processNextJob`). Sans filtre supplémentaire, un parent pourrait voir (et rejeter/approuver)
+ * un monde encore en cours de vérification. Le filtre correct est `status = buffered` **ET**
+ * `worldPassedQa` (job `generate_world` `done` pour cet index) — même garde que celle qu'`approveWorld`
+ * pose déjà côté écriture, appliquée ICI côté lecture pour ne **jamais exposer** un monde mi-QA au
+ * parent (défense en profondeur, en plus de la garde directe posée dans `rejectWorld`).
  */
 
-/** Un monde `buffered` prêt à être approuvé/rejeté, avec son thème per-monde pour l'aperçu. */
+/** Un monde `buffered` ET QA-validé, prêt à être approuvé/rejeté, avec son thème per-monde. */
 export interface PendingWorld {
   /** Clé stable (`world:<index>`) — cible des actions `approveWorld`/`rejectWorld`. */
   readonly id: string;
@@ -25,17 +35,23 @@ export interface PendingWorld {
   readonly theme: WorldTheme;
 }
 
+/** Colonnes brutes d'un candidat `buffered`, avant filtre QA + construction du thème. */
+interface PendingRow {
+  readonly id: string;
+  readonly index: number;
+  readonly theme: string;
+  readonly palette: string;
+  readonly assetRefs: string;
+}
+
 /**
- * Liste les mondes **en attente d'approbation** (`status = buffered`), triés par `world_index`
- * croissant (ordre de carte, déterministe). Un monde dont la palette/les refs d'assets seraient
- * **corrompues** (`PaletteError`, ne devrait jamais arriver — écrites uniquement par le
- * générateur, WORLDGEN §7 write-then-gate) est **silencieusement exclu** plutôt que de faire
- * planter tout l'écran : un seul monde malformé ne doit jamais bloquer l'approbation des autres
- * (même doctrine de tolérance que `readAssetRef`, `world-theme.ts` — un défaut de forme ne casse
- * jamais tout le rendu).
+ * Lignes `buffered` **QA-validées** (job `done`, `worldPassedQa`), triées par `world_index`
+ * croissant (ordre de carte, déterministe) — source de vérité **unique** partagée par
+ * `listPendingWorlds`/`countPendingWorlds` (un seul filtre à maintenir, jamais deux définitions de
+ * « en attente » qui pourraient diverger).
  */
-export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
-  const rows = db
+function qaPassedBufferedRows(db: AppDatabase): PendingRow[] {
+  return db
     .select({
       id: worlds.id,
       index: worlds.index,
@@ -46,10 +62,21 @@ export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
     .from(worlds)
     .where(eq(worlds.status, "buffered"))
     .orderBy(asc(worlds.index))
-    .all();
+    .all()
+    .filter((row) => worldPassedQa(db, row.index));
+}
 
+/**
+ * Liste les mondes **en attente d'approbation** (`status = buffered` ET QA-validé, cf. JSDoc
+ * module). Un monde dont la palette/les refs d'assets seraient **corrompues** (`PaletteError`, ne
+ * devrait jamais arriver — écrites uniquement par le générateur, WORLDGEN §7 write-then-gate) est
+ * **silencieusement exclu** plutôt que de faire planter tout l'écran : un seul monde malformé ne
+ * doit jamais bloquer l'approbation des autres (même doctrine de tolérance que `readAssetRef`,
+ * `world-theme.ts` — un défaut de forme ne casse jamais tout le rendu).
+ */
+export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
   const pending: PendingWorld[] = [];
-  for (const row of rows) {
+  for (const row of qaPassedBufferedRows(db)) {
     try {
       pending.push({
         id: row.id,
@@ -70,14 +97,11 @@ export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
 }
 
 /**
- * Compte les mondes **en attente d'approbation** (`status = buffered`) — consommé par le tableau
- * de bord parent (lien « Mondes à valider » avec repère de compte, discoverabilité de l'impasse
- * #231). Requête d'agrégat dédiée (pas `listPendingWorlds(db).length`) : évite de désérialiser
- * palette/assetRefs de chaque ligne juste pour un compte, sur l'écran consulté le plus souvent.
+ * Compte les mondes **en attente d'approbation** (même filtre QA-passé que `listPendingWorlds`,
+ * **même source** `qaPassedBufferedRows` — jamais deux définitions divergentes de « en attente »).
+ * Consommé par le tableau de bord parent (lien « Mondes à valider » avec repère de compte,
+ * découvrabilité de l'impasse #231).
  */
 export function countPendingWorlds(db: AppDatabase): number {
-  // `count()` sur un agrégat renvoie TOUJOURS une ligne (jamais NULL, jamais zéro-ligne) → pas de
-  // repli `?? 0` défensif (branche inatteignable = non testable, rétro #143 — même patron que
-  // `currentMonthSpendEur`, worker.ts).
-  return db.select({ n: count() }).from(worlds).where(eq(worlds.status, "buffered")).get()!.n;
+  return qaPassedBufferedRows(db).length;
 }

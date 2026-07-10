@@ -39,10 +39,38 @@ rejectWorld(db, worldId): void
   enregistre `approvedBy` (donnée déjà exposée ailleurs, WORLDGEN §6). Minimal in-contract : aucun
   changement de colonne, aucune migration. Symétrique de `deleteProfile` (7.5), qui ne trace pas non
   plus l'identité de l'agent de suppression.
-- **Pas de garde `worldPassedQa`** (contrairement à `approveWorld`) : un monde `buffered` a
-  **toujours** déjà passé la QA (invariant posé par `processNextJob`, cf. JSDoc worker.ts) — reposer
-  cette garde serait une branche **redondante non-testable** (CLAUDE.md « correct ≠ testable ≠
-  nécessaire », rétro #143).
+
+### Correction post-review (Backend, PR #247) — garantie terminale RÉELLE, pas un invariant supposé
+
+La version initiale de cet ADR affirmait qu'un monde `status = buffered` avait **toujours** déjà
+passé la QA (« un job n'atteint `done` qu'après QA réussie ») et omettait donc la garde
+`worldPassedQa` sur `rejectWorld`, la jugeant redondante (#143). **Cette affirmation était fausse** :
+`generateWorld` (6.3) écrit `status = buffered` **À LA GÉNÉRATION**, dans sa propre transaction
+committée, **AVANT** que `processNextJob` n'évalue la QA — un monde `buffered` peut donc être
+**pré-QA ou mi-QA** (job encore `pending`/`running`, aucun job `done` pour son index). Sans garde,
+un parent pouvait :
+
+1. voir un monde `buffered` pré-QA/mi-QA dans l'écran d'approbation (le filtre `status = buffered`
+   seul ne suffit pas à l'exclure) ;
+2. le **rejeter** (`rejectWorld` acceptait n'importe quel `buffered`) ;
+3. voir ce rejet **silencieusement écrasé** quand le même job finissait par réussir sa QA sur un
+   retry ultérieur — la finalisation de `processNextJob` (`tx.update(worlds).set({status:
+   targetStatus}).where(eq(worlds.index, worldIndex))`) n'avait **aucune condition de statut**, donc
+   réécrivait `rejected` → `active`/`buffered` sans erreur ni log.
+
+**Fix — trois couches, chacune mutation-prouvée** :
+
+1. **Finalisation gardée** (`worker.ts`, transaction de `processNextJob`) : l'`UPDATE worlds` de
+   finalisation est désormais conditionné sur `and(eq(index, worldIndex), eq(status, "buffered"))`
+   — si le monde n'est plus `buffered` (déjà `rejected` par le parent), l'écriture devient un no-op
+   (0 ligne). **C'est CETTE garde qui réalise la garantie terminale `rejected`**, pas un invariant
+   sur `rejectWorld`.
+2. **Lecture filtrée** (`world-approval.ts`, `listPendingWorlds`/`countPendingWorlds`) : ne montre
+   au parent QUE les mondes `buffered` **ET** QA-validés (`worldPassedQa`) — un monde pré-QA/mi-QA
+   n'est **jamais exposé**, donc jamais rejetable/approuvable depuis l'écran.
+3. **Garde directe sur `rejectWorld`** (défense en profondeur, symétrique d'`approveWorld`) :
+   `worldPassedQa(db, world.index)` requis, sinon `WorldModerationError` — protège le chemin d'appel
+   direct même si la couche 2 était un jour contournée/régressée.
 
 **Aucun changement à `resolveWorld`** (`src/lib/worldgen/socle.ts`) : le résolveur filtre déjà
 strictement `status = active` — un monde `rejected` tombe automatiquement dans le même repli socle
@@ -98,3 +126,9 @@ supplémentaire, pas de filtre `NOT IN (...)` à maintenir).
 - **Suite** : si un besoin de « réactiver un monde rejeté » ou de « régénérer l'index libéré »
   émerge au playtest, il fera l'objet d'un futur ADR (touche potentiellement le budget/`ensureBuffer`,
   décision verrouillée).
+- **Correction (PR #247)** : la garantie « `rejected` est terminal » est réalisée par la **garde de
+  statut sur la finalisation** de `processNextJob` (fix 1 ci-dessus), pas par un invariant supposé
+  sur `worldPassedQa`/`rejectWorld` — sans cette garde de finalisation, un job réussissant sa QA
+  **après** un rejet parent aurait pu écraser silencieusement la décision. Les trois couches
+  (finalisation gardée + lecture filtrée + garde directe) sont **chacune** mutation-prouvée
+  (`worker.test.ts`/`world-approval.test.ts`).
