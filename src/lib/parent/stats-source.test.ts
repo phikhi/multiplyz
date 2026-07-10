@@ -114,9 +114,13 @@ describe("loadParentStats", () => {
     expect(stats.regularity.today).not.toBeNull();
   });
 
-  it("régularité : jours joués + série dérivés du journal (câblage config.regularity → 7.4)", () => {
+  it("régularité : jours joués + série dérivés du journal (records threadés + engagement re-essai)", () => {
     // 3 jours consécutifs joués (aujourd'hui, hier, avant-hier), en heure de Paris. Un re-essai
     // seul le 3ᵉ jour → il compte quand même comme jour joué (engagement, ≠ justesse/rapidité).
+    // Épingle le threading `attempts → computeRegularityStats` (muter records→[] rougit ce test).
+    // NB (#224) : ces assertions sont INVARIANTES à `dayTimeZone`/`streakBreakGapDays`/`now` (jours
+    // bien espacés en milieu de journée) → le threading de `config.regularity` et de `now` au bridge
+    // est épinglé par les deux tests « bridge : … » ci-dessous, PAS par celui-ci.
     seedAttempt(profileId, MULT_6X8, { createdAt: NOW });
     seedAttempt(profileId, MULT_2X3, { createdAt: NOW - 1 * DAY });
     seedAttempt(profileId, MULT_2X3, { createdAt: NOW - 2 * DAY, isRetry: true });
@@ -126,6 +130,34 @@ describe("loadParentStats", () => {
     expect(regularity.currentStreakDays).toBe(3);
     expect(regularity.recordStreakDays).toBe(3);
     expect(regularity.days.map((d) => d.dayOrdinal)).toHaveLength(3);
+  });
+
+  it("bridge : le FUSEAU threadé via config.regularity AGIT (Paris vs UTC → daysPlayed diffère)", () => {
+    // A = 23:30 UTC 20/07 → 01:30 Europe/Paris 21/07 (jour civil suivant) ; B = 21:00 UTC 20/07 →
+    // 23:00 Paris 20/07 (même jour). Deux jours civils DISTINCTS en Paris, un SEUL en UTC.
+    seedAttempt(profileId, MULT_6X8, { createdAt: Date.UTC(2026, 6, 20, 23, 30) });
+    seedAttempt(profileId, MULT_2X3, { createdAt: Date.UTC(2026, 6, 20, 21, 0) });
+
+    // Défaut (Europe/Paris) threadé via loadParentStats → 2 jours.
+    expect(loadParentStats(db, profileId, CONFIG, NOW).regularity.daysPlayed).toBe(2);
+    // `dayTimeZone:"UTC"` threadé via loadParentStats (le VRAI chemin bridge, pas
+    // `computeRegularityStats` direct) → même jour civil → 1 jour. Rougit si le bridge fige
+    // `config.regularity` (le défaut Paris resterait 2) — épingle le threading du ⚙️ au call-site.
+    const utcConfig: StatsConfig = {
+      ...CONFIG,
+      regularity: { ...CONFIG.regularity, dayTimeZone: "UTC" },
+    };
+    expect(loadParentStats(db, profileId, utcConfig, NOW).regularity.daysPlayed).toBe(1);
+  });
+
+  it("bridge : `now` threadé AGIT sur la série courante (dernier jour trop vieux → 0)", () => {
+    // Une seule réponse il y a 2 jours (= l'écart de rupture) → série MORTE relativement à NOW.
+    seedAttempt(profileId, MULT_6X8, { createdAt: NOW - 2 * DAY });
+
+    // Série courante = 0 : `todayOrdinal − dernier >= streakBreakGapDays` (2 >= 2). Rougit si le
+    // bridge fige `now` (ex. 0 = 1970 → dernier jour dans un futur lointain → série redevient
+    // vivante = 1) — épingle le threading de `now` au call-site loadParentStats.
+    expect(loadParentStats(db, profileId, CONFIG, NOW).regularity.currentStreakDays).toBe(0);
   });
 
   it("isole le profil demandé (n'agrège pas les réponses d'un autre profil)", () => {
