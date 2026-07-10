@@ -461,14 +461,139 @@ export const fr = {
     /** Retour au sélecteur de profil (annule la saisie du code parent). */
     back: "Retour",
     /**
-     * **Stub** du tableau de bord (story 7.1 — le vrai dashboard justesse/compétences/temps
-     * arrive en story 7.7, WIREFRAMES §7). Bandeau + placeholder + sortie, registre neutre.
+     * **Tableau de bord** de l'espace parent (story 7.7, WIREFRAMES §7, PLAN §Espace parent).
+     * Assemble les agrégats read-only de 7.2 (`stats.ts` : justesse/rapidité/maîtrise/à-revoir)
+     * et 7.4 (`regularity.ts` : jours joués/temps/série/respect) + la progression (monde/niveau/
+     * créatures, 7.7). Registre **neutre/vouvoiement** (COPY §5, pas Teddy), zéro texte en dur.
      */
     dashboard: {
-      /** Bandeau de l'espace parent (WIREFRAMES §7 en-tête). */
+      /** Bandeau de l'espace parent (WIREFRAMES §7 en-tête, h1 — inchangé depuis 7.1). */
       title: "Espace parent",
-      /** Placeholder neutre — le tableau de bord des progrès arrive en story 7.7. */
-      placeholder: "Le tableau de bord des progrès arrive bientôt.",
+      /** Sous-titre nominatif (gabarit prénom) — écho littéral de COPY §5 « Progression de {prénom} ». */
+      subtitle: "Progression de {prénom}",
+      /** Bandeau du jour (minutes + niveaux touchés aujourd'hui) + série. Gabarits SINGULIER/
+       * PLURIEL séparés (français : 0 ET 1 → singulier, ≥2 → pluriel — même règle que
+       * `collection.count`/`countPlural`, `CollectionScreen.tsx`) : sélection au call-site via
+       * `pluralize()` (`dashboard-format.ts`), jamais un gabarit unique figé au pluriel. */
+      today: {
+        /** Résumé du jour, niveau au SINGULIER (0 ou 1 niveau, WIREFRAMES §7 « Aujourd'hui : 18 min · 3 niveaux »). */
+        summary: "Aujourd'hui : {min} min · {n} niveau",
+        /** Résumé du jour, niveaux au PLURIEL (≥2). */
+        summaryPlural: "Aujourd'hui : {min} min · {n} niveaux",
+        /** Repli minutes seules (progression indisponible, `SocleUnavailableError` — jamais
+         * affirmer un compte de niveaux qu'on n'a pas pu calculer). */
+        minutesOnly: "Aujourd'hui : {min} min",
+        /** Repli quand l'enfant n'a pas encore joué aujourd'hui (no-fail, jamais un 0 min sec). */
+        notPlayed: "Pas encore joué aujourd'hui.",
+        /** Série de jours consécutifs, SINGULIER (0 ou 1 jour, WIREFRAMES §7 « Série : 🔥 5 jours »). */
+        streak: "Série : {n} jour",
+        /** Série de jours consécutifs, PLURIEL (≥2). */
+        streakPlural: "Série : {n} jours",
+        /** Repli quand aucune série n'est en cours (currentStreakDays = 0, no-fail). */
+        noStreak: "Pas de série en cours.",
+      },
+      /** Justesse (semaine) + tendance + détail par compétence (WIREFRAMES §7). */
+      accuracy: {
+        heading: "Justesse (semaine)",
+        /** Repli neutre quand aucune 1ʳᵉ réponse n'est comptée cette fenêtre (no-fail). */
+        empty: "Pas encore de données cette semaine.",
+        /** Valeur affichée (gabarit pourcentage entier, aussi réutilisé par les barres par compétence). */
+        value: "{pct} %",
+        /** Delta signé (gabarit `{delta}` déjà signé, ex. « +5 »), affiché seulement si non-`null`. */
+        delta: "{delta} % vs la semaine précédente",
+        /** Tendance + delta composés en UNE phrase (mot + parenthèse), jamais de ponctuation
+         * assemblée en dur dans le composant. */
+        trendWithDelta: "{trend} ({delta})",
+        /** Légende du détail par compétence (barres). */
+        bySkillHeading: "Par compétence",
+        /** Nom accessible d'UNE barre de compétence (`role="img"`, gabarits skill+valeur — même
+         * patron que les étayages `role="img"` à nom accessible complet, ex. `TenFrame`). */
+        skillBarLabel: "{skill} : {value}",
+        /** Mots de tendance — orientés SUR LE POURCENTAGE (intuitif : monte = progression). */
+        trend: {
+          improving: "en progression",
+          regressing: "en baisse",
+          stable: "stable",
+        },
+      },
+      /** Libellés des 4 compétences (WIREFRAMES §7, ordre canonique `SKILLS`). */
+      skills: {
+        comp10: "Compléments",
+        add: "Addition",
+        sub: "Soustraction",
+        mult: "Multiplication",
+      },
+      /** Rapidité moyenne + tendance (WIREFRAMES §7 « Rapidité moyenne : 3,2 s ▼ (mieux) »). */
+      speed: {
+        heading: "Rapidité moyenne",
+        empty: "Pas encore de données.",
+        /** Valeur affichée (gabarit secondes, virgule française — cf. `dashboard-format.ts`). */
+        value: "{s} s",
+        /** Mots de tendance — orientés SUR L'ENFANT (plus rapide/lente), PAS sur le nombre brut
+         * de ms (« en baisse » serait ambigu : un temps qui baisse est une AMÉLIORATION). */
+        trend: {
+          improving: "plus rapide",
+          regressing: "plus lente",
+          stable: "stable",
+        },
+      },
+      /** Carte de maîtrise (heatmap maîtrisé/en cours/à renforcer, PLAN §Espace parent). */
+      mastery: {
+        heading: "Carte de maîtrise",
+        mastered: "Maîtrisé",
+        inProgress: "En cours",
+        weak: "À renforcer",
+      },
+      /** Liste « à revoir » (top calculs ratés/lents, WIREFRAMES §7). */
+      review: {
+        heading: "À revoir",
+        /** Posture croissance : jamais un manque, une réussite (no-fail). */
+        empty: "Rien à revoir pour le moment.",
+      },
+      /** Régularité (jours joués, série record, respect de la fenêtre saine, PLAN §Espace parent). */
+      regularity: {
+        heading: "Régularité",
+        /** Respect de la fenêtre saine — mot DOUBLE l'icône (a11y daltonisme), jamais la couleur seule. */
+        respect: {
+          under: "En dessous de la fenêtre recommandée",
+          within: "Dans la fenêtre recommandée",
+          over: "Au-dessus de la fenêtre recommandée",
+        },
+        /** Clarifie que la fenêtre est un repère pédagogique FIXE (gabarits bornes ⚙️), distinct
+         * du réglage de temps d'écran configurable du foyer (7.3/7.8, note PO story 7.4). */
+        respectHint: "Repère indicatif ({min}-{max} min), distinct du réglage de temps d'écran.",
+        /** Total de jours joués, SINGULIER (0 ou 1 jour — le participe accorde aussi). */
+        daysPlayed: "{n} jour joué au total",
+        /** Total de jours joués, PLURIEL (≥2). */
+        daysPlayedPlural: "{n} jours joués au total",
+        /** Meilleure série de l'historique, SINGULIER (0 ou 1 jour). */
+        recordStreak: "Record : {n} jour",
+        /** Meilleure série de l'historique, PLURIEL (≥2). */
+        recordStreakPlural: "Record : {n} jours",
+        /** Légende accessible du graphique minutes/jour (consommée en `role="img"` sur le
+         * conteneur du graphique — jamais un token/string déclaré sans consommateur DOM, #125). */
+        chartLabel: "Minutes jouées par jour (7 derniers jours)",
+        /** Repli textuel quand trop peu de jours pour un graphique lisible (< 2 jours ou toutes
+         * les minutes à 0) — remplace le graphique plutôt qu'un trait quasi-invisible « cassé ». */
+        chartEmpty: "Pas encore assez de jours pour afficher un graphique.",
+      },
+      /** Progression (monde/niveau, créatures débloquées, PLAN §Espace parent). */
+      progression: {
+        heading: "Progression",
+        /** Monde courant (gabarit nombre 1-based). */
+        world: "Monde {n}",
+        /** Niveaux terminés du monde courant, total au SINGULIER (gabarits complétés/total). */
+        levels: "{completed} / {total} niveau",
+        /** Niveaux terminés du monde courant, total au PLURIEL (≥2 — cas pratique courant, le
+         * monde compte `levelsPerWorld + 1 ≥ 2` niveaux, mais scindé pour la cohérence). */
+        levelsPlural: "{completed} / {total} niveaux",
+        /** Créatures débloquées, SINGULIER (0 ou 1 — le participe accorde aussi). */
+        creatures: "{n} créature débloquée",
+        /** Créatures débloquées, PLURIEL (≥2). */
+        creaturesPlural: "{n} créatures débloquées",
+        /** Repli si le socle de secours n'est pas amorcé (`SocleUnavailableError`, cf. carte 6.7). */
+        unavailable: "Progression indisponible pour le moment.",
+      },
       /** Lien vers l'écran « Gérer les profils » (story 7.5, DETAILS §3). */
       manageLink: "Gérer les profils",
       /** Lien vers l'écran « Réglages » (story 7.3, DETAILS §3). */

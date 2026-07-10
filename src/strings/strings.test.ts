@@ -136,7 +136,7 @@ describe("strings (i18n FR)", () => {
     expect(p.pinTitle.length).toBeGreaterThan(0);
     // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant (« tu »/« te »/« ton »/« ta »).
     const parentText =
-      `${p.pinHint} ${p.error} ${p.forgot} ${p.dashboard.placeholder} ${p.dashboard.exit}`.toLowerCase();
+      `${p.pinHint} ${p.error} ${p.forgot} ${p.dashboard.subtitle} ${p.dashboard.today.notPlayed} ${p.dashboard.exit}`.toLowerCase();
     expect(parentText).not.toMatch(/\btu\b/);
     expect(parentText).not.toMatch(/\bte\b/);
     expect(parentText).not.toMatch(/\bton\b/);
@@ -145,6 +145,65 @@ describe("strings (i18n FR)", () => {
     expect(p.error.toLowerCase()).not.toContain("inexistant");
     // Lien récupération présent (câblage vers /parent/recuperation).
     expect(p.forgot.toLowerCase()).toContain("oublié");
+  });
+
+  it("tableau de bord parent (7.7) = registre NEUTRE/vouvoiement + gabarits interpolables + 4 compétences", () => {
+    const d = strings.parent.dashboard;
+    // Gabarits interpolables (voix neutre, jamais Teddy).
+    expect(d.subtitle).toContain("{prénom}");
+    expect(d.today.summary).toContain("{min}");
+    expect(d.today.summary).toContain("{n}");
+    expect(d.today.summaryPlural).toContain("{min}");
+    expect(d.today.summaryPlural).toContain("{n}");
+    expect(d.today.minutesOnly).toContain("{min}");
+    expect(d.today.streak).toContain("{n}");
+    expect(d.today.streakPlural).toContain("{n}");
+    expect(d.accuracy.value).toContain("{pct}");
+    expect(d.accuracy.delta).toContain("{delta}");
+    expect(d.accuracy.trendWithDelta).toContain("{trend}");
+    expect(d.accuracy.trendWithDelta).toContain("{delta}");
+    expect(d.accuracy.skillBarLabel).toContain("{skill}");
+    expect(d.accuracy.skillBarLabel).toContain("{value}");
+    expect(d.speed.value).toContain("{s}");
+    expect(d.regularity.respectHint).toContain("{min}");
+    expect(d.regularity.respectHint).toContain("{max}");
+    expect(d.regularity.daysPlayed).toContain("{n}");
+    expect(d.regularity.daysPlayedPlural).toContain("{n}");
+    expect(d.regularity.recordStreak).toContain("{n}");
+    expect(d.regularity.recordStreakPlural).toContain("{n}");
+    expect(d.regularity.chartEmpty.length).toBeGreaterThan(0);
+    expect(d.progression.world).toContain("{n}");
+    expect(d.progression.levels).toContain("{completed}");
+    expect(d.progression.levels).toContain("{total}");
+    expect(d.progression.levelsPlural).toContain("{completed}");
+    expect(d.progression.levelsPlural).toContain("{total}");
+    expect(d.progression.creatures).toContain("{n}");
+    expect(d.progression.creaturesPlural).toContain("{n}");
+    // Gabarits SINGULIER/PLURIEL réellement DISTINCTS (pas le pluriel dupliqué sous 2 clés —
+    // sinon le bug source "1 jours"/"1 niveaux" survivrait silencieusement, review PR #239).
+    expect(d.today.summary).not.toBe(d.today.summaryPlural);
+    expect(d.today.streak).not.toBe(d.today.streakPlural);
+    expect(d.regularity.daysPlayed).not.toBe(d.regularity.daysPlayedPlural);
+    expect(d.regularity.recordStreak).not.toBe(d.regularity.recordStreakPlural);
+    expect(d.progression.levels).not.toBe(d.progression.levelsPlural);
+    expect(d.progression.creatures).not.toBe(d.progression.creaturesPlural);
+    // Les 4 compétences canoniques (ordre `SKILLS`, ENGINE §1) ont un libellé.
+    expect(Object.keys(d.skills).sort()).toEqual(["add", "comp10", "mult", "sub"]);
+    for (const label of Object.values(d.skills)) expect(label.length).toBeGreaterThan(0);
+    // Les 3 niveaux de maîtrise ont un libellé DISTINCT (a11y : mot double l'icône/couleur).
+    expect(new Set([d.mastery.mastered, d.mastery.inProgress, d.mastery.weak]).size).toBe(3);
+    // Les 3 états de respect de la fenêtre saine ont un libellé DISTINCT.
+    expect(new Set(Object.values(d.regularity.respect)).size).toBe(3);
+    // Posture croissance : jamais un manque en négatif (no-fail).
+    expect(d.review.empty.toLowerCase()).not.toContain("faux");
+    expect(d.review.empty.toLowerCase()).not.toContain("erreur");
+    // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant.
+    const dashboardText =
+      `${d.subtitle} ${d.today.notPlayed} ${d.today.noStreak} ${d.accuracy.empty} ${d.speed.empty} ${d.review.empty} ${d.regularity.respectHint} ${d.regularity.chartEmpty} ${d.progression.unavailable}`.toLowerCase();
+    expect(dashboardText).not.toMatch(/\btu\b/);
+    expect(dashboardText).not.toMatch(/\bte\b/);
+    expect(dashboardText).not.toMatch(/\bton\b/);
+    expect(dashboardText).not.toMatch(/\bta\b/);
   });
 
   it("gérer les profils (7.5) = registre NEUTRE/vouvoiement + gabarits {prénom} + clés d'erreur", () => {

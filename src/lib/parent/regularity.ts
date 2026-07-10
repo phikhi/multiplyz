@@ -76,8 +76,13 @@ export interface RegularityStats {
  * murale) — puis on convertit ce triplet en entier via `Date.UTC(y, m, d) / MS_PER_DAY`. Le résultat
  * est **DST-indépendant** (c'est un simple index de date civile) : deux jours calendaires consécutifs
  * diffèrent toujours de 1, ce que la logique de série exploite.
+ *
+ * **Exportée** (story 7.7) pour que `lib/parent/progression.ts` (compte des niveaux touchés
+ * AUJOURD'HUI, `progress.updatedAt`) réutilise EXACTEMENT la même notion de « jour calendaire »
+ * que la régularité — ne jamais réinventer un second découpage de jour (CLAUDE.md : la logique
+ * n'est jamais dupliquée). Comportement inchangé, aucune régression sur les appelants existants.
  */
-function makeDayOrdinal(timeZone: string): (epochMs: number) => number {
+export function makeDayOrdinal(timeZone: string): (epochMs: number) => number {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone,
     year: "numeric",

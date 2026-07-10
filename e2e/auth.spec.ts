@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
 import { BRAND_NAME } from "../src/config/brand";
 import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
+import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
  * E2E du parcours auth complet — onboarding 1er usage (#2.2), connexion (#2.3),
@@ -1088,13 +1089,156 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await enterPin(page, "9876"); // PIN parent posé à l'onboarding, auto-soumission au 4ᵉ
 
     await expect(page).toHaveURL(/\/parent$/);
-    // Stub du tableau de bord : bandeau « Espace parent » + placeholder neutre (dashboard = 7.7).
+    // Stub du tableau de bord (7.1) : bandeau « Espace parent » présent (titre inchangé).
     await expect(
       page.getByRole("heading", { level: 1, name: strings.parent.dashboard.title }),
     ).toBeVisible();
-    await expect(page.getByText(strings.parent.dashboard.placeholder)).toBeVisible();
 
     await page.screenshot({ path: "docs/captures/214-espace-parent.png", fullPage: true });
+  });
+
+  /**
+   * Lit le texte visible commençant par `pattern`, en extrait le PREMIER nombre, puis vérifie
+   * que ce texte est EXACTEMENT le rendu attendu du gabarit choisi par `pluralize` (même fonction
+   * que `ParentDashboard.tsx`, `dashboard-format.ts`) — pas une regex aveugle au singulier/
+   * pluriel (review Frontend PR #239 : `/^Série : \d+ jours$/` matchait AUSSI "Série : 1 jours",
+   * la faute). `dashboard-format.test.ts` verrouille déjà la RÈGLE de `pluralize` (0/1/≥2) de
+   * façon indépendante ; ce helper verrouille le CÂBLAGE (que la page appelle bien `pluralize`
+   * avec les bons arguments) sur des données E2E réelles, dont le nombre n'est pas connu à l'avance.
+   */
+  async function expectExactPluralText(
+    page: Page,
+    pattern: RegExp,
+    singular: string,
+    plural: string,
+  ): Promise<void> {
+    const locator = page.getByText(pattern);
+    await expect(locator).toBeVisible();
+    const text = ((await locator.textContent()) ?? "").trim();
+    const match = text.match(/(\d+)/u);
+    expect(match).not.toBeNull();
+    const n = Number(match![1]);
+    const expected = pluralize(n, singular, plural).replace("{n}", String(n));
+    expect(text).toBe(expected);
+  }
+
+  // ==========================================================================
+  // Tableau de bord parent (story 7.7, #220, WIREFRAMES §7) — assemblage des agrégats
+  // read-only 7.2/7.4 + progression 7.7. Le profil Léa a déjà joué le diagnostic (18
+  // calculs) + terminé le niveau 0 (test « carte du monde » ci-dessus) → les données sont
+  // RÉELLES (pas des placeholders), mais les valeurs EXACTES dépendent du déroulé (timing des
+  // réponses, tirage de l'interleaving) → assertions par REGEX/structure, jamais un nombre figé.
+  // ==========================================================================
+  test("tableau de bord parent : 6 blocs câblés sur données réelles (clair/sombre/mobile, capture)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+
+    const d = strings.parent.dashboard;
+    await expect(page.getByRole("heading", { level: 1, name: d.title })).toBeVisible();
+    // Sous-titre nominatif (gabarit prénom, COPY §5).
+    await expect(page.getByText(/^Progression de Léa$/u)).toBeVisible();
+
+    // Bandeau du jour : l'enfant a joué AUJOURD'HUI (diagnostic + niveau 0, tests précédents)
+    // → une activité mesurée existe (jamais le repli "pas encore joué").
+    await expect(page.getByText(/^Aujourd'hui : \d+ min/u)).toBeVisible();
+    // Grammaire FR EXACTE selon n (0/1 → singulier « jour », ≥2 → pluriel « jours » — pas une
+    // regex aveugle qui matcherait aussi « 1 jours », review Frontend PR #239).
+    await expectExactPluralText(page, /^Série : \d+ jour/u, d.today.streak, d.today.streakPlural);
+
+    // Justesse (semaine) : 4 barres par compétence — COMPTE EXACT (rétro #127, compte de
+    // colonnes/éléments chiffré nommé par le wireframe/AC → jamais moins que les 4 compétences).
+    // Le diagnostic (ENGINE §3) AMORCE la maîtrise (`seedDiagnostic`) mais n'écrit JAMAIS dans
+    // `attempts` (seule la table `mastery` est peuplée) — la justesse par compétence dérive
+    // UNIQUEMENT de `attempts`, alimentée par le jeu en NIVEAU normal (interleaving ENGINE §7).
+    // Un seul niveau joué (10 questions) ne couvre pas forcément les 4 compétences → CHAQUE
+    // barre affiche SOIT un pourcentage réel SOIT le repli no-fail « Pas encore de données » —
+    // les deux sont des états VALIDES (jamais un nombre inventé), au moins UNE barre a des
+    // données réelles (le niveau joué a bien alimenté au moins une compétence).
+    const skillBars = page.getByRole("img", {
+      name: /Compléments|Addition|Soustraction|Multiplication/u,
+    });
+    await expect(skillBars).toHaveCount(4);
+    let barsWithData = 0;
+    for (const bar of await skillBars.all()) {
+      const name = (await bar.getAttribute("aria-label")) ?? "";
+      expect(name).toMatch(/(\d+ %|Pas encore de données cette semaine\.)$/u);
+      if (/\d+ %$/u.test(name)) barsWithData++;
+    }
+    expect(barsWithData).toBeGreaterThan(0);
+
+    // Carte de maîtrise : les 4 compétences ET leurs 3 statuts possibles sont des mots FR non vides
+    // (a11y : le statut est un TEXTE, jamais une couleur seule).
+    await expect(page.getByText(d.mastery.heading)).toBeVisible();
+
+    // À revoir : soit des puces (liste), soit le repli neutre — les deux sont un état VALIDE.
+    const reviewList = page.getByRole("list", { name: d.review.heading });
+    const reviewEmpty = page.getByText(d.review.empty);
+    await expect(reviewList.or(reviewEmpty)).toBeVisible();
+
+    // Régularité : jours joués ≥ 1 (aujourd'hui compte), repère indicatif interpolé aux VRAIES
+    // bornes ⚙️ (jamais un « 15-20 » en dur dans la page). Grammaire FR EXACTE selon n (idem série).
+    await expectExactPluralText(
+      page,
+      /^\d+ jour(?:s)? joué/u,
+      d.regularity.daysPlayed,
+      d.regularity.daysPlayedPlural,
+    );
+    await expect(page.getByText(/^Repère indicatif \(\d+-\d+ min\), distinct/u)).toBeVisible();
+
+    // Progression : le socle est amorcé (E2E) → « Monde N » + « X / 11 niveaux » réels (11 =
+    // levelsPerWorld ⚙️ + 1 boss, cohérent avec la carte, test précédent — total FIXE ≥2, toujours
+    // pluriel, aucune ambiguïté grammaticale à ce nombre).
+    await expect(page.getByText(/^Monde \d+$/u)).toBeVisible();
+    await expect(page.getByText(/^\d+ \/ 11 niveaux$/u)).toBeVisible();
+    // Grammaire FR EXACTE selon n (0/1 créature → singulier, ≥2 → pluriel).
+    await expectExactPluralText(
+      page,
+      /^\d+ créature/u,
+      d.progression.creatures,
+      d.progression.creaturesPlural,
+    );
+
+    // Liens existants (7.1/7.5/7.3) toujours câblés — aucune régression du stub.
+    await expect(page.getByRole("link", { name: d.manageLink })).toHaveAttribute(
+      "href",
+      "/parent/profils",
+    );
+    await expect(page.getByRole("link", { name: d.settingsLink })).toHaveAttribute(
+      "href",
+      "/parent/reglages",
+    );
+
+    // AUCUN élément superposé/positionné dans ce design (barres/badges en flux normal, #170 hors
+    // périmètre par construction) — mais on garde une sonde de non-collapse : la 1re barre par
+    // compétence a une taille RENDUE non nulle (rendu ≠ invisible, même famille de piège que
+    // l'occlusion : un remplissage à `width:0%`/`height:0` serait un bug silencieux).
+    const firstBar = skillBars.first();
+    const barBox = await firstBar.boundingBox();
+    expect(barBox).not.toBeNull();
+    expect(barBox!.width).toBeGreaterThan(0);
+    expect(barBox!.height).toBeGreaterThan(0);
+
+    // ── Captures : clair (défaut) + sombre (émulation OS, sans muter le réglage foyer persisté,
+    // le thème du foyer reste "système" à ce point du parcours) + mobile 375px ──
+    await page.screenshot({ path: "docs/captures/220-dashboard-clair.png", fullPage: true });
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
+    await page.screenshot({ path: "docs/captures/220-dashboard-sombre.png", fullPage: true });
+    await page.emulateMedia({ colorScheme: "light" });
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: d.title })).toBeVisible();
+    const fitsWidth = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    );
+    expect(fitsWidth).toBe(true); // aucun débordement horizontal (WIREFRAMES §8)
+    await page.screenshot({ path: "docs/captures/220-dashboard-mobile.png", fullPage: true });
   });
 
   test("« code parent oublié » depuis le pavé parent → /parent/recuperation", async ({ page }) => {
