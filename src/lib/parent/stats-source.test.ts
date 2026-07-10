@@ -2,21 +2,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { attempts, mastery, masteryKey, profiles } from "@/lib/db/schema";
-import { loadEngineConfig, loadReportingConfig } from "@/config/server-config";
+import {
+  loadEngineConfig,
+  loadRegularityConfig,
+  loadReportingConfig,
+} from "@/config/server-config";
 import { makeFact, type Fact } from "@/lib/engine/facts";
 import type { MasteryState } from "@/lib/engine/mastery";
 import type { StatsConfig } from "./stats";
 import { loadParentStats } from "./stats-source";
 
 /**
- * Pont **DB → agrégats parent** (story 7.2) sur **base réelle** (SQLite en mémoire + migrations).
- * Vérifie la composition end-to-end (attempts + scope → agrégats) ET la garde **read-only
- * observable** : aucune écriture DB (espions insert/update/delete + comptes de lignes inchangés).
+ * Pont **DB → agrégats parent** (stories 7.2 + 7.4) sur **base réelle** (SQLite en mémoire +
+ * migrations). Vérifie la composition end-to-end (attempts + scope → agrégats, régularité incluse)
+ * ET la garde **read-only observable** : aucune écriture DB (espions insert/update/delete + comptes
+ * de lignes inchangés).
  */
 
 const CONFIG: StatsConfig = {
   engine: loadEngineConfig({}),
   reporting: loadReportingConfig({}),
+  regularity: loadRegularityConfig({}),
 };
 
 let db: AppDatabase;
@@ -86,8 +92,8 @@ beforeEach(() => {
 });
 
 describe("loadParentStats", () => {
-  it("compose les 4 agrégats depuis attempts + mastery (bout-en-bout)", () => {
-    // 2 réponses comptées (1 juste 1000 ms + 1 fausse 3000 ms) + 1 re-essai (exclu).
+  it("compose les 5 agrégats depuis attempts + mastery (bout-en-bout)", () => {
+    // 2 réponses comptées (1 juste 1000 ms + 1 fausse 3000 ms) + 1 re-essai (exclu de justesse).
     seedAttempt(profileId, MULT_6X8, { correct: true, responseMs: 1000 });
     seedAttempt(profileId, MULT_2X3, { correct: false, responseMs: 3000 });
     seedAttempt(profileId, MULT_2X3, { correct: true, responseMs: 9000, isRetry: true });
@@ -101,6 +107,25 @@ describe("loadParentStats", () => {
     expect(stats.speed.overallMs).toBe(2000); // (1000 + 3000) / 2
     expect(stats.masteryMap.mult.masteredCount).toBe(1); // seul mult_6x8 est box ≥ 4
     expect(stats.reviewList.map((i) => i.factKey)).toContain("mult_2x3"); // faible + raté
+    // Régularité : les 3 réponses (re-essai INCLUS — engagement) tombent le même jour → 1 jour joué,
+    // série courante vivante (aujourd'hui). Prouve le câblage attempts → computeRegularityStats.
+    expect(stats.regularity.daysPlayed).toBe(1);
+    expect(stats.regularity.currentStreakDays).toBe(1);
+    expect(stats.regularity.today).not.toBeNull();
+  });
+
+  it("régularité : jours joués + série dérivés du journal (câblage config.regularity → 7.4)", () => {
+    // 3 jours consécutifs joués (aujourd'hui, hier, avant-hier), en heure de Paris. Un re-essai
+    // seul le 3ᵉ jour → il compte quand même comme jour joué (engagement, ≠ justesse/rapidité).
+    seedAttempt(profileId, MULT_6X8, { createdAt: NOW });
+    seedAttempt(profileId, MULT_2X3, { createdAt: NOW - 1 * DAY });
+    seedAttempt(profileId, MULT_2X3, { createdAt: NOW - 2 * DAY, isRetry: true });
+
+    const { regularity } = loadParentStats(db, profileId, CONFIG, NOW);
+    expect(regularity.daysPlayed).toBe(3);
+    expect(regularity.currentStreakDays).toBe(3);
+    expect(regularity.recordStreakDays).toBe(3);
+    expect(regularity.days.map((d) => d.dayOrdinal)).toHaveLength(3);
   });
 
   it("isole le profil demandé (n'agrège pas les réponses d'un autre profil)", () => {

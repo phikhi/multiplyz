@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   loadEngineConfig,
+  loadRegularityConfig,
   loadReportingConfig,
   type ReportingConfig,
 } from "@/config/server-config";
@@ -30,11 +31,12 @@ import {
 
 const ENGINE = loadEngineConfig({});
 const REPORTING = loadReportingConfig({});
-const CONFIG: StatsConfig = { engine: ENGINE, reporting: REPORTING };
+const REGULARITY = loadRegularityConfig({});
+const CONFIG: StatsConfig = { engine: ENGINE, reporting: REPORTING, regularity: REGULARITY };
 
 /** Config avec seuils de reporting surchargés (prouve que les ⚙️ AGISSENT). */
 function withReporting(overrides: Partial<ReportingConfig>): StatsConfig {
-  return { engine: ENGINE, reporting: { ...REPORTING, ...overrides } };
+  return { engine: ENGINE, reporting: { ...REPORTING, ...overrides }, regularity: REGULARITY };
 }
 
 const DAY = 24 * 60 * 60 * 1000;
