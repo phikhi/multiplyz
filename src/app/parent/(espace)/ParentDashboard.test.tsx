@@ -145,6 +145,7 @@ const BASE_PROPS = {
   displayName: "Léa",
   respectWindowMinMinutes: 15,
   respectWindowMaxMinutes: 20,
+  pendingWorldsCount: 0,
 };
 
 describe("ParentDashboard — bandeau + en-tête", () => {
@@ -506,6 +507,48 @@ describe("ParentDashboard — liens + sortie (repris de 7.1/7.5/7.3, inchangés)
       "href",
       "/parent/reglages",
     );
+  });
+
+  it("expose le lien « Mondes à valider » (story 7.9) — TOUJOURS affiché, même à 0 en attente", () => {
+    render(
+      <ParentDashboard
+        {...BASE_PROPS}
+        pendingWorldsCount={0}
+        stats={FULL_STATS}
+        progression={FULL_PROGRESSION}
+      />,
+    );
+    expect(screen.getByRole("link", { name: d.worldApprovalLink })).toHaveAttribute(
+      "href",
+      "/parent/mondes",
+    );
+    // Aucun repère de compte à 0 (jamais « 0 monde en attente », posture no-fail).
+    expect(screen.queryByText(/en attente/u)).toBeNull();
+  });
+
+  it("MUTATION-PROUVÉ : repère de compte pluralisé (FR EXACTE) quand des mondes attendent", () => {
+    const { rerender } = render(
+      <ParentDashboard
+        {...BASE_PROPS}
+        pendingWorldsCount={1}
+        stats={FULL_STATS}
+        progression={FULL_PROGRESSION}
+      />,
+    );
+    // SINGULIER à 1 (grammaire FR — promotion #239, jamais « 1 mondes »).
+    expect(screen.getByText("1 monde en attente")).toBeInTheDocument();
+
+    rerender(
+      <ParentDashboard
+        {...BASE_PROPS}
+        pendingWorldsCount={3}
+        stats={FULL_STATS}
+        progression={FULL_PROGRESSION}
+      />,
+    );
+    // PLURIEL à ≥2 — retirer `pluralize()` au profit d'un gabarit unique figé romprait ce test.
+    expect(screen.getByText("3 mondes en attente")).toBeInTheDocument();
+    expect(screen.queryByText("3 monde en attente")).toBeNull();
   });
 
   it("rend le bouton de sortie (ParentExitButton, testé isolément ailleurs)", () => {

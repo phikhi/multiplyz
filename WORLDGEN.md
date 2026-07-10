@@ -49,6 +49,7 @@
 - **Auto-filtre** : classifieur de sécurité image + règles (pas de texte, rien d'effrayant/inapproprié, cohérence de style).
 - **Validation parent optionnelle** : si activée, un monde `buffered` attend l'**approbation** dans l'espace parent avant `active`. Sinon auto.
 - Échec → **régénération** (jusqu'à N essais), sinon on reste sur le fallback.
+- **Rejet parent** (story 7.9, ADR 0015) : depuis l'écran d'approbation, un parent peut aussi **rejeter** un monde `buffered` → statut `rejected` (jamais réactivé). Le monde disparaît de la file d'attente ; sa position de carte retombe **définitivement** sur le socle de secours (même repli qu'un monde jamais approuvé).
 
 ## 7. Fallback & reproductibilité
 

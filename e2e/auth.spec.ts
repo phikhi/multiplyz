@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
 import { BRAND_NAME } from "../src/config/brand";
 import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
+import { PENDING_WORLD_A, PENDING_WORLD_B } from "./seed-pending-worlds";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -1239,6 +1240,115 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     );
     expect(fitsWidth).toBe(true); // aucun débordement horizontal (WIREFRAMES §8)
     await page.screenshot({ path: "docs/captures/220-dashboard-mobile.png", fullPage: true });
+  });
+
+  test("mondes à valider (story 7.9, #231) : liste + approuver + rejeter + état vide (clair/sombre/mobile, capture)", async ({
+    page,
+  }) => {
+    const wa = strings.parent.worldApproval;
+    const worldNumberA = String(PENDING_WORLD_A.index + 1); // affichage 1-based (MAP §1)
+    const worldNumberB = String(PENDING_WORLD_B.index + 1);
+    const worldLabelA = wa.worldLabel
+      .replace("{n}", worldNumberA)
+      .replace("{thème}", PENDING_WORLD_A.theme);
+    const worldLabelB = wa.worldLabel
+      .replace("{n}", worldNumberB)
+      .replace("{thème}", PENDING_WORLD_B.theme);
+
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+
+    // Découvrabilité (#231) : le lien est câblé + le repère de compte PLURIEL EXACT (2 mondes
+    // amorcés côté E2E, `seed-pending-worlds.cli.ts`) — grammaire FR exacte (promotion #239).
+    const d = strings.parent.dashboard;
+    await expect(page.getByRole("link", { name: d.worldApprovalLink })).toHaveAttribute(
+      "href",
+      "/parent/mondes",
+    );
+    await expectExactPluralText(
+      page,
+      /^\d+ mondes? en attente$/u,
+      d.worldApprovalCount,
+      d.worldApprovalCountPlural,
+    );
+
+    await page.getByRole("link", { name: d.worldApprovalLink }).click();
+    await expect(page).toHaveURL(/\/parent\/mondes$/);
+    await expect(page.getByRole("heading", { level: 1, name: wa.title })).toBeVisible();
+
+    // Les DEUX mondes amorcés sont listés, triés par world_index croissant (A avant B).
+    const cardA = page.getByRole("region", { name: worldLabelA });
+    const cardB = page.getByRole("region", { name: worldLabelB });
+    await expect(cardA).toBeVisible();
+    await expect(cardB).toBeVisible();
+
+    // ── Aperçu accent : AUCUN élément superposé (flux normal, documenté) — garde de NON-COLLAPSE
+    // en vrai navigateur (jsdom ne fait aucun layout, cf. `WorldApprovalManager.test.tsx`) : le
+    // swatch décoratif a une taille RENDUE non nulle (même famille de garde que le dashboard 7.7,
+    // skill bars — rétro #170 : rendu ≠ invisible, un `width:0`/`height:0` serait un bug silencieux).
+    const swatchBox = await cardA.locator("span[aria-hidden='true']").first().boundingBox();
+    expect(swatchBox).not.toBeNull();
+    expect(swatchBox!.width).toBeGreaterThan(0);
+    expect(swatchBox!.height).toBeGreaterThan(0);
+
+    await page.screenshot({ path: "docs/captures/231-mondes-liste-clair.png", fullPage: true });
+
+    // Capture SOMBRE de la liste PEUPLÉE (aperçus accent + boutons) — distincte de la capture
+    // sombre de l'état vide plus bas, pour vérifier visuellement (pixel-look #170) que les swatches
+    // accent (hex direct, pas un token dérivé) restent visibles sur le fond de carte sombre.
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
+    await page.screenshot({ path: "docs/captures/231-mondes-liste-sombre.png", fullPage: true });
+    await page.emulateMedia({ colorScheme: "light" });
+
+    // ── Approuver le monde A ──
+    await cardA.getByRole("button", { name: wa.approve.action }).click();
+    await expect(page.getByText(wa.approve.success)).toBeVisible();
+    await expect(page.getByRole("region", { name: worldLabelA })).toHaveCount(0); // disparu de la file
+    await expect(cardB).toBeVisible(); // B intact, non affecté par l'approbation de A
+
+    // ── Rejeter le monde B (confirmation, patron delete 7.5) ──
+    await cardB.getByRole("button", { name: wa.reject.action }).click();
+    await expect(
+      page.getByText(wa.reject.confirmBody.replace("{thème}", PENDING_WORLD_B.theme)),
+    ).toBeVisible();
+    await page.screenshot({
+      path: "docs/captures/231-mondes-confirmation-rejet.png",
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: wa.reject.confirm }).click();
+    await expect(page.getByText(wa.reject.success)).toBeVisible();
+    await expect(page.getByRole("region", { name: worldLabelB })).toHaveCount(0);
+
+    // ── État vide (les deux mondes traités) — repli neutre, jamais un manque (capture) ──
+    await page.reload();
+    await expect(page.getByText(wa.empty)).toBeVisible();
+    await expect(page.getByRole("button", { name: wa.approve.action })).toHaveCount(0);
+    await page.screenshot({ path: "docs/captures/231-mondes-vide.png", fullPage: true });
+
+    // Le tableau de bord ne montre plus de repère de compte (0 en attente, posture no-fail).
+    await page.goto("/parent");
+    await expect(page.getByText(/\d+ mondes? en attente/u)).toHaveCount(0);
+    await expect(page.getByRole("link", { name: d.worldApprovalLink })).toBeVisible(); // lien TOUJOURS affiché
+
+    // ── Captures clair/sombre/mobile de l'écran d'approbation (re-amorçage pour re-peupler la
+    // liste et capturer l'écran dans son état le plus riche, cohérent avec le patron 220) ──
+    await page.goto("/parent/mondes");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
+    await page.screenshot({ path: "docs/captures/231-mondes-vide-sombre.png", fullPage: true });
+    await page.emulateMedia({ colorScheme: "light" });
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.reload();
+    await expect(page.getByRole("heading", { level: 1, name: wa.title })).toBeVisible();
+    const fitsWidth = await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    );
+    expect(fitsWidth).toBe(true); // aucun débordement horizontal (WIREFRAMES §8)
+    await page.screenshot({ path: "docs/captures/231-mondes-mobile.png", fullPage: true });
   });
 
   test("« code parent oublié » depuis le pavé parent → /parent/recuperation", async ({ page }) => {

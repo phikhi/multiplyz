@@ -611,6 +611,17 @@ export const fr = {
       manageLink: "Gérer les profils",
       /** Lien vers l'écran « Réglages » (story 7.3, DETAILS §3). */
       settingsLink: "Réglages",
+      /**
+       * Lien vers l'écran **« Mondes à valider »** (story 7.9, issue #231) — ferme l'impasse du
+       * toggle « Votre approbation » (7.3) : sans ce lien, un parent qui active la validation
+       * bloque silencieusement le buffer. Toujours affiché (indépendant de l'état du toggle —
+       * des mondes en attente peuvent survivre à sa désactivation).
+       */
+      worldApprovalLink: "Mondes à valider",
+      /** Repère de compte, SINGULIER (0 ou 1 monde en attente — grammaire FR, promotion #239). */
+      worldApprovalCount: "{n} monde en attente",
+      /** Repère de compte, PLURIEL (≥2). */
+      worldApprovalCountPlural: "{n} mondes en attente",
       /** Bouton de sortie (✕ du wireframe §7) → révoque la session parent, retour au sélecteur. */
       exit: "Quitter l'espace parent",
     },
@@ -690,6 +701,55 @@ export const fr = {
         PROFILE_NOT_FOUND: "Ce profil est introuvable.",
         OWNER_UNDELETABLE: "Le compte parent ne peut pas être supprimé.",
         UNAUTHORIZED: "Votre session parent a expiré. Reconnectez-vous.",
+        GENERIC: "Une erreur est survenue. Réessayez.",
+      },
+    },
+    /**
+     * Écran **« Mondes à valider »** (story 7.9, issue #231, WORLDGEN §6, ADR 0015). Liste les
+     * mondes `buffered` en attente d'approbation — ferme l'impasse du toggle « Votre approbation »
+     * (7.3). Registre **neutre/vouvoiement** (COPY §5, pas la voix de Teddy). Le gabarit `{n}`
+     * (numéro de monde) et `{thème}` sont interpolés côté composant. Aucun texte en dur ailleurs.
+     */
+    worldApproval: {
+      /** Titre de l'écran (h1). */
+      title: "Mondes à valider",
+      /** Consigne neutre sous le titre. */
+      intro:
+        "Ces mondes ont passé la vérification automatique et attendent votre décision avant " +
+        "d'être visibles pour l'enfant.",
+      /** Retour vers le tableau de bord parent. */
+      back: "Retour au tableau de bord",
+      /** État vide (aucun monde en attente) — cas fréquent (repli socle tant qu'aucun n'est
+       * généré/approuvé), voix neutre, jamais un manque. */
+      empty: "Aucun monde en attente pour le moment.",
+      /** Libellé accessible d'une carte de monde (gabarit numéro + thème). */
+      worldLabel: "Monde {n} — {thème}",
+      /** Numéro de monde affiché (gabarit, MAP §1 : position sur la carte infinie, 1-based). */
+      worldNumber: "Monde {n}",
+      /** Approbation d'un monde. */
+      approve: {
+        /** Bouton d'approbation (action directe, pas de confirmation — décision positive). */
+        action: "Approuver",
+        /** Confirmation neutre après approbation. */
+        success: "Monde approuvé : il sera bientôt visible pour l'enfant.",
+      },
+      /** Rejet d'un monde (action négative → confirmation, même patron que la suppression 7.5). */
+      reject: {
+        /** Bouton ouvrant la confirmation de rejet. */
+        action: "Rejeter",
+        /** Corps de la confirmation (gabarit thème). */
+        confirmBody: "Le monde « {thème} » sera définitivement retiré de la file d'attente.",
+        /** Confirmer le rejet définitif. */
+        confirm: "Rejeter définitivement",
+        /** Annuler le rejet. */
+        cancel: "Annuler",
+        /** Confirmation neutre après rejet. */
+        success: "Monde rejeté.",
+      },
+      /** Messages d'erreur (mappés depuis `WorldApprovalActionResult` + repli). */
+      errors: {
+        UNAUTHORIZED: "Votre session parent a expiré. Reconnectez-vous.",
+        MODERATION_FAILED: "Ce monde n'est plus disponible pour cette action. Actualisez la liste.",
         GENERIC: "Une erreur est survenue. Réessayez.",
       },
     },

@@ -43,6 +43,9 @@ export interface ParentDashboardProps {
   readonly respectWindowMinMinutes: number;
   /** Borne haute ⚙️ de la fenêtre saine de temps de jeu. */
   readonly respectWindowMaxMinutes: number;
+  /** Nombre de mondes `buffered` en attente d'approbation (story 7.9, `countPendingWorlds`) —
+   * repère de découvrabilité de l'impasse #231 (le lien reste affiché même à 0). */
+  readonly pendingWorldsCount: number;
 }
 
 const d = strings.parent.dashboard;
@@ -577,6 +580,11 @@ function ProgressionSection({ progression }: { readonly progression: Progression
  * 7.1 (`strings.parent.dashboard.title`, sans focus programmatique — pas de stack-trap outline
  * UA #222 ici, cette page n'est jamais atteinte par un redirect client qui exigerait l'annonce
  * SR). Liens « Gérer les profils »/« Réglages » + sortie repris **tels quels** (7.1/7.5/7.3).
+ *
+ * **« Mondes à valider » (story 7.9, issue #231)** : lien **toujours affiché** (indépendant du
+ * toggle « Votre approbation », 7.3 — des mondes en attente peuvent survivre à sa désactivation),
+ * avec un repère de compte pluralisé (`pluralize`, promotion #239) affiché **seulement si > 0**
+ * (jamais « 0 monde en attente » — bruit inutile, posture no-fail).
  */
 export function ParentDashboard({
   displayName,
@@ -584,6 +592,7 @@ export function ParentDashboard({
   progression,
   respectWindowMinMinutes,
   respectWindowMaxMinutes,
+  pendingWorldsCount,
 }: ParentDashboardProps) {
   return (
     <main className="bg-bg text-text" style={mainStyle}>
@@ -608,12 +617,24 @@ export function ParentDashboard({
           respectWindowMaxMinutes={respectWindowMaxMinutes}
         />
         <ProgressionSection progression={progression} />
+        {pendingWorldsCount > 0 && (
+          <p style={mutedTextStyle}>
+            {fill(
+              pluralize(pendingWorldsCount, d.worldApprovalCount, d.worldApprovalCountPlural),
+              "{n}",
+              String(pendingWorldsCount),
+            )}
+          </p>
+        )}
         <div style={actionsRowStyle}>
           <Link href="/parent/profils" style={manageLinkStyle} className="mz-focusable">
             {d.manageLink}
           </Link>
           <Link href="/parent/reglages" style={manageLinkStyle} className="mz-focusable">
             {d.settingsLink}
+          </Link>
+          <Link href="/parent/mondes" style={manageLinkStyle} className="mz-focusable">
+            {d.worldApprovalLink}
           </Link>
         </div>
         <ParentExitButton />
