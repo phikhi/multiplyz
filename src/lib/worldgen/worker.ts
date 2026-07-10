@@ -546,8 +546,9 @@ export async function processNextJob(
   // Statut cible = **validation des mondes** (WORLDGEN §6) : `active` auto (validation off) OU
   // `buffered` en attente d'approbation parent (validation on) — jamais `active` sans QA passée (AC3).
   // **Source de vérité = réglage parent persisté** (story 7.3) : le worker lit `household_settings`
-  // via `readHouseholdSettings(db)` (le `deps.config.qa.parentValidationEnabled` reste le défaut
-  // d'amorçage d'un foyer neuf, cf. `resolveSettingsDefaults`). Câble le ⚙️ 6.5 sur le toggle parent.
+  // via `readHouseholdSettings(db)` (pour un foyer neuf sans ligne, le défaut d'amorçage vient de
+  // `resolveSettingsDefaults` → `getWorldGenConfig().qa.parentValidationEnabled`, le ⚙️ 6.5).
+  // Câble ce ⚙️ 6.5 sur le toggle parent.
   const parentValidationEnabled = readHouseholdSettings(db).parentWorldValidation;
   const targetStatus = moderatedStatusAfterQaPass(parentValidationEnabled);
   db.transaction((tx) => {

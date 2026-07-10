@@ -34,7 +34,9 @@ export default defineConfig({
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.{test,spec}.{ts,tsx}",
-        // layout.tsx = boilerplate framework (rend <html>/<body>, non testable via RTL).
+        // layout.tsx = boilerplate framework (rend <html>/<body>, non testable via RTL) ;
+        // la seule logique (lecture settings + calcul du thème) est déléguée à `dataThemeAttr`
+        // (pure, couverte à 100 %) et le câblage `data-theme` est couvert bout-en-bout par l'E2E.
         "src/app/layout.tsx",
       ],
       // Gate armé : 100 % sur le périmètre couvert. La logique critique
