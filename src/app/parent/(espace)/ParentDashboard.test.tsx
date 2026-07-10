@@ -170,6 +170,42 @@ describe("ParentDashboard — bandeau + en-tête", () => {
     expect(screen.getByText(d.today.notPlayed)).toBeInTheDocument();
     expect(screen.getByText(d.today.noStreak)).toBeInTheDocument();
   });
+
+  it('pluralisation FR (bug PR #239 "1 jours"/"1 niveaux") : SINGULIER à 0 et 1, PLURIEL à ≥2', () => {
+    const today18min = { dayOrdinal: 1, activeMs: 0, activeMinutes: 18, respect: "under" as const };
+    const withStreak = (currentStreakDays: number): ParentStats => ({
+      ...FULL_STATS,
+      regularity: { ...FULL_STATS.regularity, today: today18min, currentStreakDays },
+    });
+    const progressionWith = (levelsToday: number): ProgressionSummary => ({
+      ...FULL_PROGRESSION,
+      levelsToday,
+    });
+
+    // niveaux : 0 → singulier, 1 → singulier, 2 → pluriel.
+    const { rerender } = render(
+      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(0)} />,
+    );
+    expect(screen.getByText("Aujourd'hui : 18 min · 0 niveau")).toBeInTheDocument();
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(1)} />,
+    );
+    expect(screen.getByText("Aujourd'hui : 18 min · 1 niveau")).toBeInTheDocument();
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(2)} />,
+    );
+    expect(screen.getByText("Aujourd'hui : 18 min · 2 niveaux")).toBeInTheDocument();
+
+    // série : 1 → singulier (0 passe par le repli `noStreak`, déjà testé ci-dessus), 2 → pluriel.
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={withStreak(1)} progression={progressionWith(3)} />,
+    );
+    expect(screen.getByText("Série : 1 jour")).toBeInTheDocument();
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(3)} />,
+    );
+    expect(screen.getByText("Série : 2 jours")).toBeInTheDocument();
+  });
 });
 
 describe("ParentDashboard — justesse (semaine) + par compétence", () => {
@@ -303,45 +339,118 @@ describe("ParentDashboard — régularité", () => {
     ).toBeInTheDocument();
   });
 
-  it("le graphique (5 barres, décoratif) est rendu quand des jours existent, absent sinon", () => {
+  it('pluralisation FR (bug PR #239) : "jours joués"/"Record" SINGULIER à 0 et 1, PLURIEL à ≥2', () => {
+    const withDaysAndStreak = (daysPlayed: number, recordStreakDays: number): ParentStats => ({
+      ...EMPTY_STATS,
+      regularity: { ...EMPTY_STATS.regularity, daysPlayed, recordStreakDays },
+    });
+
+    const { rerender } = render(
+      <ParentDashboard {...BASE_PROPS} stats={withDaysAndStreak(0, 0)} progression={null} />,
+    );
+    expect(screen.getByText("0 jour joué au total")).toBeInTheDocument();
+    expect(screen.getByText("Record : 0 jour")).toBeInTheDocument();
+
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={withDaysAndStreak(1, 1)} progression={null} />,
+    );
+    expect(screen.getByText("1 jour joué au total")).toBeInTheDocument();
+    expect(screen.getByText("Record : 1 jour")).toBeInTheDocument();
+
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={withDaysAndStreak(2, 2)} progression={null} />,
+    );
+    expect(screen.getByText("2 jours joués au total")).toBeInTheDocument();
+    expect(screen.getByText("Record : 2 jours")).toBeInTheDocument();
+  });
+
+  // ==========================================================================
+  // Graphique minutes/jour — FIX-2 (review Frontend PR #239) : `chartLabel` CONSOMMÉE
+  // (role="img"+aria-label, jamais déclarée-orpheline #125) + repli textuel accessible sous
+  // le seuil de lisibilité (< 2 jours OU toutes les minutes à 0 → un trait au plancher 4 % lirait
+  // comme un graphique CASSÉ, pas comme « pas assez de données »).
+  // ==========================================================================
+  it("graphique LISIBLE (≥2 jours, au moins 1 minute) : consomme `chartLabel` en role=img, compte EXACT de barres", () => {
     const { container, rerender } = render(
       <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />,
     );
-    const chart = container.querySelector('[aria-hidden="true"][style*="flex-end"]');
-    expect(chart).not.toBeNull();
-    expect(chart?.children).toHaveLength(5); // compte EXACT (5 jours dans la fixture)
+    const chart = screen.getByRole("img", { name: d.regularity.chartLabel });
+    expect(chart.children).toHaveLength(5); // compte EXACT (5 jours dans la fixture)
+    expect(container.querySelector('[aria-hidden="true"][style*="flex-end"]')).toBeNull(); // plus de aria-hidden nu sur le conteneur
 
+    // Repli textuel absent quand le graphique est lisible.
+    expect(screen.queryByText(d.regularity.chartEmpty)).not.toBeInTheDocument();
+
+    // Ré-affiche sans jour → plus de rôle image (le repli prend le relais, cf. test suivant).
     rerender(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(container.querySelector('[aria-hidden="true"][style*="flex-end"]')).toBeNull();
+    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
   });
 
-  it("tous les jours à 0 minute (amplitude nulle, réponse isolée) → barres au plancher, PAS 0%", () => {
-    const zeroMinutes: ParentStats = {
+  it("repli textuel accessible : 0 jour → PAS de graphique, `chartEmpty` affiché", () => {
+    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
+    expect(screen.getByText(d.regularity.chartEmpty)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
+  });
+
+  it("repli textuel accessible : EXACTEMENT 1 jour (même avec de vraies minutes) → PAS de graphique", () => {
+    const oneDay: ParentStats = {
       ...FULL_STATS,
       regularity: {
         ...FULL_STATS.regularity,
-        days: [{ dayOrdinal: 50, activeMs: 0, activeMinutes: 0, respect: "under" }],
+        days: [{ dayOrdinal: 50, activeMs: 18 * 60_000, activeMinutes: 18, respect: "within" }],
       },
     };
-    const { container } = render(
-      <ParentDashboard {...BASE_PROPS} stats={zeroMinutes} progression={FULL_PROGRESSION} />,
-    );
-    const chart = container.querySelector('[aria-hidden="true"][style*="flex-end"]');
-    const bar = chart?.firstElementChild as HTMLElement;
-    expect(bar.style.height).toBe("4%"); // plancher — jamais une barre invisible (#170)
+    render(<ParentDashboard {...BASE_PROPS} stats={oneDay} progression={FULL_PROGRESSION} />);
+    expect(screen.getByText(d.regularity.chartEmpty)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
   });
 
-  it("aucune barre du graphique n'a une hauteur nulle (rendu ≠ invisible, #170)", () => {
-    const { container } = render(
-      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />,
-    );
-    const chart = container.querySelector('[aria-hidden="true"][style*="flex-end"]');
-    const bars = chart ? Array.from(chart.children) : [];
+  it("repli textuel accessible : ≥2 jours mais TOUTES les minutes à 0 → PAS de graphique", () => {
+    const allZero: ParentStats = {
+      ...FULL_STATS,
+      regularity: {
+        ...FULL_STATS.regularity,
+        days: [
+          { dayOrdinal: 50, activeMs: 0, activeMinutes: 0, respect: "under" },
+          { dayOrdinal: 51, activeMs: 0, activeMinutes: 0, respect: "under" },
+        ],
+      },
+    };
+    render(<ParentDashboard {...BASE_PROPS} stats={allZero} progression={FULL_PROGRESSION} />);
+    expect(screen.getByText(d.regularity.chartEmpty)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
+  });
+
+  it("graphique lisible avec un jour à 0 min : ce jour reste au plancher 4 % (jamais 0 %, #170)", () => {
+    const mixed: ParentStats = {
+      ...FULL_STATS,
+      regularity: {
+        ...FULL_STATS.regularity,
+        days: [
+          { dayOrdinal: 50, activeMs: 0, activeMinutes: 0, respect: "under" },
+          { dayOrdinal: 51, activeMs: 5 * 60_000, activeMinutes: 5, respect: "under" },
+        ],
+      },
+    };
+    render(<ParentDashboard {...BASE_PROPS} stats={mixed} progression={FULL_PROGRESSION} />);
+    // Ciblage PRÉCIS du graphique de régularité (`getByRole` par nom, PAS un `querySelector`
+    // générique `[role="img"]` — les 4 barres de justesse portent AUSSI `role="img"` et sont
+    // rendues AVANT dans le DOM, un sélecteur générique ciblerait la mauvaise barre en silence).
+    const chart = screen.getByRole("img", { name: d.regularity.chartLabel });
+    const bars = Array.from(chart.children) as HTMLElement[];
+    expect(bars).toHaveLength(2);
+    expect(bars[0].style.height).toBe("4%"); // jour à 0 min — plancher, jamais invisible
+    expect(bars[1].style.height).toBe("100%"); // jour au maximum de la fenêtre
+  });
+
+  it("aucune barre du graphique lisible n'a une hauteur nulle (rendu ≠ invisible, #170)", () => {
+    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
+    const chart = screen.getByRole("img", { name: d.regularity.chartLabel });
+    const bars = Array.from(chart.children) as HTMLElement[];
     expect(bars.length).toBeGreaterThan(0);
     for (const bar of bars) {
-      const height = (bar as HTMLElement).style.height;
-      expect(height).not.toBe("0%");
-      expect(height).not.toBe("");
+      expect(bar.style.height).not.toBe("0%");
+      expect(bar.style.height).not.toBe("");
     }
   });
 });
@@ -357,6 +466,32 @@ describe("ParentDashboard — progression", () => {
   it("repli neutre quand le socle n'est pas amorcé (progression null)", () => {
     render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={null} />);
     expect(screen.getByText(d.progression.unavailable)).toBeInTheDocument();
+  });
+
+  it('pluralisation FR (bug PR #239 "0 créatures") : "niveau"/"créature" SINGULIER à 0 et 1, PLURIEL à ≥2', () => {
+    const progressionWith = (totalLevels: number, creaturesCount: number): ProgressionSummary => ({
+      ...FULL_PROGRESSION,
+      levelsCompleted: 0,
+      totalLevels,
+      creaturesCount,
+    });
+
+    const { rerender } = render(
+      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={progressionWith(1, 0)} />,
+    );
+    expect(screen.getByText("0 / 1 niveau")).toBeInTheDocument();
+    expect(screen.getByText("0 créature débloquée")).toBeInTheDocument();
+
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={progressionWith(1, 1)} />,
+    );
+    expect(screen.getByText("1 créature débloquée")).toBeInTheDocument();
+
+    rerender(
+      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={progressionWith(11, 2)} />,
+    );
+    expect(screen.getByText("0 / 11 niveaux")).toBeInTheDocument();
+    expect(screen.getByText("2 créatures débloquées")).toBeInTheDocument();
   });
 });
 

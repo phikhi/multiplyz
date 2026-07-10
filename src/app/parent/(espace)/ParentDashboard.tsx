@@ -15,7 +15,7 @@ import type {
 } from "@/lib/parent/stats";
 import type { DayActivity, DayRespect } from "@/lib/parent/regularity";
 import type { ProgressionSummary } from "@/lib/parent/progression";
-import { signedPercentPoints, toPercent, toSecondsFr } from "./dashboard-format";
+import { pluralize, signedPercentPoints, toPercent, toSecondsFr } from "./dashboard-format";
 
 /**
  * **Tableau de bord parent** (story 7.7, WIREFRAMES §7, PLAN §Espace parent). Assemble les
@@ -191,13 +191,21 @@ function TodayBanner({
       : levelsToday === null
         ? fill(d.today.minutesOnly, "{min}", String(today.activeMinutes))
         : fill(
-            fill(d.today.summary, "{min}", String(today.activeMinutes)),
+            fill(
+              pluralize(levelsToday, d.today.summary, d.today.summaryPlural),
+              "{min}",
+              String(today.activeMinutes),
+            ),
             "{n}",
             String(levelsToday),
           );
   const streak =
     currentStreakDays > 0
-      ? fill(d.today.streak, "{n}", String(currentStreakDays))
+      ? fill(
+          pluralize(currentStreakDays, d.today.streak, d.today.streakPlural),
+          "{n}",
+          String(currentStreakDays),
+        )
       : d.today.noStreak;
   return (
     <div style={sectionStyle}>
@@ -423,13 +431,17 @@ function ReviewSection({ reviewList }: { readonly reviewList: readonly ReviewIte
 // ============================================================================
 // Régularité (jours joués, série record, respect de la fenêtre saine, mini-graphique jours).
 // ============================================================================
+// `maxMinutes > 0` est GARANTI par le seul appelant (`isChartReadable`, plus bas) : un
+// `maxMinutes` nul empêche le graphique de se rendre (repli textuel à la place) → pas de
+// branche défensive `maxMinutes === 0` ici (redondante avec la garde de l'appelant, jamais
+// atteignable/testable — CLAUDE.md « correct ≠ testable ≠ nécessaire », rétro #143).
 const chartBarStyle = (activeMinutes: number, maxMinutes: number) =>
   ({
     display: "block",
     width: "var(--parent-chart-bar-width)",
     // Hauteur PROPORTIONNELLE (jamais 0 si l'enfant a joué — `Math.max` évite une barre
     // invisible pour une activité réelle mais très courte, cf. #170 « rendu ≠ visible »).
-    height: maxMinutes > 0 ? `${Math.max((activeMinutes / maxMinutes) * 100, 4)}%` : "4%",
+    height: `${Math.max((activeMinutes / maxMinutes) * 100, 4)}%`,
     backgroundColor: "var(--parent-chart-fill-bg)",
     borderRadius: "var(--parent-bar-radius)",
   }) as const;
@@ -463,12 +475,26 @@ function RegularitySection({
   // de largeur de graphique inventé, cf. corps de PR).
   const recentDays = days.slice(-7);
   const maxMinutes = recentDays.reduce((max, day) => Math.max(max, day.activeMinutes), 0);
+  // Repli textuel accessible (review Frontend PR #239) : à < 2 jours ou toutes les minutes à 0,
+  // le graphique n'est qu'un trait quasi invisible (chaque barre au plancher 4 %, indiscernable
+  // d'un bug d'affichage) — un repli TEXTE vaut mieux qu'un graphique illisible ET non-consommé.
+  const isChartReadable = recentDays.length >= 2 && maxMinutes > 0;
   return (
     <div style={sectionStyle}>
       <h2 style={headingStyle}>{d.regularity.heading}</h2>
-      <p style={bodyTextStyle}>{fill(d.regularity.daysPlayed, "{n}", String(daysPlayed))}</p>
+      <p style={bodyTextStyle}>
+        {fill(
+          pluralize(daysPlayed, d.regularity.daysPlayed, d.regularity.daysPlayedPlural),
+          "{n}",
+          String(daysPlayed),
+        )}
+      </p>
       <p style={mutedTextStyle}>
-        {fill(d.regularity.recordStreak, "{n}", String(recordStreakDays))}
+        {fill(
+          pluralize(recordStreakDays, d.regularity.recordStreak, d.regularity.recordStreakPlural),
+          "{n}",
+          String(recordStreakDays),
+        )}
       </p>
       {today !== null && (
         <p style={{ ...bodyTextStyle, ...rowStyle }}>
@@ -483,12 +509,18 @@ function RegularitySection({
           String(respectWindowMaxMinutes),
         )}
       </p>
-      {recentDays.length > 0 && (
-        <div aria-hidden="true" style={chartTrackStyle}>
+      {isChartReadable ? (
+        <div role="img" aria-label={d.regularity.chartLabel} style={chartTrackStyle}>
           {recentDays.map((day) => (
-            <span key={day.dayOrdinal} style={chartBarStyle(day.activeMinutes, maxMinutes)} />
+            <span
+              key={day.dayOrdinal}
+              aria-hidden="true"
+              style={chartBarStyle(day.activeMinutes, maxMinutes)}
+            />
           ))}
         </div>
+      ) : (
+        <p style={mutedTextStyle}>{d.regularity.chartEmpty}</p>
       )}
     </div>
   );
@@ -510,13 +542,29 @@ function ProgressionSection({ progression }: { readonly progression: Progression
           </p>
           <p style={mutedTextStyle}>
             {fill(
-              fill(d.progression.levels, "{completed}", String(progression.levelsCompleted)),
+              fill(
+                pluralize(
+                  progression.totalLevels,
+                  d.progression.levels,
+                  d.progression.levelsPlural,
+                ),
+                "{completed}",
+                String(progression.levelsCompleted),
+              ),
               "{total}",
               String(progression.totalLevels),
             )}
           </p>
           <p style={mutedTextStyle}>
-            {fill(d.progression.creatures, "{n}", String(progression.creaturesCount))}
+            {fill(
+              pluralize(
+                progression.creaturesCount,
+                d.progression.creatures,
+                d.progression.creaturesPlural,
+              ),
+              "{n}",
+              String(progression.creaturesCount),
+            )}
           </p>
         </>
       )}

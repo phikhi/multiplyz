@@ -471,17 +471,24 @@ export const fr = {
       title: "Espace parent",
       /** Sous-titre nominatif (gabarit prénom) — écho littéral de COPY §5 « Progression de {prénom} ». */
       subtitle: "Progression de {prénom}",
-      /** Bandeau du jour (minutes + niveaux touchés aujourd'hui) + série. */
+      /** Bandeau du jour (minutes + niveaux touchés aujourd'hui) + série. Gabarits SINGULIER/
+       * PLURIEL séparés (français : 0 ET 1 → singulier, ≥2 → pluriel — même règle que
+       * `collection.count`/`countPlural`, `CollectionScreen.tsx`) : sélection au call-site via
+       * `pluralize()` (`dashboard-format.ts`), jamais un gabarit unique figé au pluriel. */
       today: {
-        /** Résumé du jour (gabarits minutes + niveaux, WIREFRAMES §7 « Aujourd'hui : 18 min · 3 niveaux »). */
-        summary: "Aujourd'hui : {min} min · {n} niveaux",
+        /** Résumé du jour, niveau au SINGULIER (0 ou 1 niveau, WIREFRAMES §7 « Aujourd'hui : 18 min · 3 niveaux »). */
+        summary: "Aujourd'hui : {min} min · {n} niveau",
+        /** Résumé du jour, niveaux au PLURIEL (≥2). */
+        summaryPlural: "Aujourd'hui : {min} min · {n} niveaux",
         /** Repli minutes seules (progression indisponible, `SocleUnavailableError` — jamais
          * affirmer un compte de niveaux qu'on n'a pas pu calculer). */
         minutesOnly: "Aujourd'hui : {min} min",
         /** Repli quand l'enfant n'a pas encore joué aujourd'hui (no-fail, jamais un 0 min sec). */
         notPlayed: "Pas encore joué aujourd'hui.",
-        /** Série de jours consécutifs (gabarit nombre, WIREFRAMES §7 « Série : 🔥 5 jours »). */
-        streak: "Série : {n} jours",
+        /** Série de jours consécutifs, SINGULIER (0 ou 1 jour, WIREFRAMES §7 « Série : 🔥 5 jours »). */
+        streak: "Série : {n} jour",
+        /** Série de jours consécutifs, PLURIEL (≥2). */
+        streakPlural: "Série : {n} jours",
         /** Repli quand aucune série n'est en cours (currentStreakDays = 0, no-fail). */
         noStreak: "Pas de série en cours.",
       },
@@ -555,22 +562,35 @@ export const fr = {
         /** Clarifie que la fenêtre est un repère pédagogique FIXE (gabarits bornes ⚙️), distinct
          * du réglage de temps d'écran configurable du foyer (7.3/7.8, note PO story 7.4). */
         respectHint: "Repère indicatif ({min}-{max} min), distinct du réglage de temps d'écran.",
-        /** Total de jours joués (gabarit nombre). */
-        daysPlayed: "{n} jours joués au total",
-        /** Meilleure série de l'historique (gabarit nombre). */
-        recordStreak: "Record : {n} jours",
-        /** Légende accessible du graphique minutes/jour. */
+        /** Total de jours joués, SINGULIER (0 ou 1 jour — le participe accorde aussi). */
+        daysPlayed: "{n} jour joué au total",
+        /** Total de jours joués, PLURIEL (≥2). */
+        daysPlayedPlural: "{n} jours joués au total",
+        /** Meilleure série de l'historique, SINGULIER (0 ou 1 jour). */
+        recordStreak: "Record : {n} jour",
+        /** Meilleure série de l'historique, PLURIEL (≥2). */
+        recordStreakPlural: "Record : {n} jours",
+        /** Légende accessible du graphique minutes/jour (consommée en `role="img"` sur le
+         * conteneur du graphique — jamais un token/string déclaré sans consommateur DOM, #125). */
         chartLabel: "Minutes jouées par jour (7 derniers jours)",
+        /** Repli textuel quand trop peu de jours pour un graphique lisible (< 2 jours ou toutes
+         * les minutes à 0) — remplace le graphique plutôt qu'un trait quasi-invisible « cassé ». */
+        chartEmpty: "Pas encore assez de jours pour afficher un graphique.",
       },
       /** Progression (monde/niveau, créatures débloquées, PLAN §Espace parent). */
       progression: {
         heading: "Progression",
         /** Monde courant (gabarit nombre 1-based). */
         world: "Monde {n}",
-        /** Niveaux terminés du monde courant (gabarits complétés/total). */
-        levels: "{completed} / {total} niveaux",
-        /** Créatures débloquées (gabarit nombre, collection). */
-        creatures: "{n} créatures débloquées",
+        /** Niveaux terminés du monde courant, total au SINGULIER (gabarits complétés/total). */
+        levels: "{completed} / {total} niveau",
+        /** Niveaux terminés du monde courant, total au PLURIEL (≥2 — cas pratique courant, le
+         * monde compte `levelsPerWorld + 1 ≥ 2` niveaux, mais scindé pour la cohérence). */
+        levelsPlural: "{completed} / {total} niveaux",
+        /** Créatures débloquées, SINGULIER (0 ou 1 — le participe accorde aussi). */
+        creatures: "{n} créature débloquée",
+        /** Créatures débloquées, PLURIEL (≥2). */
+        creaturesPlural: "{n} créatures débloquées",
         /** Repli si le socle de secours n'est pas amorcé (`SocleUnavailableError`, cf. carte 6.7). */
         unavailable: "Progression indisponible pour le moment.",
       },

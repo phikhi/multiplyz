@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signedPercentPoints, toPercent, toSecondsFr } from "./dashboard-format";
+import { pluralize, signedPercentPoints, toPercent, toSecondsFr } from "./dashboard-format";
 
 describe("toPercent", () => {
   it("arrondit un ratio [0,1] en pourcentage entier", () => {
@@ -28,5 +28,14 @@ describe("signedPercentPoints", () => {
     // Signe typographique MOINS (U+2212), jamais le trait d'union ASCII (U+002D).
     expect(signedPercentPoints(-0.01)).not.toContain("-");
     expect(signedPercentPoints(-0.01)).toContain("−");
+  });
+});
+
+describe("pluralize", () => {
+  it('règle FR : 0 ET 1 → singulier, ≥2 → pluriel (bug source PR #239 : "1 jours")', () => {
+    expect(pluralize(0, "jour", "jours")).toBe("jour");
+    expect(pluralize(1, "jour", "jours")).toBe("jour");
+    expect(pluralize(2, "jour", "jours")).toBe("jours");
+    expect(pluralize(11, "jour", "jours")).toBe("jours");
   });
 });
