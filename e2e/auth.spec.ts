@@ -4,6 +4,7 @@ import { strings } from "../src/strings";
 import { BRAND_NAME } from "../src/config/brand";
 import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
 import { PENDING_WORLD_A, PENDING_WORLD_B } from "./seed-pending-worlds";
+import { COLLECTION_SESSION_TOKEN, COLLECTION_CREATURES } from "./seed-collection";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -1344,6 +1345,121 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(phone.teddyGeom!.upstreamMedBottom).not.toBeNull();
     expect(phone.teddyGeom!.top).toBeGreaterThanOrEqual(phone.teddyGeom!.upstreamMedBottom!);
     await page.screenshot({ path: "docs/captures/255-carte-phone.png", fullPage: true });
+  });
+
+  // ==========================================================================
+  // Collection responsive reflow (story 8.2b, #266) — grille 3 colonnes sur téléphone
+  // (WIREFRAMES §8, piège EXACT #127 : « 3 colonnes rendues 1-2 sur téléphone »). Profil
+  // dédié `Nino` amorcé hors de la chaîne de progression de Léa (`seed-collection.ts` — la
+  // collection ne se peuple qu'au boss, hors scope d'un test de reflow géométrique ; la
+  // boutique/gacha n'existe pas encore, cf. `discovered` #269) + cookie de session injecté
+  // directement (même patron que la suppression de frère/sœur, cf. plus haut) : surface
+  // DISJOINTE de la séquence Léa, aucune dépendance à l'état laissé par les tests précédents.
+  // ==========================================================================
+  test("collection → grille 3 colonnes RENDUES aux 3 tailles, cibles tactiles, aucune régression (story 8.2b #266, captures)", async ({
+    page,
+  }) => {
+    const cookie = {
+      name: "mz_session",
+      value: COLLECTION_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+    await page.goto("/collection");
+    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.collection.title }),
+    ).toBeVisible();
+    // Les 5 créatures amorcées sont bien affichées avant de lire la géométrie (dont la
+    // légendaire, dernière de la liste — preuve que le fetch serveur a résolu la collection).
+    await expect(page.getByText(COLLECTION_CREATURES[4].nameDefault)).toBeVisible();
+
+    /**
+     * Géométrie RENDUE (jamais un `data-*`/une classe seule, #127) des 5 cartes de créature :
+     * compte de lignes/colonnes DISTINCTES (tops/lefts uniques des `[data-collection-card]`),
+     * tap targets ≥44px des boutons « Renommer », aucun débordement horizontal. 5 créatures ⇒
+     * une grille 3-colonnes rend EXACTEMENT 3 cartes sur la 1ʳᵉ ligne et 2 sur la 2ᵉ — un
+     * `auto-fill`/`auto-fit` (ou un reflow cassé à 1-2 colonnes) romprait ce compte.
+     */
+    async function readCollectionGeometry() {
+      return page.evaluate((renameNeedle) => {
+        const cards = [...document.querySelectorAll<HTMLElement>("[data-collection-card]")];
+        const rects = cards.map((c) => {
+          const r = c.getBoundingClientRect();
+          return { top: Math.round(r.top), left: Math.round(r.left) };
+        });
+        const tops = [...new Set(rects.map((r) => r.top))].sort((a, b) => a - b);
+        const firstRowLefts = new Set(rects.filter((r) => r.top === tops[0]).map((r) => r.left));
+        const renameButtons = [...document.querySelectorAll("button")]
+          .filter((b) => (b.textContent ?? "").includes(renameNeedle))
+          .map((b) => {
+            const r = b.getBoundingClientRect();
+            return { width: r.width, height: r.height };
+          });
+        return {
+          cardCount: rects.length,
+          rowCount: tops.length,
+          columnsInFirstRow: firstRowLefts.size,
+          scrollWidth: document.documentElement.scrollWidth,
+          innerWidth: window.innerWidth,
+          renameButtons,
+        };
+      }, strings.collection.rename);
+    }
+
+    // ---------- DESKTOP (1280×800) : disposition ACTUELLE préservée (WIREFRAMES §8 « mêmes
+    // dispositions » desktop/tablette/téléphone pour la collection — AUCUNE régression) ----------
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const desktop = await readCollectionGeometry();
+    expect(desktop.cardCount).toBe(5);
+    expect(desktop.columnsInFirstRow).toBe(3);
+    expect(desktop.rowCount).toBe(2);
+    expect(desktop.scrollWidth).toBeLessThanOrEqual(desktop.innerWidth + 1);
+    for (const btn of desktop.renameButtons) {
+      expect(btn.width).toBeGreaterThanOrEqual(44);
+      expect(btn.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.screenshot({ path: "docs/captures/266-collection-desktop.png", fullPage: true });
+
+    // ---------- TABLETTE (834×1194, iPad Air portrait) : disposition ACTUELLE préservée ----------
+    await page.setViewportSize({ width: 834, height: 1194 });
+    const tablet = await readCollectionGeometry();
+    expect(tablet.cardCount).toBe(5);
+    expect(tablet.columnsInFirstRow).toBe(3);
+    expect(tablet.rowCount).toBe(2);
+    expect(tablet.scrollWidth).toBeLessThanOrEqual(tablet.innerWidth + 1);
+    await page.screenshot({ path: "docs/captures/266-collection-tablette.png", fullPage: true });
+
+    // ---------- TÉLÉPHONE (375×812) : reflow WIREFRAMES §8 « Collection : grille 3 colonnes » ----------
+    await page.setViewportSize({ width: 375, height: 812 });
+    const phone = await readCollectionGeometry();
+    expect(phone.cardCount).toBe(5);
+    // Garde E2E de géométrie RENDUE (#127) : rougit si le reflow retombe à 1-2 colonnes (ex.
+    // `auto-fill`/`auto-fit` qui n'honorerait pas un compte fixe à 375px) — EXACTEMENT le piège
+    // #127 (« 3 colonnes WIREFRAMES §8 rendues 1-2 sur téléphone »).
+    expect(phone.columnsInFirstRow).toBe(3);
+    expect(phone.rowCount).toBe(2); // 5 créatures / 3 colonnes ⇒ 2 lignes (3 + 2)
+    expect(phone.scrollWidth).toBeLessThanOrEqual(phone.innerWidth + 1); // jamais de scrollbar horizontale à 375px
+    for (const btn of phone.renameButtons) {
+      expect(btn.width).toBeGreaterThanOrEqual(44);
+      expect(btn.height).toBeGreaterThanOrEqual(44);
+    }
+    // Cible tactile du lien retour (dernier CTA de l'écran, zone pouce WIREFRAMES §8).
+    const backGeom = await page.evaluate((label) => {
+      const link = [...document.querySelectorAll("a")].find(
+        (a) => (a.textContent ?? "").trim() === label,
+      );
+      if (link === undefined) return null;
+      const r = link.getBoundingClientRect();
+      return { width: r.width, height: r.height };
+    }, strings.collection.back);
+    expect(backGeom).not.toBeNull();
+    expect(backGeom!.width).toBeGreaterThanOrEqual(44);
+    expect(backGeom!.height).toBeGreaterThanOrEqual(44);
+
+    await page.screenshot({ path: "docs/captures/266-collection-phone.png", fullPage: true });
   });
 
   test("route jeu sans session valide → redirection vers le sélecteur (capture)", async ({
