@@ -4,6 +4,11 @@
 // Problème résolu : deux runs `continue multiplyz` (cron) qui se recouvrent → merges parallèles,
 // clôtures d'épic prématurées, worktrees/branches écrasés, tokens gâchés (#264, 2 collisions réelles).
 //
+// Portée (honnête — ne pas sur-revendiquer, cf. #164) : ce verrou empêche de DÉMARRER une story
+// tant qu'un BUILD concurrent est verrouillé. Il réduit fortement le recouvrement mais ne couvre
+// PAS la fenêtre planning/merge/clôture d'épic d'un autre run (main checkout, aucun lock agent-*) —
+// full-exclusion pleine-durée = variante lockfile/flock (#264, follow-up).
+//
 // Principe : un build de story tourne dans un worktree `.claude/worktrees/agent-*` VERROUILLÉ
 // (git worktree lock ; le fichier `.git/worktrees/<name>/locked` porte la raison
 // « claude agent <name> (pid NNNNN start ...) »). Au DÉMARRAGE (avant que CE run n'ait spawn
@@ -70,11 +75,16 @@ function scan() {
     }
     const pidMatch = reason.match(/pid\s+(\d+)/i);
     const pid = pidMatch ? Number(pidMatch[1]) : null;
+    // pid non parsable = liveness INDÉTERMINABLE → fail-safe vers "vivant" (bloquer),
+    // jamais "mort" : STALE conseille `remove --force`, on ne détruit pas un worktree
+    // potentiellement vivant sur une raison de verrou inattendue.
+    const pidUnknown = pid == null;
     locks.push({
       worktree: name,
       branch: worktreeBranch(wtGitDir),
       pid,
-      alive: pid != null && pidAlive(pid),
+      pidUnknown,
+      alive: pidUnknown || pidAlive(pid),
       reason,
     });
   }
@@ -114,7 +124,10 @@ process.stdout.write(JSON.stringify(out, null, 2) + "\n");
 const human =
   verdict === "BLOCKED"
     ? `[lock] BLOCKED — run concurrent actif : ${live
-        .map((l) => `${l.worktree}@${l.branch ?? "?"} (pid ${l.pid} vivant)`)
+        .map(
+          (l) =>
+            `${l.worktree}@${l.branch ?? "?"} (${l.pidUnknown ? "pid inconnu → fail-safe" : `pid ${l.pid} vivant`})`,
+        )
         .join(", ")} → YIELD, ne pas démarrer de story.`
     : verdict === "STALE"
       ? `[lock] STALE — orphelin(s) à nettoyer : ${stale

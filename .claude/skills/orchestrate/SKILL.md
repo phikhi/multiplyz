@@ -12,7 +12,7 @@ Playbook de la **boucle autonome** (cf. **ADR 0004** + ADR 0003, WORKFLOW §20).
 
 ## 1. Synchroniser l'état
 
-**1.0 — Verrou d'exclusion mutuelle (EN PREMIER, avant tout — #264 Option A, ADR 0004).** Un seul run orchestrateur actif à la fois. Deux runs cron qui se recouvrent = merges parallèles + clôtures d'épic prématurées + worktrees écrasés (2 collisions réelles). Au démarrage, AVANT de spawn le moindre subagent :
+**1.0 — Verrou d'exclusion mutuelle (EN PREMIER, avant tout — #264 Option A, ADR 0004).** Empêche de **démarrer une story** tant qu'un **build concurrent** est verrouillé (réduit fortement le recouvrement ; ne couvre pas la fenêtre planning/merge d'un autre run sans build actif — full-exclusion pleine-durée = follow-up lockfile/flock). Deux runs cron qui se recouvrent = merges parallèles + clôtures d'épic prématurées + worktrees écrasés (2 collisions réelles). Au démarrage, AVANT de spawn le moindre subagent :
 ```bash
 node .claude/skills/orchestrate/concurrency-guard.mjs   # scanne les verrous agent-* (pid vivant ?)
 ```
