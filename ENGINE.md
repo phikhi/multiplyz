@@ -87,7 +87,7 @@ qui **respecte l'invariant §2 « progression monotone, jamais de régression »
   - **`seed ≤ box_courant`** → **aucune écriture** (jamais de rétrograde, espacement préservé) ;
   - **fait non re-sondé** → inchangé.
 - La **correction vers le bas** (enfant surestimé) reste gérée par le **rétrograde Leitner normal**
-  (`box − demoteBoxes` sur faux, §2 / PRODUCT :108) **pendant le jeu**, jamais par le recalibrage.
+  (`box − demoteBoxes` sur faux, §2) **pendant le jeu**, jamais par le recalibrage.
 - **Atomicité** : les upserts `mastery` **et** l'effacement du drapeau vivent dans **une** transaction
   (la demande est consommée exactement une fois). Le recalibrage n'écrit **jamais** `attempts` (parité
   avec le diagnostic initial). Détail : ADR 0016.

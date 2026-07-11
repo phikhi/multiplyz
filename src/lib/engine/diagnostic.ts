@@ -531,7 +531,7 @@ export interface RecalibrationUpsert {
  * jamais de régression »** (ENGINE §2, PRODUCT :38) : le recalibrage ne peut que **relever** un
  * fait sous-amorcé ou **créer** un fait neuf — **jamais** rétrograder une boîte acquise. La
  * correction VERS LE BAS (enfant surestimé) reste gérée par le rétrograde Leitner normal (`−demoteBoxes`
- * sur faux, PRODUCT :108) pendant le jeu, **pas** par le recalibrage.
+ * sur faux, ENGINE §2) pendant le jeu, **pas** par le recalibrage.
  *
  * Pour **chaque** fait re-sondé (`seed = seedBox(response)` : 3 fluent / 2 lent / 0 faux, **même**
  * classement `isFluent` que l'amorçage — pas de barème réinventé) :

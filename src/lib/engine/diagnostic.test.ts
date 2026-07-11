@@ -588,7 +588,7 @@ describe("recalibrateMastery — GARDE MONOTONE (jamais de régression, invarian
 
   it("réponse FAUSSE (box 0) sur un fait box 2 → AUCUNE écriture (0 ≤ 2, jamais rétrograde)", () => {
     // La correction VERS LE BAS (enfant surestimé) reste gérée par le rétrograde Leitner normal
-    // pendant le jeu (−demoteBoxes sur faux, PRODUCT :108) — JAMAIS par le recalibrage (ADR 0016).
+    // pendant le jeu (−demoteBoxes sur faux, ENGINE §2) — JAMAIS par le recalibrage (ADR 0016).
     const current = masteryState({ box: 2 });
     expect(
       recalibrateMastery([{ response: response({ correct: false }), current }], CONFIG, NOW),

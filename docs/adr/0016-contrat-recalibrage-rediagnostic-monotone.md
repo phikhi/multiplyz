@@ -3,7 +3,7 @@
 - **Statut** : accepté
 - **Type** : pedago (contrat du modèle de maîtrise) — **précise** le contrat, ne modifie **aucune** décision verrouillée
 - **Portée** : majeure (drift pédagogie arbitré par le propriétaire — issue #237 → **Option A**)
-- **Liens** : issue #237 (drift ENGINE) · issue #219 (story 7.6) · PR (cette story) · spec [ENGINE.md](../../ENGINE.md) §2/§3 · [PRODUCT.md](../../PRODUCT.md) §3.6 :30/:38/:108 · [DETAILS.md](../../DETAILS.md) §3 :29
+- **Liens** : issue #237 (drift ENGINE) · issue #219 (story 7.6) · PR (cette story) · spec [ENGINE.md](../../ENGINE.md) §2 (rétrograde) /§3 (diagnostic) · [PRODUCT.md](../../PRODUCT.md) §3.6 :30/:38 · [DETAILS.md](../../DETAILS.md) §3 :29
 
 ## Contexte
 
@@ -53,7 +53,7 @@ violation d'invariant.**
      jamais de perturbation de l'espacement d'un fait déjà mieux placé ;
    - **fait non re-sondé** → **INCHANGÉ**.
    La **correction VERS LE BAS** (enfant surestimé) reste gérée par le **rétrograde Leitner normal**
-   (`−demoteBoxes` sur faux, `PRODUCT.md` :108) **pendant le jeu**, **jamais** par le recalibrage.
+   (`−demoteBoxes` sur faux, `ENGINE.md` §2) **pendant le jeu**, **jamais** par le recalibrage.
 
 4. **Atomicité** — la fusion (`seedRecalibration`) applique les upserts `mastery` **PUIS** efface le
    drapeau (`recalibration_requested := false`) dans **UNE** transaction synchrone (better-sqlite3,
