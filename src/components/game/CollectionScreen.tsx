@@ -272,6 +272,7 @@ function CreatureCard({
       <RarityBadge rarity={entry.rarity} />
       {entry.story !== "" && (
         <p
+          data-collection-story=""
           style={{
             margin: 0,
             fontFamily: "var(--font-family-body)",
@@ -400,6 +401,7 @@ export function CollectionScreen() {
         <>
           <h1 style={headingStyle}>{strings.collection.title}</h1>
           <p
+            data-collection-count=""
             style={{
               margin: 0,
               fontFamily: "var(--font-family-body)",

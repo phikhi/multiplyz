@@ -288,6 +288,41 @@ describe("CollectionScreen — contraste WCAG résolu des glyphes rendus (rétro
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
+
+  // #126 : la story 8.2b TOUCHE cet écran → auditer TOUS ses glyphes/textes rendus, pas seulement
+  // ceux de la carte de créature. Les 3 assertions ci-dessous couvrent le libellé du bouton
+  // « Renommer » (sur --color-bg-tertiary, un fond que la suite n'exerçait pas), le CTA « Retour à
+  // la carte » et le titre h1 — tous en flux normal, plein-alpha (aucune opacity d'ancêtre, prouvé
+  // par le bloc d'audit #226 ci-dessus) → le contraste résolu sur le fond réel suffit (pas de
+  // paintedContrast requis, cf. #226).
+  it.each(["light", "dark"] as Theme[])(
+    "%s : le libellé du bouton « Renommer » (--collection-text) ≥ 4.5:1 sur son fond (--color-bg-tertiary)",
+    (theme) => {
+      const text = resolveTokenColor(theme, "--collection-text");
+      const bg = resolveTokenColor(theme, "--color-bg-tertiary");
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as Theme[])(
+    "%s : le CTA « Retour à la carte » (--color-text-inverse) ≥ 4.5:1 sur son fond accent plein (--color-accent-primary)",
+    (theme) => {
+      // CTA sur fond ACCENT PLEIN → --color-text-inverse est ici légitime (règle a11y CLAUDE.md :
+      // text-inverse réservé à un fond accent plein, jamais un fond neutre).
+      const text = resolveTokenColor(theme, "--color-text-inverse");
+      const bg = resolveTokenColor(theme, "--color-accent-primary");
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it.each(["light", "dark"] as Theme[])(
+    "%s : le titre h1 (--color-text-primary) ≥ 4.5:1 sur le fond de PAGE (--color-bg-primary)",
+    (theme) => {
+      const text = resolveTokenColor(theme, "--color-text-primary");
+      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });
 
 /**
@@ -301,30 +336,44 @@ describe("CollectionScreen — contraste WCAG résolu des glyphes rendus (rétro
  * ou une `opacity` diluante sur l'un de ces éléments sans ajouter la garde correspondante.
  */
 describe("CollectionScreen — audit build #126 : zéro occlusion/opacité sur les glyphes rendus (#170/#190/#226)", () => {
-  it("carte, badge de rareté et silhouette placeholder restent en flux normal (position statique, jamais superposés)", async () => {
-    await renderReady([entry()]);
-    const card = document.querySelector<HTMLElement>("[data-collection-card]");
-    const placeholder = document.querySelector<HTMLElement>("[data-collection-placeholder]");
-    const rarityBadge = document.querySelector<HTMLElement>("[data-collection-rarity]");
-    expect(card).not.toBeNull();
-    expect(placeholder).not.toBeNull();
-    expect(rarityBadge).not.toBeNull();
-    for (const el of [card!, placeholder!, rarityBadge!]) {
+  /**
+   * Récupère les 6 éléments rendus de l'écran que l'audit doit couvrir (carte + les 5 glyphes/
+   * textes qu'elle porte : nom, rareté, histoire, placeholder, compteur). Chacun a un `data-*`
+   * dédié (jamais un query par texte, fragile à la copie) → l'audit couvre RÉELLEMENT ce que son
+   * titre énumère (#164 : pas d'over-claim comment↔code). Fixture avec `story` non vide ⇒ le `<p>`
+   * d'histoire EST rendu (sinon `data-collection-story` serait absent — le `not.toBeNull` rougirait).
+   */
+  async function renderAndCollectAuditedElements() {
+    await renderReady([entry({ story: "Une histoire." })]);
+    const audited = {
+      card: document.querySelector<HTMLElement>("[data-collection-card]"),
+      name: document.querySelector<HTMLElement>("[data-collection-name]"),
+      rarityBadge: document.querySelector<HTMLElement>("[data-collection-rarity]"),
+      story: document.querySelector<HTMLElement>("[data-collection-story]"),
+      placeholder: document.querySelector<HTMLElement>("[data-collection-placeholder]"),
+      count: document.querySelector<HTMLElement>("[data-collection-count]"),
+    };
+    // Chaque élément que le titre nomme DOIT exister — sinon l'audit serait vacuous (boucle vide).
+    for (const [key, el] of Object.entries(audited)) {
+      expect(el, `élément audité manquant : ${key}`).not.toBeNull();
+    }
+    return audited as { [K in keyof typeof audited]: HTMLElement };
+  }
+
+  it("carte + nom/rareté/histoire/placeholder/compteur restent en flux normal (position statique, jamais superposés)", async () => {
+    const a = await renderAndCollectAuditedElements();
+    for (const el of [a.card, a.name, a.rarityBadge, a.story, a.placeholder, a.count]) {
       // "" = valeur inline par défaut (jsdom résout la CASCADE, pas le layout — suffisant ici :
       // aucune règle CSS externe ne pose `position` sur ces éléments, seul le style inline compte).
       expect(["", "static"]).toContain(el.style.position);
     }
   });
 
-  it("aucun texte/glyphe de carte ne porte une opacity diluante (name/rareté/histoire/placeholder/compteur)", async () => {
-    await renderReady([entry({ story: "Une histoire." })]);
-    const name = document.querySelector<HTMLElement>("[data-collection-name]");
-    const rarityBadge = document.querySelector<HTMLElement>("[data-collection-rarity]");
-    const placeholder = document.querySelector<HTMLElement>("[data-collection-placeholder]");
-    expect(name).not.toBeNull();
-    expect(rarityBadge).not.toBeNull();
-    expect(placeholder).not.toBeNull();
-    for (const el of [name!, rarityBadge!, placeholder!]) {
+  it("aucun texte/glyphe ne porte une opacity diluante (carte/nom/rareté/histoire/placeholder/compteur)", async () => {
+    const a = await renderAndCollectAuditedElements();
+    // Rejet de TOUTE opacité diluante (#260 : jamais une valeur interdite unique) : seule
+    // pleine-opacité ("" hérité, ou "1" explicite) est acceptée sur un élément texte.
+    for (const el of [a.card, a.name, a.rarityBadge, a.story, a.placeholder, a.count]) {
       expect(["", "1"]).toContain(el.style.opacity);
     }
   });
