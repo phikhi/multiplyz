@@ -1197,6 +1197,154 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(page).toHaveURL(/\/jouer$/);
   });
 
+  test("carte du monde → reflow responsive 3 tailles (scroll vertical, cibles tactiles, non-occlusion Teddy/médaillon ET trait, story 8.2 #255, captures)", async ({
+    page,
+  }) => {
+    // Nouveau contexte (cookie absent) — même profil déjà amorcé par les tests précédents. La
+    // géométrie exacte des nœuds (compte/positions/types) n'est PAS le sujet ici (déjà couverte
+    // par le test précédent) : cette garde vérifie que le REFLOW (padding de <main> sous
+    // --bp-phone, story 8.2) ne casse RIEN — ni la géométrie (#123), ni la non-occlusion
+    // Teddy/médaillon/trait déjà prouvée (#170/#190), à AUCUNE des 3 largeurs.
+    await page.goto("/");
+    await page.getByRole("button", { name: profileLabel }).click();
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+    await page.goto("/carte");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    /**
+     * Géométrie RENDUE (jamais raisonnée, rétro #190 — CET écran est la surface littérale du
+     * piège) de tout ce qui doit rester non-occlus à la largeur COURANTE : padding de `<main>`
+     * (preuve du reflow), débordement horizontal (jamais de scrollbar), compte de nœuds
+     * (invariance #123), trait du chemin vs médaillon (#169/#170), avatar Teddy vs médaillon
+     * COURANT et médaillon AMONT (#170/#190), cible tactile du nœud courant.
+     */
+    async function readReflowState() {
+      return page.evaluate(() => {
+        const main = document.querySelector("main");
+        const nodeCount = document.querySelectorAll("[data-map-node]").length;
+        const svg = document.querySelector("[data-map-connector]");
+        const li = svg?.closest("li");
+        const badge = li?.querySelector("[data-map-node-status]");
+        const connector =
+          svg === null || badge == null
+            ? null
+            : {
+                svgTop: svg.getBoundingClientRect().top,
+                svgHeight: svg.getBoundingClientRect().height,
+                badgeBottom: badge.getBoundingClientRect().bottom,
+              };
+        const currentLink = document.querySelector('a[data-map-node-status="current"]');
+        const currentLi = currentLink?.closest("li");
+        const medallion = currentLink?.querySelector("[data-map-medallion]");
+        const upstreamLi = currentLi?.nextElementSibling; // column-reverse : suivant DOM = au-dessus visuellement
+        const upstreamMed = upstreamLi?.querySelector("[data-map-medallion]");
+        const teddy = document.querySelector("[data-world-teddy]");
+        const teddyGeom =
+          teddy === null || medallion == null
+            ? null
+            : {
+                bottom: teddy.getBoundingClientRect().bottom,
+                top: teddy.getBoundingClientRect().top,
+                medCenterY:
+                  medallion.getBoundingClientRect().top + medallion.getBoundingClientRect().height / 2,
+                upstreamMedBottom:
+                  upstreamMed == null ? null : upstreamMed.getBoundingClientRect().bottom,
+              };
+        const tapTarget =
+          currentLink === null
+            ? null
+            : {
+                w: currentLink.getBoundingClientRect().width,
+                h: currentLink.getBoundingClientRect().height,
+              };
+        return {
+          mainPaddingLeft: main === null ? null : getComputedStyle(main).paddingLeft,
+          scrollWidth: document.documentElement.scrollWidth,
+          scrollHeight: document.documentElement.scrollHeight,
+          innerWidth: window.innerWidth,
+          innerHeight: window.innerHeight,
+          nodeCount,
+          connector,
+          teddyGeom,
+          tapTarget,
+        };
+      });
+    }
+
+    // ---------- DESKTOP (1280×800) : disposition ACTUELLE préservée ----------
+    await page.setViewportSize({ width: 1280, height: 800 });
+    const desktop = await readReflowState();
+    expect(desktop.mainPaddingLeft).toBe("32px"); // --space-6 (2rem), inchangé (AC : pas de régression)
+    expect(desktop.scrollWidth).toBeLessThanOrEqual(desktop.innerWidth + 1); // jamais de scrollbar horizontale
+    expect(desktop.connector).not.toBeNull();
+    expect(desktop.connector!.svgTop).toBeGreaterThanOrEqual(desktop.connector!.badgeBottom - 1);
+    expect(desktop.connector!.svgHeight).toBeGreaterThan(0);
+    // Teddy per-monde garanti par le seed E2E (socle[0] pointe des fixtures réelles, cf. test
+    // précédent) — assertion FERME, pas conditionnelle (jamais un test qui passerait aussi vide).
+    expect(desktop.teddyGeom).not.toBeNull();
+    expect(desktop.teddyGeom!.bottom).toBeLessThanOrEqual(desktop.teddyGeom!.medCenterY);
+    expect(desktop.teddyGeom!.upstreamMedBottom).not.toBeNull();
+    expect(desktop.teddyGeom!.top).toBeGreaterThanOrEqual(desktop.teddyGeom!.upstreamMedBottom!);
+    await page.screenshot({ path: "docs/captures/255-carte-desktop.png", fullPage: true });
+
+    // ---------- TABLETTE (834×1194, iPad Air portrait) : disposition ACTUELLE préservée ----------
+    await page.setViewportSize({ width: 834, height: 1194 });
+    const tablet = await readReflowState();
+    expect(tablet.mainPaddingLeft).toBe("32px"); // --space-6 inchangé
+    expect(tablet.scrollWidth).toBeLessThanOrEqual(tablet.innerWidth + 1);
+    expect(tablet.nodeCount).toBe(desktop.nodeCount); // invariance géométrie (#123) au changement de largeur
+    expect(tablet.connector).not.toBeNull();
+    expect(tablet.connector!.svgTop).toBeGreaterThanOrEqual(tablet.connector!.badgeBottom - 1);
+    expect(tablet.teddyGeom).not.toBeNull();
+    expect(tablet.teddyGeom!.bottom).toBeLessThanOrEqual(tablet.teddyGeom!.medCenterY);
+    expect(tablet.teddyGeom!.upstreamMedBottom).not.toBeNull();
+    expect(tablet.teddyGeom!.top).toBeGreaterThanOrEqual(tablet.teddyGeom!.upstreamMedBottom!);
+    await page.screenshot({ path: "docs/captures/255-carte-tablette.png", fullPage: true });
+
+    // ---------- TÉLÉPHONE (375×812) : reflow WIREFRAMES §8 « carte : scroll vertical du chemin » ----------
+    await page.setViewportSize({ width: 375, height: 812 });
+    // Attend la bascule RÉELLE du breakpoint (matchMedia `change`, useIsPhone) avant de lire la
+    // géométrie — jamais un `waitForTimeout` (LEARNINGS : poll jusqu'à l'état réel, même patron 8.1).
+    await page.waitForFunction(() => {
+      const main = document.querySelector("main");
+      return main !== null && getComputedStyle(main).paddingLeft === "16px";
+    });
+    const phone = await readReflowState();
+    // Garde E2E de géométrie RENDUE (#127) : rougit si le reflow retombe au padding desktop.
+    expect(phone.mainPaddingLeft).toBe("16px"); // --space-4 (1rem), reflow réel
+    expect(phone.scrollWidth).toBeLessThanOrEqual(phone.innerWidth + 1); // aucun débordement horizontal
+    expect(phone.nodeCount).toBe(desktop.nodeCount); // invariance géométrie (#123) sous reflow phone
+    // Scroll vertical RÉEL (WIREFRAMES §8) : plus de contenu que le viewport ET le scroll fonctionne
+    // effectivement (jamais un `overflow:hidden` qui piégerait le contenu).
+    expect(phone.scrollHeight).toBeGreaterThan(phone.innerHeight);
+    const scrolled = await page.evaluate(() => {
+      window.scrollTo(0, document.body.scrollHeight);
+      return window.scrollY;
+    });
+    expect(scrolled).toBeGreaterThan(0);
+    await page.evaluate(() => window.scrollTo(0, 0)); // reset avant les lectures de géométrie suivantes
+    // Cible tactile du nœud courant ≥ 44px (a11y, aucune régression du reflow).
+    expect(phone.tapTarget).not.toBeNull();
+    expect(phone.tapTarget!.w).toBeGreaterThanOrEqual(44);
+    expect(phone.tapTarget!.h).toBeGreaterThanOrEqual(44);
+    // Non-occlusion du TRAIT vs médaillon (#169/#170) — revérifiée à cette largeur (jamais
+    // seulement raisonnée, rétro #190 : cet écran EST la surface littérale de ce piège).
+    expect(phone.connector).not.toBeNull();
+    expect(phone.connector!.svgTop).toBeGreaterThanOrEqual(phone.connector!.badgeBottom - 1);
+    expect(phone.connector!.svgHeight).toBeGreaterThan(0);
+    // Non-occlusion AVATAR TEDDY vs médaillon COURANT et médaillon AMONT (#170/#190) — la
+    // géométrie Teddy est en unités de token FIXES (indépendantes du padding de <main>), donc
+    // structurellement inchangée par le reflow, mais REVÉRIFIÉE ici en vrai navigateur (jamais
+    // une géométrie seulement raisonnée : c'est exactement le piège #190).
+    expect(phone.teddyGeom).not.toBeNull();
+    expect(phone.teddyGeom!.bottom).toBeLessThanOrEqual(phone.teddyGeom!.medCenterY);
+    expect(phone.teddyGeom!.upstreamMedBottom).not.toBeNull();
+    expect(phone.teddyGeom!.top).toBeGreaterThanOrEqual(phone.teddyGeom!.upstreamMedBottom!);
+    await page.screenshot({ path: "docs/captures/255-carte-phone.png", fullPage: true });
+  });
+
   test("route jeu sans session valide → redirection vers le sélecteur (capture)", async ({
     page,
   }) => {
