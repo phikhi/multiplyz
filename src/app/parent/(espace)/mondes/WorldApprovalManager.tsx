@@ -172,16 +172,24 @@ const dangerButtonStyle = {
 // État **désactivé / en cours** (rétro Frontend #226) : registre neutre « inactif » **sans
 // `opacity`** — voir `ProfileManager.tsx` pour l'analyse complète du piège (dilution du texte sous
 // 4.5:1 par composite `opacity`). Texte plein-alpha (`--color-text-secondary` sur
-// `--color-bg-secondary`, contraste déjà prouvé) ; le signal « désactivé » vient de
-// `disabled`/`aria-disabled` + `cursor:not-allowed` + bordure atténuée, jamais d'une opacité.
+// `--color-bg-tertiary`, contraste résolu ≥4.5:1) ; le signal « désactivé » vient de
+// `disabled`/`aria-disabled` + `cursor:not-allowed` + un **fond atténué**, jamais d'une opacité.
+//
+// Fix #251 (straggler du drain #227/#249, même patron que `ProfileManager.tsx`) : l'ancien
+// `backgroundColor: "transparent"` + `border-secondary` (~1.1:1) était quasi indiscernable des
+// boutons fantômes actifs — affordance faible (WCAG 1.4.11 exempte les contrôles inactifs, ce
+// n'est pas un défaut de conformité, mais un piège d'affordance : un bouton désactivé pouvait être
+// perçu comme cliquable). `--color-bg-tertiary` (même token que le fond « en creux » du clavier
+// PIN) remplit le bouton d'un ton lavande pâle clairement distinct du fond transparent des boutons
+// actifs, sans jamais toucher à l'alpha du texte.
 const disabledButtonStyle = {
   ...buttonBase,
   display: "inline-flex",
   alignItems: "center",
   gap: "var(--space-2)",
   color: "var(--color-text-secondary)",
-  backgroundColor: "transparent",
-  border: "1px solid var(--color-border-secondary)",
+  backgroundColor: "var(--color-bg-tertiary)",
+  border: "1px solid var(--color-border-primary)",
   cursor: "not-allowed",
 } as const;
 

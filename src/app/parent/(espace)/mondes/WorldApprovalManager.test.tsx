@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { strings } from "@/strings";
 import {
   contrastRatio,
+  mixSrgb,
   resolveTokenColor,
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
@@ -221,5 +222,98 @@ describe("WorldApprovalManager — contraste WCAG résolu (tous glyphes rendus)"
         ),
       ).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  it("état DÉSACTIVÉ (approbation/rejet en vol) : texte COMPOSITÉ réellement peint ≥ 4.5:1 (aucune dilution par `opacity`)", async () => {
+    // Rétro Frontend #226, repris #251 (même patron que `ProfileManager.tsx`) : un `opacity` sur le
+    // bouton compositerait le texte vers le fond → sous 4.5:1. Ce test lit l'opacité RÉELLEMENT
+    // rendue sur les DEUX boutons désactivés en vol (« Approuver » pendant l'appel serveur,
+    // « Confirmer » le rejet pendant l'appel serveur — les deux partagent `disabledButtonStyle`) et
+    // calcule la couleur POST-BLEND effectivement peinte (piège #170 « token résolu ≠ pixel peint »)
+    // → il ROUGIT si un `opacity` diluant est réintroduit. Fond réellement peint =
+    // `--color-bg-tertiary` (#251 : fill opaque du bouton, plus le fond transparent d'avant le fix).
+    let resolveApprove: (r: { ok: true }) => void = () => {};
+    approveMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveApprove = resolve;
+        }),
+    );
+    let resolveReject: (r: { ok: true }) => void = () => {};
+    rejectMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReject = resolve;
+        }),
+    );
+
+    function checkComposite(btn: HTMLElement) {
+      const opacity = btn.style.opacity === "" ? 1 : Number(btn.style.opacity);
+      expect(opacity).toBe(1); // garde directe : aucun opacity diluant sur un bouton désactivé
+      for (const theme of THEMES) {
+        const text = resolveTokenColor(theme, "color-text-secondary");
+        const bg = resolveTokenColor(theme, "color-bg-tertiary");
+        // Couleur réellement peinte = blend du texte sur le fond selon l'opacité rendue.
+        const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
+        expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+
+    render(<WorldApprovalManager pending={[WORLD_FORET]} />);
+
+    // 1) « Approuver » en vol — capturé et résolu AVANT d'ouvrir le panneau de rejet : les deux
+    // boutons partagent la même rangée conditionnelle (`actionRowStyle`), ouvrir le panneau de
+    // rejet démonte le bouton « Approuver » (branche `isRejectPanelOpen`), donc les deux états
+    // désactivés doivent être exercés en séquence, jamais superposés.
+    fireEvent.click(
+      worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.approve.action }),
+    );
+    const approveBtn = await screen.findByRole("button", { name: wa.approve.action });
+    expect(approveBtn).toBeDisabled();
+    checkComposite(approveBtn);
+    resolveApprove({ ok: true });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: wa.approve.action })).toBeEnabled(),
+    );
+
+    // 2) Ouvrir le panneau de rejet, puis « Confirmer » en vol.
+    fireEvent.click(
+      worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.reject.action }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: wa.reject.confirm }));
+    const confirmBtn = await screen.findByRole("button", { name: wa.reject.confirm });
+    expect(confirmBtn).toBeDisabled();
+    checkComposite(confirmBtn);
+    resolveReject({ ok: true });
+    await waitFor(() => expect(screen.getByText(wa.reject.success)).toBeInTheDocument());
+  });
+
+  it("état DÉSACTIVÉ : fond ATTÉNUÉ discriminant du fond transparent des boutons actifs (#251, patron #227)", async () => {
+    // Avant ce fix, `disabledButtonStyle` ne différait des boutons fantômes actifs que par une
+    // bordure ~1.1:1 (quasi indiscernable) — un bouton désactivé pouvait être perçu comme cliquable.
+    // Ce test ROUGIT si le fond désactivé retombe à "transparent" (régression vers le pattern
+    // faiblement discriminant) OU s'aligne par erreur sur le fond d'un bouton actif.
+    let resolveApprove: (r: { ok: true }) => void = () => {};
+    approveMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveApprove = resolve;
+        }),
+    );
+
+    render(<WorldApprovalManager pending={[WORLD_FORET]} />);
+    const card = worldCard("3", "Forêt enchantée");
+    const rejectGhost = card.getByRole("button", { name: wa.reject.action });
+
+    fireEvent.click(card.getByRole("button", { name: wa.approve.action }));
+    const approveBtn = await screen.findByRole("button", { name: wa.approve.action });
+    expect(approveBtn).toBeDisabled();
+
+    expect(approveBtn.style.backgroundColor).toBe("var(--color-bg-tertiary)");
+    expect(rejectGhost.style.backgroundColor).toBe("transparent");
+    expect(approveBtn.style.backgroundColor).not.toBe(rejectGhost.style.backgroundColor);
+
+    resolveApprove({ ok: true });
+    await waitFor(() => expect(approveBtn).not.toBeDisabled());
   });
 });
