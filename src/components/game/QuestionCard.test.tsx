@@ -5,9 +5,24 @@ import { strings } from "@/strings";
 import type { LevelQuestion } from "@/lib/engine/service";
 import {
   contrastRatio,
+  mixSrgb,
   resolveTokenColor,
 } from "@/components/game/scaffolds/test-support/tokens-css";
 import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
+
+/**
+ * Contraste WCAG COMPOSITÉ (#226) : lit l'`opacity` RÉELLEMENT rendue sur `el` et calcule la
+ * couleur **post-blend** effectivement peinte (`text` fondu vers `bg` selon l'opacité) avant de
+ * mesurer le ratio contre `bg`. Reproduit le patron canonique de `ProfileManager.test.tsx` — un
+ * token résolu ≥4.5:1 ne prouve RIEN dès qu'un `opacity` d'ancêtre/élément s'empile (CLAUDE.md
+ * #226). ROUGIT si un `opacity` diluant est (ré)introduit : `mixSrgb(text, bg, opacity<1)` fait
+ * tomber le contraste sous 4.5:1.
+ */
+function paintedContrast(el: HTMLElement, text: string, bg: string): number {
+  const opacity = el.style.opacity === "" ? 1 : Number(el.style.opacity);
+  const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
+  return contrastRatio(painted, bg);
+}
 
 function qcmQuestion(overrides: Partial<LevelQuestion> = {}): LevelQuestion {
   return {
@@ -373,14 +388,14 @@ describe("QuestionCard — pavé, contraste du glyphe Valider désactivé (exten
     const submit = screen.getByRole("button", { name: strings.play.question.submit });
     expect(submit).toBeDisabled();
     expect(submit).toHaveAttribute("aria-disabled", "true");
-    // Garde à effet observable : si `opacity` diluante est réintroduite (piège #226), cette
-    // assertion rougit (jsdom applique `""` par défaut pour une propriété non posée — jamais
-    // "0.5").
-    expect(submit.style.opacity).not.toBe("0.5");
+    // Garde à effet observable, ROBUSTE à TOUTE la classe #226 (pas seulement "0.5") : le glyphe
+    // désactivé ne doit porter AUCUNE opacité diluante. jsdom applique `""` (propriété non posée)
+    // ou "1" pour l'état plein-alpha — toute autre valeur ("0.5", "0.55", …) rougit.
+    expect(["", "1"]).toContain(submit.style.opacity);
     expect(submit.style.cursor).toBe("not-allowed");
   });
 
-  it("désactivé : contraste RÉSOLU ≥4.5:1 (light ET dark) — glyphe plein-alpha sur --keypad-key-bg", () => {
+  it("désactivé : contraste COMPOSITÉ ≥4.5:1 (light ET dark) — post-blend de l'opacity rendue (#226)", () => {
     render(
       <QuestionCard
         question={paveQuestion()}
@@ -396,7 +411,10 @@ describe("QuestionCard — pavé, contraste du glyphe Valider désactivé (exten
     for (const theme of ["light", "dark"] as const) {
       const bg = resolveTokenColor(theme, "keypad-key-bg");
       const text = resolveTokenColor(theme, "keypad-key-text");
-      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+      // Contraste POST-BLEND (lit l'opacity rendue) : ROUGIT si un `opacity` diluant (ex. 0.55,
+      // valeur canonique #226) est réintroduit sur le glyphe désactivé — pas seulement la paire
+      // de tokens à pleine opacité (test vacuous #226). Vérifié en réintroduisant 0.55 → RED.
+      expect(paintedContrast(submit, text, bg)).toBeGreaterThanOrEqual(4.5);
     }
   });
 
@@ -417,7 +435,7 @@ describe("QuestionCard — pavé, contraste du glyphe Valider désactivé (exten
     expect(submit).toHaveAttribute("aria-disabled", "false");
     expect(submit.style.backgroundColor).toBe("var(--color-accent-primary)");
     expect(submit.style.color).toBe("var(--color-text-inverse)");
-    expect(submit.style.opacity).not.toBe("0.5");
+    expect(["", "1"]).toContain(submit.style.opacity); // jamais d'opacity diluante (classe #226)
   });
 });
 
@@ -443,7 +461,9 @@ describe("QuestionCard — « je ne sais pas », contraste sur le nouveau fond A
       // fond réel de l'ActionBar téléphone (le bouton est transparent, le fond peint = celui
       // de la barre) — cf. `--color-bg-secondary` dans `ActionBar.tsx`.
       const bg = resolveTokenColor(theme, "color-bg-secondary");
-      expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
+      // Contraste COMPOSITÉ (#226) : robuste si une opacity diluante était un jour posée sur ce
+      // bouton — le bouton est plein-alpha aujourd'hui (paintedContrast === contraste direct).
+      expect(paintedContrast(button, text, bg)).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

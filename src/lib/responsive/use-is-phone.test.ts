@@ -31,10 +31,11 @@ describe("phoneMediaQuery", () => {
     }
   });
 
-  it("retourne le repli documenté quand --bp-phone n'est pas résolvable (jsdom sans tokens.css chargé)", () => {
+  it("retourne la sentinelle « ne matche jamais » quand --bp-phone n'est pas résolvable (jsdom sans tokens.css), SANS breakpoint fabriqué", () => {
     // jsdom ne charge pas tokens.css importé par un fichier externe → getPropertyValue vide ici
-    // (comportement par défaut de l'environnement de test, aucun setup nécessaire).
-    expect(phoneMediaQuery()).toBe("(max-width: 30rem)");
+    // (comportement par défaut de l'environnement de test, aucun setup nécessaire). Le repli est
+    // la sentinelle 0px (jamais un nombre de breakpoint dupliqué) → useIsPhone retombe sur false.
+    expect(phoneMediaQuery()).toBe("(max-width: 0px)");
   });
 
   it("lit la valeur RÉSOLUE de --bp-phone quand posée sur documentElement (source de vérité tokens.css)", () => {

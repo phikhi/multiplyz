@@ -793,6 +793,27 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(qcmBottom).not.toBeNull();
     expect(qcmBottom!).toBeLessThanOrEqual(phoneBar!.barTop);
 
+    /**
+     * Bas RENDU (`boundingClientRect`, jamais une marge raisonnée #190) du bouton dont le texte
+     * === `needle`, `null` si absent. Sert à prouver qu'un frère EN FLUX (dernier enfant de
+     * `<main>` sur téléphone) n'est pas recouvert par la barre fixe (#170/#190 : garder contre
+     * TOUS les frères empilables, pas seulement l'élément « sous » l'overlay).
+     */
+    const inFlowButtonBottom = (needle: string) =>
+      page.evaluate((label) => {
+        const btn = [...document.querySelectorAll("button")].find(
+          (b) => (b.textContent ?? "").trim() === label,
+        );
+        return btn === undefined ? null : btn.getBoundingClientRect().bottom;
+      }, needle);
+
+    // Non-occlusion du DERNIER frère EN FLUX (#170/#190) : « Changer de joueur » (LogoutButton) est
+    // le dernier enfant de `<main>`, en flux normal SOUS le QCM — la barre fixe (padding-bottom
+    // réservé par PlayScreen) ne doit pas le recouvrir. Sa géométrie réelle le prouve, pas un raisonnement.
+    const logoutBottomQuestion = await inFlowButtonBottom(strings.play.logout);
+    expect(logoutBottomQuestion).not.toBeNull();
+    expect(logoutBottomQuestion!).toBeLessThanOrEqual(phoneBar!.barTop);
+
     await page.screenshot({ path: "docs/captures/254-jeu-mobile.png", fullPage: true });
 
     // Barre d'action du FEEDBACK (Continuer/Je réessaie) — même mécanisme `ActionBar`, sur
@@ -811,6 +832,25 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(feedbackBar!.position).toBe("fixed");
     expect(Math.abs(feedbackBar!.barBottom - feedbackBar!.innerHeight)).toBeLessThanOrEqual(2);
     expect(feedbackBar!.notOccluded).toBe(true);
+
+    // Non-occlusion en phase FEEDBACK (#170/#190, analogue de la phase question) : le CONTENU du
+    // panneau `role="status"` (dernier contenu EN FLUX du panneau — le bouton « Je réessaie » étant
+    // fixed, il ne dilate pas la boîte du panneau) reste AU-DESSUS du sommet de la barre fixe.
+    const feedbackContentBottom = await page.evaluate(() => {
+      const panel = [...document.querySelectorAll('[role="status"]')].find(
+        (s) => (s.textContent ?? "").trim().length > 0,
+      );
+      return panel === undefined ? null : panel.getBoundingClientRect().bottom;
+    });
+    expect(feedbackContentBottom).not.toBeNull();
+    expect(feedbackContentBottom!).toBeLessThanOrEqual(feedbackBar!.barTop);
+
+    // ET le DERNIER frère EN FLUX de `<main>` en phase feedback (« Changer de joueur ») n'est pas
+    // non plus recouvert par la barre fixe (garde contre TOUS les frères empilables, #170/#190).
+    const logoutBottomFeedback = await inFlowButtonBottom(strings.play.logout);
+    expect(logoutBottomFeedback).not.toBeNull();
+    expect(logoutBottomFeedback!).toBeLessThanOrEqual(feedbackBar!.barTop);
+
     await page.screenshot({ path: "docs/captures/254-jeu-mobile-feedback.png", fullPage: true });
   });
 

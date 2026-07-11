@@ -14,27 +14,32 @@ import { useEffect, useState } from "react";
 const PHONE_BREAKPOINT_TOKEN = "--bp-phone";
 
 /**
- * Repli si le token n'est pas résolvable via CSSOM (jsdom ne charge/n'applique pas `tokens.css`
- * importé par un fichier externe dans un test unitaire → `getPropertyValue` y renvoie toujours
- * une chaîne vide, cf. `use-is-phone.test.ts`). En navigateur réel, `tokens.css` est TOUJOURS
- * chargé (via `globals.css`) → ce repli n'est jamais atteint hors test/environnement dégradé.
- * Valeur alignée sur `--bp-phone` (tokens.css) — à garder synchronisée si le token change (les
- * deux endroits sont documentés l'un vers l'autre).
+ * Sentinelle « ne matche jamais » — utilisée quand aucune valeur de breakpoint n'est disponible
+ * (SSR : pas de `window` ; environnement dégradé : `tokens.css` non chargé dans le CSSOM, ex.
+ * jsdom où `getPropertyValue` renvoie une chaîne vide). Repli **sûr** : `useIsPhone` retombe alors
+ * sur `false` (disposition tablette/desktop = défaut non-pouce, toujours utilisable) SANS jamais
+ * fabriquer/dupliquer un nombre de breakpoint (le nombre vit EXCLUSIVEMENT dans `tokens.css`,
+ * `--bp-phone` — règle tokens). `0px` n'est PAS le breakpoint : c'est une valeur-sentinelle
+ * sémantiquement distincte (« aucune largeur ne matche »), partagée par le chemin SSR ci-dessous.
+ * En navigateur réel, `tokens.css` est TOUJOURS chargé (via `globals.css`) → la sentinelle n'est
+ * jamais atteinte, la vraie valeur du token est lue.
  */
-const FALLBACK_PHONE_BREAKPOINT = "30rem";
+const NEVER_MATCH_QUERY = "(max-width: 0px)";
 
 /**
  * Construit la requête `matchMedia` du breakpoint téléphone en LISANT la valeur RÉSOLUE de
  * `--bp-phone` sur `document.documentElement` — jamais une valeur dupliquée en dur (règle
- * tokens, CLAUDE.md : « aucune valeur en dur, y compris les breakpoints »).
+ * tokens, CLAUDE.md : « aucune valeur en dur, y compris les breakpoints »). Si la valeur n'est
+ * pas résolvable (SSR / CSSOM sans tokens.css), renvoie la sentinelle « ne matche jamais »
+ * (`NEVER_MATCH_QUERY`) plutôt qu'un nombre fabriqué → aucun breakpoint dupliqué côté JS.
  */
 export function phoneMediaQuery(): string {
-  if (typeof window === "undefined") return "(max-width: 0px)"; // SSR : ne matche jamais (repli sûr — cf. commentaire useIsPhone, jamais rendu côté serveur)
+  if (typeof window === "undefined") return NEVER_MATCH_QUERY; // SSR : jamais rendu côté serveur (cf. commentaire useIsPhone)
   const resolved = window
     .getComputedStyle(document.documentElement)
     .getPropertyValue(PHONE_BREAKPOINT_TOKEN)
     .trim();
-  return `(max-width: ${resolved.length > 0 ? resolved : FALLBACK_PHONE_BREAKPOINT})`;
+  return resolved.length > 0 ? `(max-width: ${resolved})` : NEVER_MATCH_QUERY;
 }
 
 /**
