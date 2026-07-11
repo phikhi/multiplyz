@@ -11,6 +11,15 @@ Playbook de la **boucle autonome** (cf. **ADR 0004** + ADR 0003, WORKFLOW §20).
 `CLAUDE.md`, `LEARNINGS.md`, mémoire de statut projet, + specs du scope à venir. Ne jamais réinventer une décision verrouillée.
 
 ## 1. Synchroniser l'état
+
+**1.0 — Verrou d'exclusion mutuelle (EN PREMIER, avant tout — #264 Option A, ADR 0004).** Empêche de **démarrer une story** tant qu'un **build concurrent** est verrouillé (réduit fortement le recouvrement ; ne couvre pas la fenêtre planning/merge d'un autre run sans build actif — full-exclusion pleine-durée = follow-up lockfile/flock). Deux runs cron qui se recouvrent = merges parallèles + clôtures d'épic prématurées + worktrees écrasés (2 collisions réelles). Au démarrage, AVANT de spawn le moindre subagent :
+```bash
+node .claude/skills/orchestrate/concurrency-guard.mjs   # scanne les verrous agent-* (pid vivant ?)
+```
+- **BLOCKED** (exit 3, un verrou `agent-*` dont le **pid est VIVANT** = build d'un AUTRE run en cours) → **YIELD** : ne démarrer **aucune** story, s'arrêter proprement, rapport court (« run concurrent actif sur <branche>, je cède »). Ne PAS tuer le process concurrent (destructif, domaine ops proprio) ; ne PAS re-programmer (le cron relancera, le concurrent aura fini).
+- **STALE** (exit 0, verrou dont le **pid est MORT** = run crashé/coupé) → nettoyer l'orphelin (`git worktree remove --force .claude/worktrees/<name>`), puis continuer.
+- **CLEAR** (exit 0) → continuer normalement.
+
 ```bash
 git fetch --prune && git status
 gh pr list --state open           # PR en cours à finir/merger d'abord
