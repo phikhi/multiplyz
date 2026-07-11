@@ -625,6 +625,195 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
   });
 
+  test("écran de jeu → reflow responsive 3 tailles (QCM 2×2, barre d'action bas de pouce, story 8.1 #254, captures)", async ({
+    page,
+  }) => {
+    // Ne termine JAMAIS le niveau (aucun impact sur le test « carte du monde » suivant, qui
+    // dépend de l'état de progression laissé par le test précédent) — géométrie uniquement,
+    // au plus quelques réponses passe-plat pour atteindre une question QCM.
+    test.setTimeout(60_000);
+    await page.goto("/");
+    await page.getByRole("button", { name: profileLabel }).click();
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page.getByRole("progressbar")).toBeVisible();
+
+    // Robustesse (ENGINE §7, interleaving non déterministe) : la 1re question d'un niveau est
+    // quasi toujours QCM (fait « jamais vu » ⇒ box=0 ≤ QCM_MAX_BOX) mais pas garanti à 100 % —
+    // boucle bornée qui répond passe-plat (jamais bloquante, no-fail) SANS jamais terminer le
+    // niveau (marge large : niveau ~10 questions, 3 tentatives max ici).
+    const choicesGroup = () =>
+      page.getByRole("group", { name: strings.play.question.choicesLabel });
+    let foundQcm = await choicesGroup()
+      .isVisible()
+      .catch(() => false);
+    for (let i = 0; i < 3 && !foundQcm; i++) {
+      await page.getByRole("button", { name: digit("9") }).click();
+      await page.getByRole("button", { name: digit("9") }).click();
+      await page.getByRole("button", { name: strings.play.question.submit }).click();
+      await expect(feedbackStatus(page)).toBeVisible();
+      const retryVisible = await page
+        .getByRole("button", { name: strings.play.retry.tryAgain })
+        .isVisible()
+        .catch(() => false);
+      await page
+        .getByRole("button", {
+          name: retryVisible ? strings.play.retry.tryAgain : strings.play.correct.next,
+        })
+        .click();
+      foundQcm = await choicesGroup()
+        .isVisible()
+        .catch(() => false);
+    }
+    expect(foundQcm).toBe(true); // AC story 8.1 : le compte de colonnes QCM s'assert sur une VRAIE question QCM
+
+    /**
+     * Lit la géométrie RENDUE (jamais un `data-*`/une classe, #127) du groupe QCM : compte de
+     * lignes/colonnes distinctes (tops/lefts uniques des 4 boutons) + cible ≥ 44 px.
+     */
+    async function readQcmGeometry() {
+      return page.evaluate((label) => {
+        const group = [...document.querySelectorAll('[role="group"]')].find(
+          (g) => g.getAttribute("aria-label") === label,
+        );
+        if (group === undefined) return null;
+        const rects = [...group!.querySelectorAll("button")].map((b) => {
+          const r = b.getBoundingClientRect();
+          return {
+            top: Math.round(r.top),
+            left: Math.round(r.left),
+            width: r.width,
+            height: r.height,
+          };
+        });
+        return rects;
+      }, strings.play.question.choicesLabel);
+    }
+
+    /**
+     * Géométrie RENDUE de la barre d'action portant `label` (bouton « Je ne sais pas » en
+     * question, « Continuer »/« Je réessaie » en feedback) — `position` calculée, bas de
+     * viewport, NON-OCCLUSION (#170/#190 : `elementFromPoint`, jamais une marge raisonnée).
+     */
+    async function readActionBarGeometry(label: string) {
+      return page.evaluate((needle) => {
+        const btn = [...document.querySelectorAll("button")].find(
+          (b) => (b.textContent ?? "").trim() === needle,
+        );
+        if (btn === undefined) return null;
+        const bar = btn.parentElement!;
+        const barRect = bar.getBoundingClientRect();
+        const btnRect = btn.getBoundingClientRect();
+        const cx = btnRect.left + btnRect.width / 2;
+        const cy = btnRect.top + btnRect.height / 2;
+        const topEl = document.elementFromPoint(cx, cy);
+        return {
+          position: getComputedStyle(bar).position,
+          barTop: barRect.top,
+          barBottom: barRect.bottom,
+          innerHeight: window.innerHeight,
+          notOccluded:
+            topEl !== null && (topEl === btn || btn.contains(topEl) || bar.contains(topEl)),
+          btnWidth: btnRect.width,
+          btnHeight: btnRect.height,
+        };
+      }, label);
+    }
+
+    // ---------- DESKTOP (1280×800) : disposition ACTUELLE préservée, pas de régression ----------
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.waitForFunction(
+      () => document.querySelectorAll('[role="group"] button').length === 4,
+    );
+    const desktopQcm = await readQcmGeometry();
+    expect(desktopQcm).not.toBeNull();
+    expect(new Set(desktopQcm!.map((r) => r.top)).size).toBe(2); // 2 lignes
+    expect(new Set(desktopQcm!.map((r) => r.left)).size).toBe(2); // 2 colonnes
+    for (const r of desktopQcm!) {
+      expect(r.width).toBeGreaterThanOrEqual(44);
+      expect(r.height).toBeGreaterThanOrEqual(44);
+    }
+    const desktopBar = await readActionBarGeometry(strings.play.question.dontKnow);
+    expect(desktopBar).not.toBeNull();
+    expect(desktopBar!.position).not.toBe("fixed"); // disposition actuelle préservée (flux normal)
+    await page.screenshot({ path: "docs/captures/254-jeu-desktop.png", fullPage: true });
+
+    // ---------- TABLETTE (834×1194, iPad Air portrait) : disposition ACTUELLE préservée ----------
+    await page.setViewportSize({ width: 834, height: 1194 });
+    await page.waitForFunction(
+      () => document.querySelectorAll('[role="group"] button').length === 4,
+    );
+    const tabletQcm = await readQcmGeometry();
+    expect(tabletQcm).not.toBeNull();
+    expect(new Set(tabletQcm!.map((r) => r.top)).size).toBe(2);
+    expect(new Set(tabletQcm!.map((r) => r.left)).size).toBe(2);
+    const tabletBar = await readActionBarGeometry(strings.play.question.dontKnow);
+    expect(tabletBar).not.toBeNull();
+    expect(tabletBar!.position).not.toBe("fixed");
+    await page.screenshot({ path: "docs/captures/254-jeu-tablette.png", fullPage: true });
+
+    // ---------- TÉLÉPHONE (375×812) : reflow WIREFRAMES §8 ----------
+    await page.setViewportSize({ width: 375, height: 812 });
+    // Attend la bascule RÉELLE du breakpoint (matchMedia `change`, useIsPhone) avant de lire la
+    // géométrie — jamais un `waitForTimeout` (LEARNINGS : pas de sleep, poll jusqu'à l'état réel).
+    await page.waitForFunction((needle) => {
+      const btn = [...document.querySelectorAll("button")].find(
+        (b) => (b.textContent ?? "").trim() === needle,
+      );
+      return btn !== undefined && getComputedStyle(btn.parentElement!).position === "fixed";
+    }, strings.play.question.dontKnow);
+
+    const phoneQcm = await readQcmGeometry();
+    expect(phoneQcm).not.toBeNull();
+    // Garde E2E de géométrie RENDUE (#127) : rougit si le reflow retombe au layout desktop (ex.
+    // `auto-fill`/`auto-fit` qui n'honore pas un compte fixe) — 2 lignes × 2 colonnes RENDUES.
+    expect(new Set(phoneQcm!.map((r) => r.top)).size).toBe(2);
+    expect(new Set(phoneQcm!.map((r) => r.left)).size).toBe(2);
+    for (const r of phoneQcm!) {
+      expect(r.width).toBeGreaterThanOrEqual(44);
+      expect(r.height).toBeGreaterThanOrEqual(44);
+    }
+
+    const phoneBar = await readActionBarGeometry(strings.play.question.dontKnow);
+    expect(phoneBar).not.toBeNull();
+    expect(phoneBar!.position).toBe("fixed"); // zone pouce, bas de viewport (WIREFRAMES §8)
+    expect(Math.abs(phoneBar!.barBottom - phoneBar!.innerHeight)).toBeLessThanOrEqual(2);
+    expect(phoneBar!.notOccluded).toBe(true); // #170/#190 : élément le plus haut au centre = la barre/son bouton
+    expect(phoneBar!.btnWidth).toBeGreaterThanOrEqual(44);
+    expect(phoneBar!.btnHeight).toBeGreaterThanOrEqual(44);
+
+    // Non-occlusion du CONTENU JOUABLE (#170/#190 : la barre fixe ne recouvre jamais le QCM au-dessus) :
+    // le bas du groupe QCM doit rester AU-DESSUS du sommet de la barre fixe.
+    const qcmBottom = await page.evaluate((label) => {
+      const group = [...document.querySelectorAll('[role="group"]')].find(
+        (g) => g.getAttribute("aria-label") === label,
+      );
+      return group === undefined ? null : group!.getBoundingClientRect().bottom;
+    }, strings.play.question.choicesLabel);
+    expect(qcmBottom).not.toBeNull();
+    expect(qcmBottom!).toBeLessThanOrEqual(phoneBar!.barTop);
+
+    await page.screenshot({ path: "docs/captures/254-jeu-mobile.png", fullPage: true });
+
+    // Barre d'action du FEEDBACK (Continuer/Je réessaie) — même mécanisme `ActionBar`, sur
+    // téléphone toujours (« je ne sais pas » compte comme faux, sans pénalité, ENGINE §9 — ne
+    // termine PAS le niveau, n'avance PAS l'index de question).
+    await page.getByRole("button", { name: strings.play.question.dontKnow }).click();
+    await expect(feedbackStatus(page)).toBeVisible();
+    await page.waitForFunction((needle) => {
+      const btn = [...document.querySelectorAll("button")].find(
+        (b) => (b.textContent ?? "").trim() === needle,
+      );
+      return btn !== undefined && getComputedStyle(btn.parentElement!).position === "fixed";
+    }, strings.play.retry.tryAgain);
+    const feedbackBar = await readActionBarGeometry(strings.play.retry.tryAgain);
+    expect(feedbackBar).not.toBeNull();
+    expect(feedbackBar!.position).toBe("fixed");
+    expect(Math.abs(feedbackBar!.barBottom - feedbackBar!.innerHeight)).toBeLessThanOrEqual(2);
+    expect(feedbackBar!.notOccluded).toBe(true);
+    await page.screenshot({ path: "docs/captures/254-jeu-mobile-feedback.png", fullPage: true });
+  });
+
   test("carte du monde → nœud 0 COMPLÉTÉ (boucle jouer→résultats→carte, #136), suivant courant (capture)", async ({
     page,
   }) => {

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { strings } from "@/strings";
 import { formatEquation } from "@/lib/game/equation";
 import type { LevelQuestion } from "@/lib/engine/service";
+import { useIsPhone } from "@/lib/responsive/use-is-phone";
+import { ActionBar } from "@/components/game/ActionBar";
 
 /**
  * Question de niveau (WIREFRAMES §3a « QCM » / §3b « pavé », ENGINE §6). Écran de jeu
@@ -17,6 +19,11 @@ import type { LevelQuestion } from "@/lib/engine/service";
  * A11y : cibles ≥ 44 px (`--tap-target-min`), boutons-réponses ≥ 72 px
  * (`--answer-min-size`), groupes nommés (`role="group"` + `aria-label`), « je ne sais
  * pas » toujours disponible (ENGINE §9, sans pénalité). Tokens uniquement.
+ *
+ * **Responsive (story 8.1 #254, WIREFRAMES §8)** : QCM déjà en grille 2×2 à tous les
+ * breakpoints (`repeat(2, 1fr)`, verrouillé par garde E2E rendue, #127) ; le pavé numérique
+ * passe **pleine largeur** sous `--bp-phone` (`useIsPhone`) ; « Je ne sais pas » passe dans
+ * l'`ActionBar` bas de zone pouce sur téléphone (disposition actuelle préservée ailleurs).
  */
 export interface QuestionCardProps {
   readonly question: LevelQuestion;
@@ -77,6 +84,9 @@ const ZERO = "0";
 /** Pavé numérique de saisie libre (ENGINE §6 : rappel, `box ≥ 2`). Non contrôlé en dehors du composant. */
 function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
   const [digits, setDigits] = useState("");
+  // Pleine largeur sous --bp-phone (WIREFRAMES §8 « pavé numérique pleine largeur »),
+  // largeur bornée préservée tablette/desktop (disposition actuelle, story 8.1 #254).
+  const isPhone = useIsPhone();
 
   const press = (digit: string) => setDigits((prev) => (prev.length >= 4 ? prev : prev + digit));
   const backspace = () => setDigits((prev) => prev.slice(0, -1));
@@ -109,7 +119,7 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
           display: "grid",
           gridTemplateColumns: "repeat(3, 1fr)",
           gap: "var(--space-3)",
-          maxWidth: "var(--space-12)",
+          maxWidth: isPhone ? "none" : "var(--space-12)",
           margin: "0 auto",
         }}
       >
@@ -149,11 +159,17 @@ function NumericInput({ onSubmit }: { onSubmit: (value: number) => void }) {
           aria-label={strings.play.question.submit}
           onClick={submit}
           disabled={digits.length === 0}
+          aria-disabled={digits.length === 0}
           style={{
             ...keypadKeyStyle,
-            backgroundColor: "var(--color-accent-primary)",
-            color: "var(--color-text-inverse)",
-            opacity: digits.length === 0 ? 0.5 : 1,
+            // Patron #226 (audit obligatoire des glyphes des fichiers touchés par une story,
+            // rétro #250) : jamais d'`opacity` sur un sous-arbre texte (dilue le glyphe SOUS
+            // 4.5:1 une fois composité sur le fond réel — piège #104/#170/#226). Désactivé =
+            // mêmes tokens PLEIN-ALPHA que les touches normales (`--keypad-key-bg`/-text,
+            // contraste déjà prouvé), le signal vient de `cursor:not-allowed` + `aria-disabled`.
+            backgroundColor:
+              digits.length === 0 ? "var(--keypad-key-bg)" : "var(--color-accent-primary)",
+            color: digits.length === 0 ? "var(--keypad-key-text)" : "var(--color-text-inverse)",
             cursor: digits.length === 0 ? "not-allowed" : "pointer",
           }}
         >
@@ -256,24 +272,26 @@ export function QuestionCard({
         <NumericInput onSubmit={onAnswer} />
       )}
 
-      <button
-        type="button"
-        className="mz-focusable"
-        onClick={onDontKnow}
-        style={{
-          minHeight: "var(--tap-target-min)",
-          padding: "var(--space-2) var(--space-4)",
-          fontFamily: "var(--font-family-body)",
-          fontSize: "var(--font-size-base)",
-          color: "var(--color-text-secondary)",
-          backgroundColor: "transparent",
-          border: "none",
-          cursor: "pointer",
-          textDecoration: "underline",
-        }}
-      >
-        {strings.play.question.dontKnow}
-      </button>
+      <ActionBar>
+        <button
+          type="button"
+          className="mz-focusable"
+          onClick={onDontKnow}
+          style={{
+            minHeight: "var(--tap-target-min)",
+            padding: "var(--space-2) var(--space-4)",
+            fontFamily: "var(--font-family-body)",
+            fontSize: "var(--font-size-base)",
+            color: "var(--color-text-secondary)",
+            backgroundColor: "transparent",
+            border: "none",
+            cursor: "pointer",
+            textDecoration: "underline",
+          }}
+        >
+          {strings.play.question.dontKnow}
+        </button>
+      </ActionBar>
     </div>
   );
 }

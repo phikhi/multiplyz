@@ -28,6 +28,7 @@ import {
   initGameState,
   type GameState,
 } from "@/lib/game/session";
+import { useIsPhone } from "@/lib/responsive/use-is-phone";
 
 /**
  * Orchestrateur client de l'écran de jeu (story #64, gains #126) — PRODUCT §2.2/§1.4,
@@ -309,6 +310,10 @@ function PlayingGame({
   readonly onResults: (screen: ScreenState) => void;
 }) {
   const [game, setGame] = useState(initialGame);
+  // Réserve l'espace de l'`ActionBar` fixe bas de zone pouce sur téléphone (story 8.1 #254) :
+  // évite que le contenu jouable se retrouve occlus derrière la barre fixe (#170/#190), prouvé
+  // par la garde E2E boundingClientRect (jamais une marge seulement raisonnée, #190).
+  const isPhone = useIsPhone();
 
   const judge = useCallback(
     (factKey: string, value: number): boolean => value === resolveAnswer(factKey),
@@ -402,6 +407,9 @@ function PlayingGame({
         justifyContent: "center",
         gap: "var(--space-6)",
         padding: "var(--space-6)",
+        paddingBottom: isPhone
+          ? "calc(var(--space-6) + var(--play-action-bar-height))"
+          : "var(--space-6)",
       }}
     >
       {game.current.phase === "asking" ? (
