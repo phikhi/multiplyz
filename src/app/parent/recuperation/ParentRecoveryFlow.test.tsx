@@ -129,3 +129,23 @@ describe("ParentRecoveryFlow — étape nouveau PIN", () => {
     expect(screen.getByRole("heading", { level: 1, name: r.title })).toBeInTheDocument();
   });
 });
+
+// STACK-TRAP #222 (rétro 7.1/7.5/7.9) : titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()`
+// au montage) → `outline:"none"` documenté, sûr car hors ordre clavier. ROUGIT si l'anneau UA
+// natif réapparaît (outline retiré du style) OU si le focus cesse de suivre l'étape.
+describe("ParentRecoveryFlow — a11y titre focus-managé (rétro 7.1/7.9 #222)", () => {
+  it("le titre reçoit le focus au montage SANS anneau UA (outline:none documenté)", () => {
+    render(<ParentRecoveryFlow />);
+    const heading = screen.getByRole("heading", { level: 1, name: r.title });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.style.outline).toBe("none");
+  });
+
+  it("le focus suit la transition d'étape (code → nouveau PIN), toujours sans anneau UA", async () => {
+    render(<ParentRecoveryFlow />);
+    await reachNewPinStep();
+    const heading = screen.getByRole("heading", { level: 1, name: r.newPinTitle });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.style.outline).toBe("none");
+  });
+});

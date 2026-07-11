@@ -35,6 +35,11 @@ const cardStyle = {
   gap: "var(--space-5)",
 } as const;
 
+// Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran,
+// chaque étape). `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1/7.5/7.9) : le focus
+// est programmatique, hors ordre clavier → l'anneau UA natif serait un artefact full-width sans
+// valeur a11y. Pas `mz-focusable` (ne stylise que `:focus-visible`, non matché par un focus
+// programmatique).
 const titleStyle = {
   fontFamily: "var(--font-family-display)",
   fontSize: "var(--font-size-xl)",
@@ -42,6 +47,7 @@ const titleStyle = {
   color: "var(--color-text-primary)",
   margin: 0,
   textAlign: "center",
+  outline: "none",
 } as const;
 
 const introStyle = {

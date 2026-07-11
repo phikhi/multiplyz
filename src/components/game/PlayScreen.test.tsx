@@ -185,6 +185,53 @@ describe("PlayScreen — verrou dur temps d'écran (story 7.8 #229, DETAILS §27
   });
 });
 
+// ============================================================================
+// StatusMessage — focus a11y au montage (#244, patron ResultsScreen.tsx/LEARNINGS #36). Chaque
+// état plein-écran remplace le précédent SANS changement de route (aucune annonce SR native) →
+// le titre doit recevoir le focus PROGRAMMATIQUEMENT. `locked` est PRIORITAIRE (empêche l'entrée
+// en jeu, story 7.8). `outline:"none"` documenté (STACK-TRAP #222) : focus hors ordre clavier
+// (tabIndex=-1) → l'anneau UA natif serait un artefact sans valeur a11y ici.
+// ============================================================================
+describe("PlayScreen — StatusMessage : focus a11y au montage (#244)", () => {
+  it("écran verrou (locked) → focus déplacé sur le titre, SANS anneau UA — écran PRIORITAIRE", async () => {
+    startLevelMock.mockResolvedValue({
+      level: null,
+      starThresholds: STAR_THRESHOLDS,
+      locked: true,
+    });
+    render(<PlayScreen />);
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: strings.play.screenTimeLocked.title,
+    });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.style.outline).toBe("none");
+  });
+
+  it("écran d'erreur → focus déplacé sur le titre, SANS anneau UA", async () => {
+    diagnosticPlanMock.mockResolvedValue({ items: null });
+    render(<PlayScreen />);
+    const heading = await screen.findByRole("heading", { level: 1, name: strings.play.loadError });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.style.outline).toBe("none");
+  });
+
+  it("niveau vide → focus déplacé sur le titre, SANS anneau UA", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen />);
+    const heading = await screen.findByRole("heading", {
+      level: 1,
+      name: strings.play.emptyLevel,
+    });
+    expect(document.activeElement).toBe(heading);
+    expect(heading.style.outline).toBe("none");
+  });
+});
+
 describe("PlayScreen — diagnostic de départ (ENGINE §3, 1re session)", () => {
   it("profil vierge → écran d'intro diagnostic (aucun score)", async () => {
     const items = [{ fact: makeFact("mult", 6, 8), difficulty: "easy" as const }];

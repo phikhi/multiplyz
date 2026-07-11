@@ -124,6 +124,14 @@ describe("OnboardingFlow — focus & annonce (a11y)", () => {
     );
   });
 
+  // STACK-TRAP #222 (rétro 7.1/7.5/7.9) : focus programmatique hors ordre clavier (tabIndex=-1)
+  // → l'anneau UA natif serait un artefact sans valeur a11y. ROUGIT si `outline:"none"` disparaît.
+  it("le titre focus-managé n'a AUCUN anneau UA (outline:none documenté)", () => {
+    render(<OnboardingFlow />);
+    const heading = screen.getByRole("heading", { name: strings.onboarding.profile.title });
+    expect(heading.style.outline).toBe("none");
+  });
+
   it("annonce le code de secours dans une région live (role=status)", async () => {
     actionMock.mockResolvedValue({ ok: true, recoveryCode: "ABCD2345" });
     render(<OnboardingFlow />);

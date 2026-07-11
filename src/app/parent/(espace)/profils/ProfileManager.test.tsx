@@ -241,6 +241,8 @@ describe("ProfileManager — contraste WCAG résolu (tous glyphes rendus)", () =
     // couleur **post-blend** effectivement peinte (piège #170 « token résolu ≠ pixel peint ») → il
     // ROUGIT si un `opacity` diluant est réintroduit. Tous les états désactivés/pending du fichier
     // partagent le même `disabledButtonStyle` (owner-« Supprimer » permanent + « Enregistrer » vide).
+    // Fond réellement peint = `--color-bg-tertiary` (#227 : fill opaque du bouton, plus le fond
+    // transparent hérité de `--color-bg-secondary` d'avant le polish #227).
     render(<ProfileManager profiles={PROFILES} />);
     const ownerDelete = card("Léa").getByRole("button", { name: m.delete.action });
     // « Enregistrer » du renommage, désactivé quand le champ est vide.
@@ -253,12 +255,25 @@ describe("ProfileManager — contraste WCAG résolu (tous glyphes rendus)", () =
       expect(opacity).toBe(1); // garde directe : aucun opacity diluant sur un bouton désactivé
       for (const theme of THEMES) {
         const text = resolveTokenColor(theme, "color-text-secondary");
-        const bg = resolveTokenColor(theme, "color-bg-secondary");
+        const bg = resolveTokenColor(theme, "color-bg-tertiary");
         // Couleur réellement peinte = blend du texte sur le fond selon l'opacité rendue.
         const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
         expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
       }
     }
+  });
+
+  it("état DÉSACTIVÉ : fond ATTÉNUÉ discriminant du fond transparent des boutons actifs (#227)", () => {
+    // Polish #227 : avant ce fix, `disabledButtonStyle` ne différait des boutons ghost actifs que
+    // par une bordure ~1.1:1 (quasi indiscernable). Ce test ROUGIT si le fond désactivé retombe à
+    // "transparent" (régression vers le pattern faiblement discriminant) OU s'aligne par erreur sur
+    // le fond d'un bouton actif.
+    render(<ProfileManager profiles={PROFILES} />);
+    const ownerDelete = card("Léa").getByRole("button", { name: m.delete.action });
+    const activeGhost = card("Zoé").getByRole("button", { name: m.delete.action });
+    expect(ownerDelete.style.backgroundColor).toBe("var(--color-bg-tertiary)");
+    expect(activeGhost.style.backgroundColor).toBe("transparent");
+    expect(ownerDelete.style.backgroundColor).not.toBe(activeGhost.style.backgroundColor);
   });
 });
 

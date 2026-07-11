@@ -1420,6 +1420,40 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(page).toHaveURL(/\/$/);
   });
 
+  test("quitter l'espace parent : état PENDING visuellement discriminant, sans opacity diluante (#240, capture)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+
+    // Ralentit délibérément la server action de déconnexion (POST vers la page courante) pour
+    // capturer l'état PENDING avant sa résolution (#240 : plus d'opacity diluante, fond
+    // `--color-bg-tertiary` + aria-disabled + cursor:not-allowed — patron #226).
+    await page.route("**/parent", async (route) => {
+      if (route.request().method() === "POST") {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      await route.continue();
+    });
+
+    const exitButton = page.getByRole("button", { name: strings.parent.dashboard.exit });
+    await exitButton.click();
+    await expect(exitButton).toBeDisabled();
+    await expect(exitButton).toHaveAttribute("aria-disabled", "true");
+    // ROUGIT si un `opacity` diluant est réintroduit sur le sous-arbre texte (rétro #226).
+    await expect(exitButton).not.toHaveCSS("opacity", "0.55");
+    await expect(exitButton).toHaveCSS("cursor", "not-allowed");
+
+    await page.screenshot({ path: "docs/captures/249-exit-pending.png", fullPage: true });
+
+    // Laisse la déconnexion se terminer (route déjà interceptée, résolution différée ci-dessus).
+    await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
   // ==========================================================================
   // Gérer les profils (story 7.5, #218) — renommer / réinitialiser le PIN enfant /
   // supprimer = purge + révocation de session. Sous garde session PARENT (9876, encore

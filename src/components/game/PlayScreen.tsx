@@ -417,7 +417,15 @@ function PlayingGame({
   );
 }
 
-/** Écran de statut minimal (chargement / erreur / niveau vide / intro diagnostic). */
+/**
+ * Écran de statut minimal (chargement / erreur / niveau vide / verrou temps d'écran / intro
+ * diagnostic). **Focus a11y** (#244, patron `ResultsScreen.tsx`/LEARNINGS #36) : chaque état
+ * remplace l'écran plein-écran précédent SANS annonce SR native (pas de changement de route) —
+ * le titre reçoit donc le focus **programmatiquement** à son montage (ref-callback, couvre les
+ * 2 branches montage/démontage). Prioritaire pour `locked` (verrou dur temps d'écran, story 7.8)
+ * qui empêche l'entrée en jeu. `outline:"none"` **documenté** (STACK-TRAP #222) : focus hors
+ * ordre clavier (`tabIndex={-1}`) → l'anneau UA serait un artefact sans valeur a11y ici.
+ */
 function StatusMessage({
   text,
   hint,
@@ -427,6 +435,10 @@ function StatusMessage({
   readonly hint?: string;
   readonly children?: React.ReactNode;
 }) {
+  const focusOnMount = useCallback((node: HTMLHeadingElement | null) => {
+    node?.focus();
+  }, []);
+
   return (
     <main
       className="bg-bg text-text"
@@ -442,12 +454,15 @@ function StatusMessage({
       }}
     >
       <h1
+        ref={focusOnMount}
+        tabIndex={-1}
         style={{
           fontFamily: "var(--font-family-display)",
           fontSize: "var(--font-size-xl)",
           fontWeight: "var(--font-weight-bold)",
           color: "var(--color-text-primary)",
           margin: 0,
+          outline: "none",
         }}
       >
         {text}
