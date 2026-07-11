@@ -33,7 +33,10 @@ export default defineConfig({
     // pas d'UI) — DANS le même contexte que le serveur (cwd + DATABASE_PATH), comme les assets.
     // ...puis amorce 2 mondes `buffered` en attente d'approbation (story 7.9, #231) — le worker
     // daemon n'est jamais lancé en E2E, sans cet amorçage `/parent/mondes` resterait toujours vide.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && pnpm dev --port ${PORT}`,
+    // ...puis amorce un profil dédié (`Nino`) + 5 créatures possédées (story 8.2b, #266) — la
+    // collection ne se peuple qu'au boss (hors scope d'un test de reflow, boutique/gacha
+    // inexistante cf. #269) : sans cet amorçage `/collection` resterait toujours vide.
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

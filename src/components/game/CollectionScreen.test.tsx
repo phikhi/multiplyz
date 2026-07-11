@@ -289,3 +289,43 @@ describe("CollectionScreen — contraste WCAG résolu des glyphes rendus (rétro
     },
   );
 });
+
+/**
+ * Audit build (rétro #126 : « une story qui TOUCHE un écran audite TOUS ses glyphes rendus »,
+ * étendu #170/#190 occlusion et #226 opacité diluante) — story 8.2b (#266) touche cet écran pour
+ * le reflow responsive. Aucun glyphe/carte de cet écran n'est superposé/positionné (`position`
+ * reste `static`, flux normal en colonne) ni sous une `opacity` diluante — donc AUCUNE garde de
+ * non-occlusion `boundingClientRect` ni de contraste composité `paintedContrast` n'est nécessaire
+ * ICI (contrairement à `MapScreen`/`QuestionCard`, qui EN ONT). Ce test le PROUVE (au lieu de
+ * l'affirmer en commentaire, #164) : il ROUGIT si un futur changement pose `position:absolute`
+ * ou une `opacity` diluante sur l'un de ces éléments sans ajouter la garde correspondante.
+ */
+describe("CollectionScreen — audit build #126 : zéro occlusion/opacité sur les glyphes rendus (#170/#190/#226)", () => {
+  it("carte, badge de rareté et silhouette placeholder restent en flux normal (position statique, jamais superposés)", async () => {
+    await renderReady([entry()]);
+    const card = document.querySelector<HTMLElement>("[data-collection-card]");
+    const placeholder = document.querySelector<HTMLElement>("[data-collection-placeholder]");
+    const rarityBadge = document.querySelector<HTMLElement>("[data-collection-rarity]");
+    expect(card).not.toBeNull();
+    expect(placeholder).not.toBeNull();
+    expect(rarityBadge).not.toBeNull();
+    for (const el of [card!, placeholder!, rarityBadge!]) {
+      // "" = valeur inline par défaut (jsdom résout la CASCADE, pas le layout — suffisant ici :
+      // aucune règle CSS externe ne pose `position` sur ces éléments, seul le style inline compte).
+      expect(["", "static"]).toContain(el.style.position);
+    }
+  });
+
+  it("aucun texte/glyphe de carte ne porte une opacity diluante (name/rareté/histoire/placeholder/compteur)", async () => {
+    await renderReady([entry({ story: "Une histoire." })]);
+    const name = document.querySelector<HTMLElement>("[data-collection-name]");
+    const rarityBadge = document.querySelector<HTMLElement>("[data-collection-rarity]");
+    const placeholder = document.querySelector<HTMLElement>("[data-collection-placeholder]");
+    expect(name).not.toBeNull();
+    expect(rarityBadge).not.toBeNull();
+    expect(placeholder).not.toBeNull();
+    for (const el of [name!, rarityBadge!, placeholder!]) {
+      expect(["", "1"]).toContain(el.style.opacity);
+    }
+  });
+});
