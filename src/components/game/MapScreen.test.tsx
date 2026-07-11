@@ -11,6 +11,7 @@ import {
   resolveTokenColor,
 } from "@/components/game/scaffolds/test-support/tokens-css";
 import { CURATED_THEMES } from "@/config/worldgen-themes";
+import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
 
 /**
  * Accents curatés (la palette BORNÉE des mondes du socle, `worldgen-themes.ts`) — source de vérité
@@ -854,5 +855,60 @@ describe("MapScreen — contraste WCAG résolu (piège #94/#104, feed-forward br
     expect(resolveTokenColor("light", "--map-node-current-glyph")).toBe(
       resolveTokenColor("light", "--color-text-inverse"),
     );
+  });
+});
+
+describe("MapScreen — reflow responsive (--bp-phone, story 8.2 #255, WIREFRAMES §8 « carte : scroll vertical du chemin »)", () => {
+  it("tablette/desktop (défaut) : marge de <main> = --space-6 (disposition actuelle préservée, AC : pas de régression)", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    expect(mainEl().style.padding).toBe("var(--space-6)");
+  });
+
+  it("téléphone (useIsPhone → true) : marge de <main> resserrée à --space-4 (plus de largeur utile pour le chemin serpentin)", async () => {
+    const restore = mockPhone(true);
+    try {
+      await renderReady(map([node({ status: "current" })]));
+      // Garde à effet observable : si la branche téléphone est retirée/mutée, la marge
+      // retomberait sur --space-6 (assertion ci-dessus) et ce test rougirait.
+      expect(mainEl().style.padding).toBe("var(--space-4)");
+    } finally {
+      restore();
+    }
+  });
+
+  it("le reflow téléphone NE CHANGE ni le nombre de nœuds ni leurs positions dérivées (invariance géométrie, rétro #123 étendue à l'état isPhone)", async () => {
+    const nodes = [
+      node({ index: 0, status: "current", position: { x: 0.5, y: 0 } }),
+      node({ index: 1, status: "locked", position: { x: 0.8, y: 0.5 } }),
+      node({ index: 2, status: "locked", position: { x: 0.2, y: 1 } }),
+    ];
+    const { unmount } = await renderReady(map(nodes));
+    const desktopCount = document.querySelectorAll("[data-map-node]").length;
+    const desktopTransforms = [...document.querySelectorAll("li")].map((li) => li.style.transform);
+    unmount();
+
+    const restore = mockPhone(true);
+    try {
+      await renderReady(map(nodes));
+      // Même compte de nœuds ET mêmes translateX dérivés — le padding de <main> (CSS pur, story
+      // 8.2) ne recalcule JAMAIS `WorldMap.nodes` (rétro #123, ici étendue à l'état `isPhone`).
+      expect(document.querySelectorAll("[data-map-node]")).toHaveLength(desktopCount);
+      const phoneTransforms = [...document.querySelectorAll("li")].map((li) => li.style.transform);
+      expect(phoneTransforms).toEqual(desktopTransforms);
+    } finally {
+      restore();
+    }
+  });
+
+  it("téléphone : les cibles tactiles des nœuds restent ≥ --tap-target-min (aucune régression a11y du reflow)", async () => {
+    const restore = mockPhone(true);
+    try {
+      await renderReady(map([node({ status: "current" })]));
+      const link = nodeLink();
+      expect(link.style.minWidth).toBe("var(--tap-target-min)");
+      expect(link.style.minHeight).toBe("var(--tap-target-min)");
+    } finally {
+      restore();
+    }
   });
 });

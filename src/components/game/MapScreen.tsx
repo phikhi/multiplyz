@@ -7,6 +7,7 @@ import { LogoutButton } from "@/components/LogoutButton";
 import { currentMapAction } from "@/app/(app)/carte/actions";
 import type { MapNode, MapStars, NodeType, WorldMap } from "@/lib/game/map";
 import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
+import { useIsPhone } from "@/lib/responsive/use-is-phone";
 
 /**
  * **Écran carte** — chemin de nœuds du monde courant (story #125/6.7, WIREFRAMES §2,
@@ -69,6 +70,25 @@ import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
  * ≥ 44 px (`--map-node-size` = 64px). `prefers-reduced-motion` respecté nativement
  * (aucune animation ajoutée ici). **Tokens only** — famille `--map-node-*`
  * (tokens.css), zéro valeur en dur.
+ *
+ * **Reflow responsive (story 8.2 #255, WIREFRAMES §8 « carte : scroll vertical du chemin »)** :
+ * le chemin est un `<ol>` en `flexDirection:column-reverse` sans contrainte de hauteur/`overflow`
+ * sur `<main>` (`minHeight:100dvh`, flux normal) — le **scroll vertical de la page** est donc déjà
+ * la mécanique native, à TOUTE largeur de viewport (aucun changement requis pour l'obtenir). Le
+ * décalage horizontal serpentin (`translateX`, `NodePath`) est **relatif à la largeur du nœud
+ * lui-même** (±50 % de `--map-node-size`, jamais du viewport) → **aucun risque de débordement
+ * horizontal**, quelle que soit la largeur d'écran (prouvé E2E aux 3 tailles). Le SEUL ajustement
+ * `useIsPhone` (`--bp-phone`) consommé ici : la marge horizontale de `<main>` se resserre
+ * (`--space-6` → `--space-4`) sous le breakpoint téléphone, pour donner plus de largeur utile au
+ * chemin sur un viewport étroit (WIREFRAMES §8 « nœuds/médaillons correctement disposés ») —
+ * **tablette/desktop gardent `--space-6`** (disposition actuelle préservée, AC story 8.2, aucune
+ * régression). Ce padding est **CSS pur** : il ne touche jamais `WorldMap.nodes` (compte/positions
+ * restent invariants à l'état runtime, rétro #123 — étendu ici à l'état `isPhone`, garde unitaire
+ * dédiée) ni la géométrie LOCALE Teddy↔médaillon (`--map-node-teddy-size`/`--map-node-gap`, tokens
+ * fixes indépendants du padding de `<main>`) — la non-occlusion #170/#190 déjà prouvée reste donc
+ * valide à toute largeur, **revérifiée explicitement aux 3 tailles par garde E2E** (jamais une
+ * géométrie seulement raisonnée, rétro #190 : ce même écran EST la surface littérale de ce piège).
+ * Collection (grille)/Boutique (cartes empilées) = story 8.2b, **hors scope ici**.
  */
 
 /** Glyphe décoratif (doublé du texte) par état de nœud — jamais la seule info portée. */
@@ -766,6 +786,9 @@ type ScreenState =
 /** Orchestrateur client de l'écran carte — charge la carte composée serveur au montage. */
 export function MapScreen() {
   const [screen, setScreen] = useState<ScreenState>({ kind: "loading" });
+  // Reflow responsive (story 8.2 #255, WIREFRAMES §8) — seul consommateur de --bp-phone sur cet
+  // écran, cf. commentaire de tête (marge de <main> resserrée, tablette/desktop inchangés).
+  const isPhone = useIsPhone();
 
   const fetchMap = useCallback(async () => {
     try {
@@ -816,7 +839,10 @@ export function MapScreen() {
     flexDirection: "column",
     alignItems: "center",
     gap: "var(--space-6)",
-    padding: "var(--space-6)",
+    // Marge resserrée sous --bp-phone (WIREFRAMES §8, story 8.2 #255) : plus de largeur utile pour
+    // le chemin serpentin sur un viewport étroit. Tablette/desktop : --space-6 inchangé (AC : pas
+    // de régression). CSS pur — aucune influence sur la géométrie de `WorldMap.nodes` (#123).
+    padding: isPhone ? "var(--space-4)" : "var(--space-6)",
   };
 
   return (
