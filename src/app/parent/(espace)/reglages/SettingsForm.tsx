@@ -9,7 +9,7 @@ import type {
   HouseholdSettingsPatch,
   ThemePreference,
 } from "@/lib/parent/settings";
-import { saveSettingsAction } from "./actions";
+import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 
 /**
  * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7). Rendu sous
@@ -37,6 +37,7 @@ const CHECK_ICON = "✓";
 const WARN_ICON = "⚠️";
 const SWITCH_ON = "◉";
 const SWITCH_OFF = "○";
+const RECAL_ICON = "🔄";
 
 type FeedbackKind = "success" | "error";
 /** Codes affichables : validation serveur + session + repli réseau. */
@@ -252,6 +253,65 @@ const backLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
+// Rangée des boutons de la confirmation de recalibrage.
+const recalibrateButtonsStyle: CSSProperties = {
+  display: "flex",
+  gap: "var(--space-3)",
+  flexWrap: "wrap",
+};
+
+// Bouton d'ouverture « Recalibrer » (registre neutre « fantôme » : texte plein-alpha
+// `--color-text-secondary` sur `--card-bg`, ≥ 4.5:1 résolu, aucune `opacity` — rétro #226).
+const recalibrateActionStyle: CSSProperties = {
+  ...segmentBase,
+  alignSelf: "flex-start",
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  color: "var(--color-text-secondary)",
+  backgroundColor: "transparent",
+  border: "1px solid var(--color-border-primary)",
+};
+
+// Bouton de CONFIRMATION = registre **amber** (warning), calme (COPY : jamais agressif) : texte
+// constant `--color-on-warning` sur `--color-status-warning` (theme-safe, contraste résolu testé)
+// + 🔄 doublé. Même patron que le bouton destructif de ProfileManager (registre warning apaisé).
+const recalibrateConfirmStyle: CSSProperties = {
+  ...segmentBase,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  fontFamily: "var(--font-family-display)",
+  fontWeight: "var(--font-weight-bold)",
+  color: "var(--color-on-warning)",
+  backgroundColor: "var(--color-status-warning)",
+  border: "none",
+};
+
+// Bouton **Annuler** = ghost neutre (texte plein-alpha, aucune `opacity`).
+const recalibrateCancelStyle: CSSProperties = {
+  ...segmentBase,
+  color: "var(--color-text-secondary)",
+  backgroundColor: "transparent",
+  border: "1px solid var(--color-border-primary)",
+};
+
+// État **en cours** (rétro Frontend #226) : registre neutre « inactif » **sans `opacity`** — un
+// `opacity` sur le bouton compositerait le TEXTE vers le fond et le ferait tomber sous 4.5:1 (piège
+// #170/#226 « token résolu ≠ pixel réellement peint »). On garde le texte **plein-alpha**
+// (`--color-text-secondary` sur `--color-bg-tertiary`, contraste résolu ≥ 4.5:1 déjà prouvé
+// ProfileManager) ; le signal « en cours » vient de `disabled`/`cursor:not-allowed` + fond atténué.
+const recalibrateDisabledStyle: CSSProperties = {
+  ...segmentBase,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  color: "var(--color-text-secondary)",
+  backgroundColor: "var(--color-bg-tertiary)",
+  border: "1px solid var(--color-border-primary)",
+  cursor: "not-allowed",
+};
+
 interface SegmentOption<T extends string> {
   value: T;
   label: string;
@@ -309,11 +369,19 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
   const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
     node?.focus();
   }, []);
+  // Focus **au montage** du panneau de confirmation de recalibrage (rendu conditionnel) : le bouton
+  // « Recalibrer » cliqué démonte → le focus retombe sur `<body>` (clavier/SR perdus). On déplace le
+  // focus sur **Annuler** (choix sûr par défaut, comme ProfileManager). Ref stable `useCallback` →
+  // invoqué une seule fois par ouverture. Bouton nativement focusable → pas d'artefact d'outline #222.
+  const recalibrateAnchorRef = useCallback((node: HTMLButtonElement | null) => {
+    node?.focus();
+  }, []);
   const [theme, setTheme] = useState<ThemePreference>(settings.theme);
   const [worldValidation, setWorldValidation] = useState(settings.parentWorldValidation);
   const [nudgeMinutes, setNudgeMinutes] = useState(settings.screenTimeNudgeMinutes);
   const [hardLockEnabled, setHardLockEnabled] = useState(settings.screenTimeHardLockEnabled);
   const [hardLockMinutes, setHardLockMinutes] = useState(settings.screenTimeHardLockMinutes);
+  const [recalibrateConfirming, setRecalibrateConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: FeedbackKind; text: string } | null>(null);
 
@@ -366,7 +434,36 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
     void runSave({ screenTimeHardLockMinutes: minutes });
   };
 
+  // **Recalibrer** (story 7.6, ADR 0016) : action à CONFIRMER (destructive-douce). L'ouverture
+  // n'arme rien — seul « Oui, recalibrer » appelle la server action (re-gardée session parent).
+  const openRecalibrate = () => {
+    setFeedback(null);
+    setRecalibrateConfirming(true);
+  };
+  const cancelRecalibrate = () => {
+    setRecalibrateConfirming(false);
+  };
+  const submitRecalibrate = async () => {
+    setPending(true);
+    setFeedback(null);
+    try {
+      const result = await requestRecalibrationAction();
+      if (result.ok) {
+        setRecalibrateConfirming(false);
+        setFeedback({ kind: "success", text: s.recalibrate.success });
+        router.refresh();
+      } else {
+        setFeedback({ kind: "error", text: errorText(result.code) });
+      }
+    } catch {
+      setFeedback({ kind: "error", text: errorText("GENERIC") });
+    } finally {
+      setPending(false);
+    }
+  };
+
   const st = s.screenTime;
+  const rc = s.recalibrate;
 
   return (
     <main className="bg-bg text-text" style={mainStyle}>
@@ -463,6 +560,54 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
                 ))}
               </select>
             </label>
+          )}
+        </fieldset>
+
+        <fieldset style={fieldsetStyle}>
+          <legend style={legendStyle}>{rc.legend}</legend>
+          <p style={hintStyle}>{rc.hint}</p>
+          {recalibrateConfirming ? (
+            <>
+              {/* Corps de confirmation : styling warning + 🔄 doublé, mais PAS `role="alert"` (ce
+                  n'est pas une erreur live-annoncée ; le vrai `role="alert"` est réservé au bandeau
+                  de feedback en tête → évite deux régions alert concurrentes, cf. ProfileManager). */}
+              <p style={warningBoxStyle}>
+                <span aria-hidden="true">{WARN_ICON}</span>
+                {rc.confirmBody}
+              </p>
+              <div style={recalibrateButtonsStyle}>
+                <button
+                  ref={recalibrateAnchorRef}
+                  type="button"
+                  className="mz-focusable"
+                  onClick={cancelRecalibrate}
+                  style={recalibrateCancelStyle}
+                >
+                  {rc.cancel}
+                </button>
+                <button
+                  type="button"
+                  className="mz-focusable"
+                  disabled={pending}
+                  onClick={() => void submitRecalibrate()}
+                  style={pending ? recalibrateDisabledStyle : recalibrateConfirmStyle}
+                >
+                  <span aria-hidden="true">{RECAL_ICON}</span>
+                  {rc.confirm}
+                </button>
+              </div>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="mz-focusable"
+              disabled={pending}
+              onClick={openRecalibrate}
+              style={pending ? recalibrateDisabledStyle : recalibrateActionStyle}
+            >
+              <span aria-hidden="true">{RECAL_ICON}</span>
+              {rc.action}
+            </button>
           )}
         </fieldset>
 

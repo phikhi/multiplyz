@@ -107,6 +107,7 @@ Ajouter un profil enfant depuis l'accueil (modèle DB déjà compatible). Chaque
 
 ### 3.6 Recalibrage
 - Si elle régresse (oublis) ou explose un palier, le moteur **réajuste** automatiquement (les calculs ratés reviennent, l'élargissement se déclenche). Parent peut **recalibrer** manuellement.
+- **Recalibrer = relancer le mini-diagnostic** (Réglages parent). Contrat **verrouillé** (ADR 0016, ENGINE §3) : c'est une **fusion MONOTONE** (max-merge) — le re-diagnostic ne peut que **relever** un fait sous-amorcé ou **créer** un fait neuf, **jamais rétrograder** une boîte acquise (invariant « progression monotone », :38). La correction vers le bas (surestimation) reste gérée par le rétrograde Leitner normal (ENGINE §2) pendant le jeu. La progression déjà acquise **n'est jamais perdue**.
 
 ---
 

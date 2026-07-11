@@ -1908,6 +1908,54 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.screenshot({ path: "docs/captures/7.3-reglages-mobile.png", fullPage: true });
   });
 
+  // ── Recalibrer (story 7.6, #219, ADR 0016) : le contrôle parent AGIT bout-en-bout ──
+  // Sérialisé DANS le même foyer (PIN parent encore 9876). Prouve : (a) le contrôle « Recalibrer »
+  // est RÉELLEMENT VISIBLE (pixels + géométrie non recouverte, garde #170) ; (b) l'étape de
+  // confirmation apparaît au clic ; (c) confirmer appelle la vraie server action → armement DB (la
+  // confirmation de succès s'affiche). La fusion monotone côté enfant est couverte par les tests
+  // d'intégration (`seedRecalibration`, `diagnosticPlanAction`/`seedDiagnosticAction` routés).
+  test("recalibrer : contrôle parent visible → confirmation → armement (capture)", async ({
+    page,
+  }) => {
+    const rc = settings.recalibrate;
+    // Accès sous garde session parent (9876) → tableau de bord → Réglages.
+    await page.goto("/");
+    await page.getByRole("button", { name: strings.parent.entryLabel }).click();
+    await enterPin(page, "9876");
+    await expect(page).toHaveURL(/\/parent$/);
+    await page.getByRole("link", { name: strings.parent.dashboard.settingsLink }).click();
+    await expect(page).toHaveURL(/\/parent\/reglages$/);
+
+    // (a) Le contrôle « Recalibrer » est RÉELLEMENT RENDU + VISIBLE (pixels, garde #170).
+    const recalibrateBtn = page.getByRole("button", { name: rc.action });
+    await recalibrateBtn.scrollIntoViewIfNeeded();
+    await expect(recalibrateBtn).toBeVisible();
+    await expect(recalibrateBtn).toBeInViewport(); // géométrie rendue réelle, non hors-cadre
+    // Non-occlusion : la boîte a une aire non nulle (élément peint, pas height:0 / clippé).
+    const box = await recalibrateBtn.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThan(0);
+    expect(box!.height).toBeGreaterThanOrEqual(44); // cible tactile ≥ 44 px (a11y)
+    await expect(page.getByText(rc.hint)).toBeVisible();
+    await page.screenshot({ path: "docs/captures/7.6-recalibrer.png", fullPage: true });
+
+    // (b) Cliquer ouvre l'étape de confirmation (corps + confirmer/annuler), sans rien armer encore.
+    await recalibrateBtn.click();
+    await expect(page.getByText(rc.confirmBody)).toBeVisible();
+    const confirmBtn = page.getByRole("button", { name: rc.confirm });
+    await expect(confirmBtn).toBeVisible();
+    await expect(confirmBtn).toBeInViewport();
+    await expect(page.getByRole("button", { name: rc.cancel })).toBeVisible();
+    await page.screenshot({ path: "docs/captures/7.6-recalibrer-confirm.png", fullPage: true });
+
+    // (c) Confirmer → vraie server action (armement DB du drapeau) → confirmation de succès visible.
+    await confirmBtn.click();
+    await expect(page.getByText(rc.success)).toBeVisible();
+    // L'étape de confirmation s'est refermée : le bouton d'action est de nouveau rendu.
+    await expect(page.getByRole("button", { name: rc.action })).toBeVisible();
+    await page.screenshot({ path: "docs/captures/7.6-recalibrer-arme.png", fullPage: true });
+  });
+
   test("récupération PIN parent via code de secours → nouveau code (capture)", async ({ page }) => {
     const rec = strings.recovery;
     expect(recoveryCode).toMatch(/^[A-Z0-9]{8}$/); // capté à l'onboarding

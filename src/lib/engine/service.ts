@@ -25,14 +25,21 @@
 
 import { eq } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
-import { mastery } from "@/lib/db/schema";
+import { mastery, profiles } from "@/lib/db/schema";
 import type { EngineConfig } from "@/config/server-config";
 import { SKILLS, type Skill } from "./domain";
 import { buildLevel, type BuildLevelOptions, type LevelItem } from "./level";
 import { applyAttempt, type Attempt, type MasteryState } from "./mastery";
 import { chooseFormat, buildQuestionChoices, type QuestionFormat, type Rng } from "./distractors";
 import type { Fact } from "./facts";
-import { seedDiagnosticMastery, type DiagnosticResponse, type SeededMastery } from "./diagnostic";
+import {
+  recalibrateMastery,
+  seedDiagnosticMastery,
+  type DiagnosticResponse,
+  type RecalibrationInput,
+  type RecalibrationUpsert,
+  type SeededMastery,
+} from "./diagnostic";
 import {
   attemptExists,
   insertAttempt,
@@ -40,6 +47,7 @@ import {
   loadScope,
   resolveFact,
   upsertMastery,
+  type DbHandle,
 } from "./persistence";
 
 // ============================================================================
@@ -391,5 +399,108 @@ export function seedDiagnostic(
       upsertMastery(tx, profileId, fact, row.state);
     }
     return seeded;
+  });
+}
+
+// ============================================================================
+// Recalibrage — re-diagnostic MONOTONE déclenché par le parent (ENGINE §3, ADR 0016)
+// ============================================================================
+
+/**
+ * `true` si le profil porte un **drapeau de recalibrage armé** (`profiles.recalibration_requested`)
+ * — le parent a demandé de relancer le mini-diagnostic (story 7.6, ADR 0016). Lecture seule.
+ * Consommée par le gate côté enfant (`diagnosticPlanAction`) pour re-présenter le diagnostic MÊME
+ * quand `mastery` est non vide, et par `seedRecalibration` comme garde armé (anti-TOCTOU). Accepte
+ * un handle DB **ou** un handle de transaction (réutilisable dans la transaction de re-seed).
+ */
+export function isRecalibrationRequested(db: DbHandle, profileId: number): boolean {
+  const row = db
+    .select({ flag: profiles.recalibrationRequested })
+    .from(profiles)
+    .where(eq(profiles.id, profileId))
+    .limit(1)
+    .get();
+  return row?.flag === true;
+}
+
+/**
+ * **Arme** le drapeau de recalibrage du profil (déclencheur parent, story 7.6, ADR 0016) :
+ * `profiles.recalibration_requested := true`. À la prochaine partie, l'enfant re-joue le
+ * mini-diagnostic (gate `diagnosticPlanAction`), puis la fusion monotone consomme + efface le
+ * drapeau (`seedRecalibration`). **Idempotent** : (ré)armer un drapeau déjà armé est sûr (armer × N
+ * = armé) — aucun état partiel possible (écriture **unique**, donc pas de transaction/test de
+ * rollback : serait vacuous, rétro #124). Écrit **uniquement** `profiles` (jamais `mastery`/
+ * `attempts`) : la maîtrise ne bouge pas tant que l'enfant n'a pas re-joué le diagnostic.
+ */
+export function requestRecalibration(db: DbHandle, profileId: number): void {
+  db.update(profiles).set({ recalibrationRequested: true }).where(eq(profiles.id, profileId)).run();
+}
+
+/**
+ * **Applique la fusion MONOTONE** d'un re-diagnostic pour le profil de session (ENGINE §3, ADR
+ * 0016, Option A du drift #237). Valide chaque réponse (forme + domaine, #36, **même** normalisation
+ * que le diagnostic initial), puis, dans **UNE** transaction synchrone (atomicité, anti-TOCTOU #36) :
+ *
+ * 1. **garde « armé »** : ne recalibre QUE si `recalibration_requested` est vrai (sinon **no-op**
+ *    strict — re-soumettre un re-diagnostic hors demande ne touche **rien**) ;
+ * 2. **fusion max-merge** (`recalibrateMastery`) : chaque fait re-sondé est **créé** (jamais amorcé)
+ *    ou **relevé** si sa boîte sondée est plus haute — **jamais** rétrogradé (invariant monotone
+ *    ENGINE §2). Un fait dont la boîte courante est ≥ la sondée n'est **pas** écrit (spacing préservé) ;
+ * 3. **effacement du drapeau** (`recalibration_requested := false`) dans la **MÊME** transaction que
+ *    les upserts de maîtrise → la demande est consommée **exactement une fois** (atomique).
+ *
+ * **N'écrit QUE `mastery` + le drapeau `profiles`** — **jamais** `attempts` (la sonde de calibrage
+ * est hors comptage de justesse, exactement comme le diagnostic initial, ADR 0012/0014). Idempotent
+ * de fait : le drapeau effacé rend un rejeu **no-op** (garde armé).
+ *
+ * @returns les écritures **effectivement** appliquées (create/raise) ; vide si non armé ou si tous
+ *   les faits re-sondés sont déjà à une boîte ≥ (aucun relèvement). `now` (epoch ms) injecté = horloge serveur.
+ */
+export function seedRecalibration(
+  db: AppDatabase,
+  profileId: number,
+  rawResponses: readonly RawDiagnosticResponse[],
+  config: EngineConfig,
+  now: number,
+): RecalibrationUpsert[] {
+  // Valider AVANT la transaction (garde de forme frontière #36) — réutilise la normalisation du
+  // diagnostic initial (résolution domaine + skill cohérent + response_ms fini/entier/≥0).
+  const responses: DiagnosticResponse[] = [];
+  for (const raw of rawResponses) {
+    const normalized = normalizeDiagnosticResponse(raw);
+    if (normalized !== null) {
+      responses.push(normalized);
+    }
+  }
+
+  return db.transaction((tx): RecalibrationUpsert[] => {
+    // 1. Garde « armé » (anti-TOCTOU) : hors demande parent → aucune écriture (no-op strict).
+    if (!isRecalibrationRequested(tx, profileId)) {
+      return [];
+    }
+
+    // 2. Fusion MONOTONE : lire l'état courant de chaque fait re-sondé (DANS la transaction,
+    //    APRÈS la garde armé, AVANT toute écriture), puis calculer les écritures create/raise.
+    const inputs: RecalibrationInput[] = responses.map((response) => ({
+      response,
+      current: loadMasteryState(tx, profileId, response.factKey),
+    }));
+    const upserts = recalibrateMastery(inputs, config, now);
+
+    // 1ʳᵉˢ écriture(s) : upsert des lignes relevées/créées (jamais une boîte plus basse, monotone).
+    for (const upsert of upserts) {
+      const fact = resolveFact(upsert.factKey) as Fact;
+      upsertMastery(tx, profileId, fact, upsert.state);
+    }
+
+    // 3. 2ᵉ écriture (garde d'atomicité, ADR 0016) : effacer le drapeau dans la MÊME transaction.
+    //    Si CETTE écriture échoue, TOUTE la fusion ci-dessus est annulée (ROLLBACK) : ni maîtrise
+    //    relevée, ni drapeau effacé — aucun état partiel (la demande n'est jamais « à moitié » consommée).
+    tx.update(profiles)
+      .set({ recalibrationRequested: false })
+      .where(eq(profiles.id, profileId))
+      .run();
+
+    return upserts;
   });
 }
