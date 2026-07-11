@@ -68,6 +68,30 @@ Un **fact** = 1 calcul atomique, clé stable. Commutatif → clé **canonique tr
   - non testé → **pas de ligne** (= « nouveau », sera introduit tôt selon le rythme).
 - **Aucun score affiché.** Cadre : « on prépare ta carte ! ».
 
+### Re-diagnostic monotone (recalibrage parent) — ADR 0016
+
+Le parent peut **relancer le mini-diagnostic** (PRODUCT §3.6, DETAILS §3). Contrat **verrouillé**
+(ADR 0016, arbitrage drift #237 → Option A) : le re-diagnostic est une **fusion MONOTONE (max-merge)**
+qui **respecte l'invariant §2 « progression monotone, jamais de régression »** — il ne peut que
+**relever** ou **créer**, jamais rétrograder.
+
+- **Armement** : une action parent pose un drapeau `recalibration_requested` sur le profil enfant
+  (n'écrit que le drapeau). À la prochaine partie, l'enfant re-joue **le même** `selectDiagnostic`
+  (~18 faits) — présenté **même** si `mastery` est non vide.
+- **Fusion** (à la soumission), pour chaque fait re-sondé (`seed = seedBox(réponse)`, même classement
+  qu'à l'amorçage) :
+  - **jamais amorcé** → **CREATE** identique à l'amorçage initial (0 → seed) ;
+  - **`seed > box_courant`** → **RAISE** (`box := seed`, `next_due` recalculé, `last_seen := now`) ;
+    **compteurs `correct/wrong_count` + `avg_response_ms` INCHANGÉS** (la sonde ne pollue pas la
+    justesse/fluence rapportées — agrégats parent dérivés d'`attempts`, ADR 0012/0014) ;
+  - **`seed ≤ box_courant`** → **aucune écriture** (jamais de rétrograde, espacement préservé) ;
+  - **fait non re-sondé** → inchangé.
+- La **correction vers le bas** (enfant surestimé) reste gérée par le **rétrograde Leitner normal**
+  (`box − demoteBoxes` sur faux, §2 / PRODUCT :108) **pendant le jeu**, jamais par le recalibrage.
+- **Atomicité** : les upserts `mastery` **et** l'effacement du drapeau vivent dans **une** transaction
+  (la demande est consommée exactement une fois). Le recalibrage n'écrit **jamais** `attempts` (parité
+  avec le diagnostic initial). Détail : ADR 0016.
+
 ---
 
 ## 4. Composition d'un niveau (~10 questions)

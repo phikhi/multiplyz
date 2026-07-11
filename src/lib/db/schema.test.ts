@@ -100,6 +100,30 @@ describe("schéma profiles", () => {
     const indexes = rows.map((r) => r.name).sort();
     expect(indexes).toEqual(["profiles_name_key_unique", "profiles_name_unique"]);
   });
+
+  it("`recalibration_requested` est NOT NULL DEFAULT false (colonne additive migration 0014, jamais NOT NULL sans default — #105/ADR 0016)", () => {
+    // Garde PRAGMA (doctrine anti-drift #91/#105) : contrairement à `name_key` (NULLABLE, non
+    // calculable en SQL), ce drapeau a un default SQL `false`/0 → l'ADD COLUMN est sûr sur une
+    // table `profiles` DÉJÀ peuplée (les lignes existantes prennent 0). Effet observable : casser
+    // le default du SQL 0014 (ou passer la colonne NULLABLE en schema.ts + rebuild) → rouge.
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number; dflt_value: string | null }>(
+      sql`PRAGMA table_info(profiles)`,
+    );
+    const col = info.find((c) => c.name === "recalibration_requested");
+    expect(col?.notnull).toBe(1);
+    expect(col?.dflt_value).toBe("false");
+  });
+
+  it("insère un profil SANS `recalibrationRequested` → défaut DB `false` (exerce le default)", () => {
+    const db = freshDb();
+    db.insert(profiles)
+      .values({ name: "Nour", nameKey: "nour", pinHash: "h", avatar: "fox" })
+      .run();
+    const row = db.select().from(profiles).get();
+    // Le défaut DB s'applique aux lignes créées sans le drapeau (armement = action parent explicite).
+    expect(row?.recalibrationRequested).toBe(false);
+  });
 });
 
 describe("schéma sessions (FK ON DELETE CASCADE)", () => {

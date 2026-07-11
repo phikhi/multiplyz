@@ -99,6 +99,13 @@
       "when": 1783597505966,
       "tag": "0013_purple_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1783782804774,
+      "tag": "0014_spotty_stick",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
 import {
+  isRecalibrationRequested,
   needsDiagnostic,
   seedDiagnostic,
+  seedRecalibration,
   startLevel,
   submitAttempt,
   type SubmitAttemptInput,
@@ -78,6 +80,8 @@ vi.mock("@/lib/engine/service", () => ({
   submitAttempt: vi.fn(),
   seedDiagnostic: vi.fn(),
   needsDiagnostic: vi.fn(),
+  isRecalibrationRequested: vi.fn(),
+  seedRecalibration: vi.fn(),
 }));
 vi.mock("@/lib/engine/diagnostic", () => ({ selectDiagnostic: vi.fn() }));
 vi.mock("@/lib/game/finish-level", () => ({ finishLevel: vi.fn() }));
@@ -93,6 +97,8 @@ const startLevelMock = vi.mocked(startLevel);
 const submitAttemptMock = vi.mocked(submitAttempt);
 const seedDiagnosticMock = vi.mocked(seedDiagnostic);
 const needsDiagnosticMock = vi.mocked(needsDiagnostic);
+const isRecalibrationRequestedMock = vi.mocked(isRecalibrationRequested);
+const seedRecalibrationMock = vi.mocked(seedRecalibration);
 const selectDiagnosticMock = vi.mocked(selectDiagnostic);
 const finishLevelMock = vi.mocked(finishLevel);
 const getUnlockedWorldCountMock = vi.mocked(getUnlockedWorldCount);
@@ -124,6 +130,9 @@ beforeEach(() => {
   // les tests hors-scope du verrou n'ont pas à le paramétrer explicitement.
   readHouseholdSettingsMock.mockReturnValue(FAKE_HOUSEHOLD_SETTINGS);
   evaluateScreenTimeLockMock.mockReturnValue(false);
+  // Recalibrage NON armé par défaut (story 7.6) — les tests hors-scope du recalibrage n'ont pas à
+  // le paramétrer ; seuls les tests dédiés l'arment (`isRecalibrationRequestedMock.mockReturnValue`).
+  isRecalibrationRequestedMock.mockReturnValue(false);
 });
 
 describe("startLevelAction", () => {
@@ -296,9 +305,10 @@ describe("diagnosticPlanAction", () => {
     expect(needsDiagnosticMock).not.toHaveBeenCalled();
   });
 
-  it("profil déjà amorcé → { items: [] } (pas de re-diagnostic)", async () => {
+  it("profil déjà amorcé ET recalibrage NON armé → { items: [] } (pas de re-diagnostic)", async () => {
     profileMock.mockResolvedValue(7);
     needsDiagnosticMock.mockReturnValue(false);
+    isRecalibrationRequestedMock.mockReturnValue(false);
     await expect(diagnosticPlanAction()).resolves.toEqual({ items: [] });
     expect(selectDiagnosticMock).not.toHaveBeenCalled();
   });
@@ -306,6 +316,15 @@ describe("diagnosticPlanAction", () => {
   it("profil vierge → renvoie le plan de sélection", async () => {
     profileMock.mockResolvedValue(7);
     needsDiagnosticMock.mockReturnValue(true);
+    const items = [{ fact: { key: "comp10_7" }, difficulty: "easy" }] as never;
+    selectDiagnosticMock.mockReturnValue(items);
+    await expect(diagnosticPlanAction()).resolves.toEqual({ items });
+  });
+
+  it("profil amorcé MAIS recalibrage ARMÉ (7.6) → renvoie le plan (re-présente le diagnostic)", async () => {
+    profileMock.mockResolvedValue(7);
+    needsDiagnosticMock.mockReturnValue(false); // mastery non vide
+    isRecalibrationRequestedMock.mockReturnValue(true); // parent a demandé un recalibrage
     const items = [{ fact: { key: "comp10_7" }, difficulty: "easy" }] as never;
     selectDiagnosticMock.mockReturnValue(items);
     await expect(diagnosticPlanAction()).resolves.toEqual({ items });
@@ -319,14 +338,29 @@ describe("seedDiagnosticAction", () => {
     expect(seedDiagnosticMock).not.toHaveBeenCalled();
   });
 
-  it("authentifié → amorce et renvoie le nombre de lignes amorcées", async () => {
+  it("NON armé → amorçage initial (seedDiagnostic), renvoie le nombre de lignes amorcées", async () => {
     profileMock.mockResolvedValue(7);
+    isRecalibrationRequestedMock.mockReturnValue(false);
     seedDiagnosticMock.mockReturnValue([
       { factKey: "comp10_7", state: {} as never },
       { factKey: "mult_6x8", state: {} as never },
     ]);
     await expect(seedDiagnosticAction([])).resolves.toEqual({ ok: true, seededCount: 2 });
     expect(seedDiagnosticMock.mock.calls[0][1]).toBe(7); // profil de session
+    expect(seedRecalibrationMock).not.toHaveBeenCalled(); // routage : pas la branche recalibrage
+  });
+
+  it("recalibrage ARMÉ (7.6) → ROUTE vers seedRecalibration (fusion monotone), PAS seedDiagnostic", async () => {
+    profileMock.mockResolvedValue(7);
+    isRecalibrationRequestedMock.mockReturnValue(true);
+    seedRecalibrationMock.mockReturnValue([
+      { factKey: "comp10_7", action: "raise", state: {} as never },
+    ]);
+    await expect(seedDiagnosticAction([])).resolves.toEqual({ ok: true, seededCount: 1 });
+    expect(seedRecalibrationMock.mock.calls[0][1]).toBe(7); // profil de session
+    // Routage mutation-prouvé : la branche armée n'appelle JAMAIS l'amorçage initial (n'écraserait
+    // pas la maîtrise). Retirer le routage `isRecalibrationRequested ? … : …` → seedDiagnostic appelé.
+    expect(seedDiagnosticMock).not.toHaveBeenCalled();
   });
 });
 

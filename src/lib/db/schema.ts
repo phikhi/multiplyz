@@ -73,6 +73,22 @@ export const profiles = sqliteTable("profiles", {
   nameKey: text("name_key").unique("profiles_name_key_unique"),
   pinHash: text("pin_hash").notNull(),
   avatar: text("avatar").notNull(),
+  /**
+   * **Drapeau de recalibrage** (story 7.6, ADR 0016, ENGINE §3 « re-diagnostic monotone ») :
+   * `true` = le parent a demandé de **relancer le mini-diagnostic**. Armé par l'action parent
+   * (`reglages/actions.ts`), il fait re-présenter le diagnostic à l'enfant à la prochaine partie
+   * (`diagnosticPlanAction`) MÊME quand `mastery` est non vide ; il est **effacé** dans la MÊME
+   * transaction que la fusion monotone du re-diagnostic (`seedRecalibration`, atomicité).
+   *
+   * Bool SQLite (0/1). **NOT NULL DEFAULT false** — sûr en ajout de colonne sur une table
+   * `profiles` DÉJÀ peuplée (SQLite n'interdit `ADD col NOT NULL` que **sans** default ; ici la
+   * valeur par défaut `0` remplit les lignes existantes, issue #105 respectée) → aucun backfill
+   * applicatif requis (contrairement à `name_key`, non calculable en SQL, ADR 0005). schema.ts ↔
+   * snapshot ↔ SQL ↔ base restent cohérents (`db:generate` no-op), garde PRAGMA `notnull=1`/`dflt=0`.
+   */
+  recalibrationRequested: integer("recalibration_requested", { mode: "boolean" })
+    .notNull()
+    .default(false),
   /** Hash du PIN parent (espace parent) — porté par le profil propriétaire. */
   parentPinHash: text("parent_pin_hash"),
   /** Hash du code de secours (réinit PIN parent sans email, AUTH.md §5). */

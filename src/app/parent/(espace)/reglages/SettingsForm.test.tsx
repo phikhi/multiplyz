@@ -8,13 +8,17 @@ import {
 } from "@/components/game/scaffolds/test-support/tokens-css";
 import type { HouseholdSettings } from "@/lib/parent/settings";
 import { SettingsForm } from "./SettingsForm";
-import { saveSettingsAction } from "./actions";
+import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
-vi.mock("./actions", () => ({ saveSettingsAction: vi.fn() }));
+vi.mock("./actions", () => ({
+  saveSettingsAction: vi.fn(),
+  requestRecalibrationAction: vi.fn(),
+}));
 
 const saveMock = vi.mocked(saveSettingsAction);
+const recalibrateMock = vi.mocked(requestRecalibrationAction);
 const s = strings.parent.settings;
 
 const SETTINGS: HouseholdSettings = {
@@ -40,6 +44,7 @@ function renderForm(settings: HouseholdSettings = SETTINGS) {
 beforeEach(() => {
   vi.clearAllMocks();
   saveMock.mockResolvedValue({ ok: true });
+  recalibrateMock.mockResolvedValue({ ok: true });
   delete document.documentElement.dataset.theme;
 });
 
@@ -191,6 +196,86 @@ describe("SettingsForm — feedback d'erreur (doublé d'icône ⚠️)", () => {
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: s.theme.dark }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(s.errors.GENERIC));
+  });
+});
+
+// ───────────────────────────── recalibrer (story 7.6, ADR 0016 — confirm step) ─────────────────────────────
+
+describe("SettingsForm — recalibrer (story 7.6, ADR 0016)", () => {
+  const rc = s.recalibrate;
+
+  it("rend la section recalibrer (légende + consigne + bouton d'action) — pas de confirmation par défaut", () => {
+    renderForm();
+    expect(screen.getByRole("button", { name: rc.action })).toBeInTheDocument();
+    expect(screen.getByText(rc.hint)).toBeInTheDocument();
+    // Aucune confirmation ouverte au départ (le bouton de confirmation n'est PAS rendu).
+    expect(screen.queryByRole("button", { name: rc.confirm })).toBeNull();
+  });
+
+  it("cliquer « Recalibrer » OUVRE la confirmation (corps + confirmer/annuler) SANS armer (aucun appel action)", () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    expect(screen.getByText(rc.confirmBody)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: rc.confirm })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: rc.cancel })).toBeInTheDocument();
+    // Ouvrir n'ARME RIEN : seul « Oui, recalibrer » appelle la server action (destructive-douce).
+    expect(recalibrateMock).not.toHaveBeenCalled();
+  });
+
+  it("confirmer ⇒ requestRecalibrationAction() appelé + confirmation succès + panneau refermé + refresh", async () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    fireEvent.click(screen.getByRole("button", { name: rc.confirm }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(rc.success));
+    expect(recalibrateMock).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalled();
+    // Panneau de confirmation refermé après succès → le bouton d'action est de nouveau rendu.
+    expect(screen.getByRole("button", { name: rc.action })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: rc.confirm })).toBeNull();
+  });
+
+  it("annuler ⇒ referme la confirmation SANS appeler l'action", () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    fireEvent.click(screen.getByRole("button", { name: rc.cancel }));
+    expect(recalibrateMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: rc.confirm })).toBeNull();
+    expect(screen.getByRole("button", { name: rc.action })).toBeInTheDocument();
+  });
+
+  it("a11y : l'ouverture de la confirmation déplace le focus sur « Annuler » (choix sûr, rétro #226)", () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: rc.cancel }));
+  });
+
+  it("SÉCU : action { ok:false, code:UNAUTHORIZED } ⇒ role=alert message mappé (session expirée)", async () => {
+    recalibrateMock.mockResolvedValue({ ok: false, code: "UNAUTHORIZED" });
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    fireEvent.click(screen.getByRole("button", { name: rc.confirm }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(s.errors.UNAUTHORIZED));
+  });
+
+  it("exception réseau (action throw) ⇒ role=alert message GENERIC", async () => {
+    recalibrateMock.mockRejectedValue(new Error("network"));
+    renderForm();
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    fireEvent.click(screen.getByRole("button", { name: rc.confirm }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(s.errors.GENERIC));
+  });
+
+  it("aucun bouton de la section recalibrer (action/confirmer/annuler) ne dilue son texte par une `opacity` (rétro #226)", () => {
+    renderForm();
+    // Bouton d'action fermé.
+    expect(screen.getByRole("button", { name: rc.action }).style.opacity === "" ? 1 : 0).toBe(1);
+    // Ouvrir la confirmation → confirmer + annuler visibles : vérifier leur alpha plein.
+    fireEvent.click(screen.getByRole("button", { name: rc.action }));
+    for (const name of [rc.confirm, rc.cancel]) {
+      const el = screen.getByRole("button", { name });
+      const opacity = el.style.opacity === "" ? 1 : Number(el.style.opacity);
+      expect(opacity).toBe(1); // texte plein-alpha → signal « en cours » via disabled/cursor, pas l'opacité
+    }
   });
 });
 

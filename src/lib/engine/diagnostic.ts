@@ -454,18 +454,143 @@ export function seedDiagnosticMastery(
 
   const seeded: SeededMastery[] = [];
   for (const [factKey, response] of latest) {
-    const box = seedBox(response, config);
-    seeded.push({
-      factKey,
-      state: {
-        box,
-        correctCount: response.correct ? 1 : 0,
-        wrongCount: response.correct ? 0 : 1,
-        avgResponseMs: response.responseMs,
-        lastSeen: now,
-        nextDue: now + boxDelayMs(box, config),
-      },
-    });
+    seeded.push({ factKey, state: seedMasteryRow(response, config, now) });
   }
   return seeded;
+}
+
+/**
+ * **Ligne de maîtrise amorcée** pour une réponse (ENGINE §3, amorçage INITIAL) : boîte selon
+ * `seedBox` (3 fluent / 2 lent / 0 faux), `next_due = now + délai(box)` avec le **même** barème
+ * Leitner que les transitions (`boxDelayMs`), compteurs initialisés (1 juste **ou** 1 faux),
+ * `avg_response_ms = response_ms`, `last_seen = now`. Fonction **pure** — source **unique** de la
+ * forme « ligne amorcée » : réutilisée par `seedDiagnosticMastery` (diagnostic initial) ET par
+ * `recalibrateMastery` (cas « fait jamais amorcé » du re-diagnostic) → la création est **par
+ * construction identique** à l'amorçage initial (aucune divergence à maintenir, ADR 0016).
+ */
+function seedMasteryRow(
+  response: DiagnosticResponse,
+  config: EngineConfig,
+  now: number,
+): MasteryState {
+  const box = seedBox(response, config);
+  return {
+    box,
+    correctCount: response.correct ? 1 : 0,
+    wrongCount: response.correct ? 0 : 1,
+    avgResponseMs: response.responseMs,
+    lastSeen: now,
+    nextDue: now + boxDelayMs(box, config),
+  };
+}
+
+// ============================================================================
+// Recalibrage — re-diagnostic MONOTONE (max-merge), ADR 0016 / issue #237 (Option A)
+// ============================================================================
+
+/**
+ * Nature d'une écriture produite par le re-diagnostic monotone (observabilité + tests) :
+ * - `"create"` : le fait n'avait **aucune** ligne de maîtrise → on la crée exactement comme
+ *   l'amorçage initial (`seedMasteryRow`) ;
+ * - `"raise"` : le fait avait une boîte **plus basse** que celle sondée → on **relève** la boîte.
+ *
+ * Un fait dont la boîte courante est **≥** celle sondée ne produit **aucune** écriture (« keep »,
+ * jamais rétrogradé) → il n'apparaît **pas** dans la sortie (invariant monotone, cf. `RecalibrationUpsert`).
+ */
+export type RecalibrationAction = "create" | "raise";
+
+/**
+ * Entrée du re-diagnostic pour **un** fait : la réponse de l'enfant + l'**état de maîtrise
+ * courant** de ce fait (`null` si jamais amorcé). L'appelant serveur (`seedRecalibration`) lit
+ * l'état courant depuis la base ; la fonction reste **pure** (aucune I/O).
+ */
+export interface RecalibrationInput {
+  /** Réponse de l'enfant au fait re-sondé (clé + juste/faux + `response_ms`). */
+  readonly response: DiagnosticResponse;
+  /** État de maîtrise **courant** du fait (`null` = jamais amorcé → sera créé). */
+  readonly current: MasteryState | null;
+}
+
+/**
+ * Une **écriture** à appliquer suite au re-diagnostic monotone : la clé, la nature (`create`/
+ * `raise`) et l'état de maîtrise à **upserter**. Un fait « keep » (boîte courante ≥ sondée)
+ * **n'apparaît pas** dans la liste → aucune écriture, aucune perturbation de l'espacement.
+ */
+export interface RecalibrationUpsert {
+  /** Clé canonique du fait. */
+  readonly factKey: string;
+  /** Nature de l'écriture (création vs relèvement). */
+  readonly action: RecalibrationAction;
+  /** État de maîtrise à persister (monotone : jamais une boîte plus basse que la courante). */
+  readonly state: MasteryState;
+}
+
+/**
+ * **Fusion MONOTONE (max-merge)** des réponses d'un re-diagnostic avec l'état de maîtrise courant
+ * (ADR 0016, Option A du drift #237). **Respecte l'invariant verrouillé « progression monotone,
+ * jamais de régression »** (ENGINE §2, PRODUCT :38) : le recalibrage ne peut que **relever** un
+ * fait sous-amorcé ou **créer** un fait neuf — **jamais** rétrograder une boîte acquise. La
+ * correction VERS LE BAS (enfant surestimé) reste gérée par le rétrograde Leitner normal (`−demoteBoxes`
+ * sur faux, PRODUCT :108) pendant le jeu, **pas** par le recalibrage.
+ *
+ * Pour **chaque** fait re-sondé (`seed = seedBox(response)` : 3 fluent / 2 lent / 0 faux, **même**
+ * classement `isFluent` que l'amorçage — pas de barème réinventé) :
+ * - **aucune ligne courante** (jamais amorcé) → **CREATE** : ligne identique à l'amorçage initial
+ *   (`seedMasteryRow`, box = seed, compteurs 1, `avg = response_ms`, `next_due = now + délai(seed)`) ;
+ * - **ligne courante, `seed > box_courant`** → **RAISE** : `box := seed`, `next_due := now +
+ *   délai(seed)`, `last_seen := now`. Les **compteurs** (`correctCount`/`wrongCount`) et
+ *   `avg_response_ms` sont **INCHANGÉS** — la sonde de calibrage ne doit **pas** polluer la justesse/
+ *   fluence rapportées (les agrégats parent dérivent du vrai jeu, `attempts`, ADR 0012/0014) ;
+ * - **ligne courante, `seed ≤ box_courant`** → **AUCUNE écriture** (« keep ») : jamais de
+ *   rétrograde, jamais de perturbation de l'espacement d'un fait déjà mieux placé.
+ *
+ * Un fait **non re-sondé** (absent des `inputs`) est **inchangé** (l'appelant ne lui construit
+ * aucune entrée). Fonction **pure et déterministe** ; **aucun score** produit (copy en 3.8).
+ * Dédoublonnage par clé (dernière entrée gagne), ordre de 1ʳᵉ apparition préservé — comme
+ * `seedDiagnosticMastery`.
+ *
+ * @param inputs une entrée par fait re-sondé (réponse + état courant).
+ * @param config config moteur ⚙️ — seuils de fluence / anti-mash / délais Leitner.
+ * @param now instant courant **injecté** (epoch ms) — base de `last_seen` / `next_due`.
+ * @returns les **écritures** (create/raise) à appliquer ; les « keep » en sont **absents**.
+ */
+export function recalibrateMastery(
+  inputs: readonly RecalibrationInput[],
+  config: EngineConfig,
+  now: number,
+): RecalibrationUpsert[] {
+  // Dédoublonnage par clé (dernière entrée gagne, ordre de 1ʳᵉ apparition), parité avec
+  // `seedDiagnosticMastery`. La Map JS conserve l'ordre d'insertion des clés.
+  const latest = new Map<string, RecalibrationInput>();
+  for (const input of inputs) {
+    latest.set(input.response.factKey, input);
+  }
+
+  const upserts: RecalibrationUpsert[] = [];
+  for (const [factKey, { response, current }] of latest) {
+    if (current === null) {
+      // Fait jamais amorcé → création identique à l'amorçage initial (0 → seed, monotone).
+      upserts.push({ factKey, action: "create", state: seedMasteryRow(response, config, now) });
+      continue;
+    }
+    const seed = seedBox(response, config);
+    // GARDE MONOTONE : ne RELEVER que si la sonde place le fait STRICTEMENT plus haut que sa
+    // boîte courante. `seed ≤ box_courant` → « keep » (aucune écriture) : jamais de rétrograde
+    // (invariant ENGINE §2), jamais de perturbation de l'espacement d'un fait déjà mieux placé.
+    if (seed > current.box) {
+      upserts.push({
+        factKey,
+        action: "raise",
+        // Boîte relevée + échéance recalculée + dernière-vue rafraîchie ; compteurs et fluence
+        // moyenne **préservés** (la sonde ne pollue pas la justesse/rapidité rapportées).
+        state: {
+          ...current,
+          box: seed,
+          nextDue: now + boxDelayMs(seed, config),
+          lastSeen: now,
+        },
+      });
+    }
+  }
+  return upserts;
 }

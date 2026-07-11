@@ -133,7 +133,8 @@ describe("runMigrations", () => {
     // référence `characters` par FK, donc drop dans cet ordre ; index UNIQUE 0008 sur
     // `attempts` — celui du `ledger` part avec son DROP TABLE ; tables worldgen 0009 :
     // worlds/jobs — sans FK, drop libre ; socle 0012 : socle_worlds ; réglages 0013 :
-    // household_settings — sans FK — pour que leur `CREATE TABLE` puisse rejouer).
+    // household_settings — sans FK — pour que leur `CREATE TABLE` puisse rejouer ;
+    // recalibrage 0014 : colonne `profiles.recalibration_requested` — pour que son `ADD COLUMN` rejoue).
     seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
@@ -145,6 +146,7 @@ describe("runMigrations", () => {
     seed.run(sql`DROP TABLE ledger`);
     seed.run(sql`DROP TABLE wallet`);
     seed.run(sql`DROP TABLE progress`);
+    seed.run(sql`ALTER TABLE profiles DROP COLUMN recalibration_requested`);
     seed.run(sql`DROP INDEX profiles_name_key_unique`);
     seed.run(sql`ALTER TABLE profiles DROP COLUMN name_key`);
     // Dé-journalise 0005 (6ᵉ migration, index 5) + tout ce qui suit → l'état « base
@@ -198,13 +200,15 @@ describe("runMigrations", () => {
     // Retour à l'état pré-0008 : retirer les deux index + dé-journaliser 0008 (9ᵉ
     // migration, ordinal 8 dans l'ordre chronologique — robuste à l'ajout ultérieur de
     // migrations, comme la régression #105). La dé-journalisation `>= OFFSET 8` retire
-    // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets), 0012 (socle_worlds) et 0013
-    // (household_settings) → on drope ces tables pour que leur `CREATE TABLE` rejoue.
+    // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets), 0012 (socle_worlds), 0013
+    // (household_settings) et 0014 (colonne `profiles.recalibration_requested`) → on drope ces
+    // tables + la colonne pour que leur `CREATE TABLE` / `ADD COLUMN` rejoue.
     seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
     seed.run(sql`DROP TABLE jobs`);
     seed.run(sql`DROP TABLE worlds`);
+    seed.run(sql`ALTER TABLE profiles DROP COLUMN recalibration_requested`);
     seed.run(sql`DROP INDEX attempts_profile_client_attempt_unique`);
     seed.run(sql`DROP INDEX ledger_profile_reason_ref_unique`);
     seed.run(

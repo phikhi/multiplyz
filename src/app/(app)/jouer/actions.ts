@@ -10,8 +10,10 @@ import {
 } from "@/config/server-config";
 import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
 import {
+  isRecalibrationRequested,
   needsDiagnostic,
   seedDiagnostic,
+  seedRecalibration,
   startLevel,
   submitAttempt,
   type Level,
@@ -151,19 +153,26 @@ export interface DiagnosticPlanActionResult {
 }
 
 /**
- * Renvoie le plan de diagnostic (~18 faits, ENGINE §3) à poser en 1ʳᵉ session, **ou une
- * liste vide** si le profil est déjà amorcé (le diagnostic ne se joue qu'une fois, §3).
- * Lecture seule (aucune écriture) — l'amorçage se fait ensuite via `seedDiagnosticAction`.
- * `null` si pas de session enfant valide.
+ * Renvoie le plan de diagnostic (~18 faits, ENGINE §3) à poser, **ou une liste vide** si aucun
+ * diagnostic n'est dû. Lecture seule (aucune écriture) — l'amorçage/la fusion se fait ensuite via
+ * `seedDiagnosticAction`. `null` si pas de session enfant valide.
+ *
+ * **Deux déclencheurs** (même plan `selectDiagnostic`, ENGINE §3, ADR 0016) :
+ * - **1ʳᵉ session** : profil vierge (`needsDiagnostic`, `mastery` vide → amorçage initial) ;
+ * - **recalibrage** : le parent a armé `recalibration_requested` (`isRecalibrationRequested`, story
+ *   7.6) → on re-présente le diagnostic MÊME si `mastery` est non vide (fusion monotone au seed).
+ * Le même plan déterministe est posé dans les deux cas ; c'est `seedDiagnosticAction` qui route
+ * entre amorçage initial et fusion monotone selon le drapeau.
  */
 export async function diagnosticPlanAction(): Promise<DiagnosticPlanActionResult> {
   const profileId = await getCurrentChildProfileId();
   if (profileId === null) {
     return { items: null };
   }
-  // Ne proposer le diagnostic qu'à un profil vierge (1ʳᵉ session) : un profil déjà amorcé
-  // n'en rejoue pas (cohérent avec l'idempotence de `seedDiagnostic`).
-  if (!needsDiagnostic(getDb(), profileId)) {
+  const db = getDb();
+  // Diagnostic dû ssi : profil vierge (1ʳᵉ session) OU recalibrage armé par le parent (7.6).
+  // Un profil déjà amorcé ET non armé n'en rejoue pas (cohérent avec l'idempotence des deux seeds).
+  if (!needsDiagnostic(db, profileId) && !isRecalibrationRequested(db, profileId)) {
     return { items: [] };
   }
   return { items: selectDiagnostic(getEngineConfig()) };
@@ -176,10 +185,18 @@ export interface SeedDiagnosticActionResult {
 }
 
 /**
- * Amorce la maîtrise du profil de session à partir des réponses du diagnostic (ENGINE §3).
- * Idempotent (n'écrit que sur un profil vierge, SYNC §5). `{ ok: false }` si non
- * authentifié ; `seededCount` = 0 si le profil est déjà amorcé (rejeu) ou aucune réponse
- * valide. Écriture atomique (transaction sync) portée par le service.
+ * Amorce **ou recalibre** la maîtrise du profil de session à partir des réponses du diagnostic
+ * (ENGINE §3, ADR 0016). **Route selon le drapeau de recalibrage** (`isRecalibrationRequested`) :
+ * - **armé** (parent a demandé un recalibrage, 7.6) → `seedRecalibration` : fusion **monotone**
+ *   (max-merge) — relève les faits sous-amorcés / crée les faits neufs, **jamais** de rétrograde,
+ *   puis **efface le drapeau** dans la même transaction ;
+ * - **non armé** (1ʳᵉ session) → `seedDiagnostic` : amorçage initial (idempotent, n'écrit que sur un
+ *   profil vierge, SYNC §5).
+ *
+ * `{ ok: false }` si non authentifié ; `seededCount` = nombre de lignes de maîtrise **effectivement**
+ * écrites (0 si déjà amorcé/non armé, ou aucune réponse valide, ou aucun relèvement). Écriture
+ * atomique (transaction sync) portée par le service. **N'écrit jamais `attempts`** (sonde de
+ * calibrage hors comptage de justesse, ADR 0012/0014), dans les deux branches.
  */
 export async function seedDiagnosticAction(
   responses: readonly RawDiagnosticResponse[],
@@ -188,8 +205,14 @@ export async function seedDiagnosticAction(
   if (profileId === null) {
     return { ok: false, seededCount: 0 };
   }
-  const seeded = seedDiagnostic(getDb(), profileId, responses, getEngineConfig(), Date.now());
-  return { ok: true, seededCount: seeded.length };
+  const db = getDb();
+  const config = getEngineConfig();
+  const now = Date.now();
+  // Recalibrage armé → fusion monotone (consomme le drapeau) ; sinon amorçage initial.
+  const written = isRecalibrationRequested(db, profileId)
+    ? seedRecalibration(db, profileId, responses, config, now)
+    : seedDiagnostic(db, profileId, responses, config, now);
+  return { ok: true, seededCount: written.length };
 }
 
 // ============================================================================
