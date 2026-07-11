@@ -1248,7 +1248,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
                 bottom: teddy.getBoundingClientRect().bottom,
                 top: teddy.getBoundingClientRect().top,
                 medCenterY:
-                  medallion.getBoundingClientRect().top + medallion.getBoundingClientRect().height / 2,
+                  medallion.getBoundingClientRect().top +
+                  medallion.getBoundingClientRect().height / 2,
                 upstreamMedBottom:
                   upstreamMed == null ? null : upstreamMed.getBoundingClientRect().bottom,
               };
