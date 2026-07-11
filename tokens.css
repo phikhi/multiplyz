@@ -453,6 +453,32 @@
   --collection-placeholder-bg:    var(--color-bg-tertiary);
   --collection-placeholder-glyph: var(--color-text-primary);
 
+  /* ---------- RESPONSIVE — BREAKPOINT ÉCRAN DE JEU (story 8.1 #254, WIREFRAMES §8) ----------
+     UN SEUL breakpoint numérique consommé par cette story : --bp-phone (téléphone vs
+     tablette/desktop, qui restent GROUPÉS — WIREFRAMES §8 « tablette/desktop : disposition
+     actuelle préservée », aucun comportement distinct tablette n'est consommé ICI). Pas de
+     --bp-tablet déclaré (anti-token-orphelin #125) : aucun code de CETTE story ne le
+     consommerait — à ajouter par une story qui le consomme réellement (8.2+, carte/collection/
+     boutique).
+     ⚠️ Les media queries CSS ne peuvent PAS référencer une custom property dans leur condition
+     (`@media (max-width: var(--x))` est invalide CSS) — ce token est donc consommé CÔTÉ JS
+     (`useIsPhone`, `src/lib/responsive/use-is-phone.ts`) via
+     `getComputedStyle(document.documentElement).getPropertyValue('--bp-phone')` À L'EXÉCUTION
+     RÉELLE (vrai navigateur) : AUCUNE valeur dupliquée en dur dans les composants, tokens.css
+     reste la SEULE source du nombre (jsdom ne résout pas les custom properties déclarées par
+     fichier importé → repli JS documenté et testé séparément dans ce module, jamais atteint en
+     navigateur réel où tokens.css est toujours chargé via globals.css). */
+  --bp-phone: 30rem; /* 480px — sous ce seuil : QCM 2×2 (déjà natif, verrouillé par garde E2E),
+                         numpad pleine largeur, barre d'action en bas (zone pouce) */
+
+  /* Barre d'action bas de zone pouce (ActionBar, story 8.1 #254, WIREFRAMES §8 « boutons
+     d'action en bas, zone pouce » — téléphone uniquement). Hauteur RÉSERVÉE consommée à la
+     fois par la barre elle-même (min-height) ET par le padding-bottom du contenu défilant
+     au-dessus (`PlayScreen.tsx`) — évite toute occlusion du dernier contenu jouable par la
+     barre fixe (#170/#190), prouvé par la garde E2E boundingClientRect (jamais une marge
+     seulement raisonnée, #190). */
+  --play-action-bar-height: var(--space-9); /* 96px */
+
   /* ---------- CONTRAT PER-MONDE (override dynamique) ----------
      Chaque monde généré pose --world-accent (via [data-world] ou style
      inline). Défaut = neutre. Le reste du système ne change pas. */

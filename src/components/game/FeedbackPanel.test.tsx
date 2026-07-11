@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { FeedbackPanel, type FeedbackPanelProps } from "./FeedbackPanel";
 import { strings } from "@/strings";
+import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
 
 /**
  * Rend un `FeedbackPanel` avec des props par défaut sûres (skill/operands requis pour
@@ -127,5 +128,39 @@ describe("FeedbackPanel — focus au montage (a11y, LEARNINGS #36)", () => {
     // Le focus reste sur le conteneur `role="status"` malgré l'étayage monté dessous
     // (l'étayage n'ajoute aucun contrôle focusable — #38 non blocked-by).
     expect(screen.getByRole("status")).toHaveFocus();
+  });
+});
+
+describe("FeedbackPanel — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
+  it("bouton primaire : disposition actuelle préservée tablette/desktop (ActionBar transparente)", () => {
+    renderPanel({ phase: "correct" });
+    const button = screen.getByRole("button", { name: strings.play.correct.next });
+    expect(button.parentElement!.style.display).toBe("contents");
+    expect(button.parentElement!.style.position).toBe("");
+  });
+
+  it("bouton primaire : passe en barre d'action bas de zone pouce sous --bp-phone", () => {
+    const restore = mockPhone(true);
+    try {
+      renderPanel({ phase: "retry" });
+      const button = screen.getByRole("button", { name: strings.play.retry.tryAgain });
+      expect(button.parentElement!.style.position).toBe("fixed");
+      expect(button.parentElement!.style.bottom).toBe("0px");
+    } finally {
+      restore();
+    }
+  });
+
+  it("reste un enfant du panneau role=status déjà focalisé (aucune restructuration DOM)", () => {
+    const restore = mockPhone(true);
+    try {
+      renderPanel({ phase: "correct" });
+      const status = screen.getByRole("status");
+      const button = screen.getByRole("button", { name: strings.play.correct.next });
+      expect(status).toContainElement(button);
+      expect(status).toHaveFocus();
+    } finally {
+      restore();
+    }
   });
 });

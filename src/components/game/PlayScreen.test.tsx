@@ -16,6 +16,7 @@ type StartLevelResult = Awaited<ReturnType<typeof startLevelAction>>;
 type DiagnosticPlanResult = Awaited<ReturnType<typeof diagnosticPlanAction>>;
 import { makeFact } from "@/lib/engine/facts";
 import type { LevelQuestion } from "@/lib/engine/service";
+import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
@@ -679,5 +680,38 @@ describe("PlayScreen — déconnexion accessible à tout écran", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument(),
     );
+  });
+});
+
+describe("PlayScreen — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
+  it("padding-bottom standard tablette/desktop (défaut, pas de régression)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    expect(screen.getByRole("main").style.paddingBottom).toBe("var(--space-6)");
+  });
+
+  it("réserve l'espace de l'ActionBar (padding-bottom) sous --bp-phone (non-occlusion #170/#190)", async () => {
+    const restore = mockPhone(true);
+    try {
+      startLevelMock.mockResolvedValue({
+        level: { questions: [question("mult_6x8")] },
+        starThresholds: STAR_THRESHOLDS,
+        locked: false,
+      });
+      render(<PlayScreen />);
+      await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+      // Garde à effet observable : si la réserve d'espace saute (retirée/mutée), le contenu
+      // jouable ne serait plus protégé de l'occlusion par la barre fixe (#170/#190).
+      expect(screen.getByRole("main").style.paddingBottom).toBe(
+        "calc(var(--space-6) + var(--play-action-bar-height))",
+      );
+    } finally {
+      restore();
+    }
   });
 });

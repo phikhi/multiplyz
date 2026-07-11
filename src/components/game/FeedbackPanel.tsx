@@ -6,6 +6,7 @@ import { pickVariant } from "@/lib/game/copy-variant";
 import type { QuestionPhase } from "@/lib/game/session";
 import type { Skill } from "@/lib/engine/domain";
 import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
+import { ActionBar } from "@/components/game/ActionBar";
 
 /**
  * Feedback no-fail après une réponse (ENGINE §9, WIREFRAMES §3c/§3d, COPY §3).
@@ -28,6 +29,12 @@ import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
  * clavier. Couleurs `--color-feedback-*` (bg + texte suivent **ensemble** le thème,
  * contraste préservé dans les 2 modes — distinct du cas « chip à couleur fixe » qui
  * exigerait un token de texte constant type `--color-on-warning`, cf. LEARNINGS #23).
+ *
+ * **Responsive (story 8.1 #254, WIREFRAMES §8)** : le bouton primaire (Continuer/Je
+ * réessaie) passe dans l'`ActionBar` bas de zone pouce sur téléphone (`useIsPhone`),
+ * disposition actuelle préservée tablette/desktop. Reste un enfant du panneau
+ * `role="status"` déjà focalisé au montage (`position:fixed` se positionne relatif au
+ * viewport, aucune restructuration DOM — le focus/l'ordre de lecture ne changent pas).
  */
 export interface FeedbackPanelProps {
   readonly phase: Exclude<QuestionPhase, "asking">;
@@ -161,14 +168,16 @@ export function FeedbackPanel({
         </p>
       )}
 
-      <button
-        type="button"
-        className="mz-focusable"
-        onClick={isCorrect ? onContinue : onRetry}
-        style={primaryButtonStyle}
-      >
-        {isCorrect ? strings.play.correct.next : strings.play.retry.tryAgain}
-      </button>
+      <ActionBar>
+        <button
+          type="button"
+          className="mz-focusable"
+          onClick={isCorrect ? onContinue : onRetry}
+          style={primaryButtonStyle}
+        >
+          {isCorrect ? strings.play.correct.next : strings.play.retry.tryAgain}
+        </button>
+      </ActionBar>
     </div>
   );
 }
