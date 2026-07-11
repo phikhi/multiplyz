@@ -1303,8 +1303,30 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.screenshot({ path: "docs/captures/231-mondes-liste-sombre.png", fullPage: true });
     await page.emulateMedia({ colorScheme: "light" });
 
-    // ── Approuver le monde A ──
-    await cardA.getByRole("button", { name: wa.approve.action }).click();
+    // ── Approuver le monde A ── Ralentit délibérément la server action (POST vers la page
+    // courante) pour capturer l'état PENDING avant sa résolution — même patron que #240/#249
+    // (`route.continue()` différé). Vérifie le fix #251 (straggler du drain #227/#249) : le
+    // bouton désactivé peint un fond ATTÉNUÉ DISCRIMINANT (`--color-bg-tertiary`, résolu en
+    // rgb réel par le vrai navigateur — pas seulement le nom du token, cf. #104), sans dilution
+    // `opacity` du texte (patron #226), en VRAI layout (pas jsdom, cf. #170).
+    await page.route("**/parent/mondes", async (route) => {
+      if (route.request().method() === "POST") {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
+      await route.continue();
+    });
+    const approveButtonA = cardA.getByRole("button", { name: wa.approve.action });
+    await approveButtonA.click();
+    await expect(approveButtonA).toBeDisabled();
+    await expect(approveButtonA).toHaveCSS("opacity", "1"); // aucune dilution du texte (#226)
+    await expect(approveButtonA).toHaveCSS("cursor", "not-allowed");
+    // `--color-bg-tertiary` résolu (light) = #F1ECFB = rgb(241, 236, 251) — couleur RÉELLEMENT
+    // peinte par le navigateur, discriminante du fond transparent des boutons actifs (#251).
+    await expect(approveButtonA).toHaveCSS("background-color", "rgb(241, 236, 251)");
+    await page.screenshot({
+      path: "docs/captures/251-mondes-approuver-pending.png",
+      fullPage: true,
+    });
     await expect(page.getByText(wa.approve.success)).toBeVisible();
     await expect(page.getByRole("region", { name: worldLabelA })).toHaveCount(0); // disparu de la file
     await expect(cardB).toBeVisible(); // B intact, non affecté par l'approbation de A
