@@ -518,6 +518,33 @@ export interface ParentControlsConfig {
   screenTimeHardLockMaxMinutes: number;
 }
 
+/**
+ * ⚙️ **Réglages son** (DETAILS §22 « son on/off, musique on/off + volume », PRODUCT §2/§137, story
+ * 8.3). Source unique des **défauts** ⚙️ d'un foyer neuf pour `soundEnabled`/`musicEnabled`/`volume`
+ * (persistés par foyer dans `household_settings`, `lib/parent/settings.ts`). Contrairement au temps
+ * d'écran (`ParentControlsConfig`), les **bornes de validation** ne sont PAS calibrables : `volume`
+ * est un pourcentage à bornes naturelles fixes `[0, 100]` (mêmes conventions que `THEME_PREFERENCES`,
+ * bornes non-⚙️ — seul le point de repli est calibrable).
+ *
+ * ⚠️ **État de consommation (honnête, #127/#155)** : ces ⚙️ sont **POSÉS + VALIDÉS + STOCKÉS** en
+ * 8.3 (défauts d'un foyer neuf + bornes de validation `writeHouseholdSettings`). Ils ne sont **PAS
+ * ENFORCÉS** ici : aucun moteur audio n'existe encore — la lecture/coupure réelle du son/musique au
+ * volume réglé dépend du **moteur sonore** (story 8.4, inexistant). Décrire « déclaré + validé +
+ * stocké, consommé en 8.4 », **jamais** « agit / joue / coupe ».
+ */
+export interface SoundConfig {
+  /** Bruitages activés par **défaut** pour un foyer neuf (DETAILS §22). */
+  soundEnabledDefault: boolean;
+  /** Musique activée par **défaut** pour un foyer neuf (DETAILS §22). */
+  musicEnabledDefault: boolean;
+  /** Volume par **défaut** pour un foyer neuf, en pourcentage `[0, 100]` (DETAILS §22 « + volume »). */
+  volumeDefault: number;
+}
+
+/** Bornes **fixes** (non-⚙️) du volume — pourcentage entier, source unique pour parsing + validation. */
+export const SOUND_VOLUME_MIN = 0;
+export const SOUND_VOLUME_MAX = 100;
+
 export interface AppConfig {
   mode: AppMode;
   database: DatabaseConfig;
@@ -530,6 +557,7 @@ export interface AppConfig {
   reporting: ReportingConfig;
   regularity: RegularityConfig;
   parentControls: ParentControlsConfig;
+  sound: SoundConfig;
 }
 
 /** Valeurs par défaut ⚙️ centralisées (surchargées par l'environnement). */
@@ -712,6 +740,14 @@ export const CONFIG_DEFAULTS = {
     screenTimeHardLockDefaultMinutes: 45,
     screenTimeHardLockMinMinutes: 10,
     screenTimeHardLockMaxMinutes: 240,
+  },
+  sound: {
+    // Réglages son (DETAILS §22) — défauts ⚙️ d'un foyer neuf. STOCKÉS/validés en 8.3, ENFORCÉS
+    // (moteur audio réel) en 8.4. Audio v1 = bruitages + musique activés par défaut (opt-out).
+    soundEnabledDefault: true,
+    musicEnabledDefault: true,
+    // Volume par défaut 70 % (repère raisonnable ni silencieux ni saturé, à calibrer au playtest).
+    volumeDefault: 70,
   },
 } as const;
 
@@ -1072,6 +1108,26 @@ export function loadParentControlsConfig(env: Env): ParentControlsConfig {
 }
 
 /**
+ * Bloc **réglages son** de la config (DETAILS §22, story 8.3), isolé en fonction pure (mêmes
+ * conventions que `loadParentControlsConfig`). Source unique des ⚙️ **défauts** son/musique/volume —
+ * **consommés** par `lib/parent/settings.ts` (défauts d'un foyer neuf). Aucun secret : réglages
+ * purs. `parseIntInRange` borne `volumeDefault` à `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]` (fixe).
+ */
+export function loadSoundConfig(env: Env): SoundConfig {
+  const d = CONFIG_DEFAULTS.sound;
+  return {
+    soundEnabledDefault: parseBoolean(env.SOUND_ENABLED_DEFAULT, d.soundEnabledDefault),
+    musicEnabledDefault: parseBoolean(env.MUSIC_ENABLED_DEFAULT, d.musicEnabledDefault),
+    volumeDefault: parseIntInRange(
+      env.SOUND_VOLUME_DEFAULT,
+      SOUND_VOLUME_MIN,
+      SOUND_VOLUME_MAX,
+      d.volumeDefault,
+    ),
+  };
+}
+
+/**
  * Parse une **chaîne** de configuration : valeur d'env **non vide** (espaces compactés à ses
  * extrémités) sinon défaut. Retenu pour les prompts de base ⚙️ (override d'un gabarit ART §5
  * au playtest) — une valeur vide/espaces retombe sur la charte verrouillée (jamais de prompt
@@ -1092,6 +1148,23 @@ function parseUnitInterval(raw: string | undefined, fallback: number): number {
   if (raw === undefined) return fallback;
   const n = Number.parseFloat(raw);
   return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+}
+
+/**
+ * Parse un **entier borné** dans `[min, max]` (bornes incluses). Retenu pour le volume par défaut
+ * (DETAILS §22, `[0, 100]`) — bornes **fixes** (non-⚙️, contrairement à `parsePositiveInt` des
+ * durées de temps d'écran dont les bornes elles-mêmes sont calibrables). Hors intervalle, non
+ * entier ou non numérique → défaut.
+ */
+function parseIntInRange(
+  raw: string | undefined,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  if (raw === undefined) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
 }
 
 /**
@@ -1194,6 +1267,7 @@ export function loadConfig(env: Env): AppConfig {
     reporting: loadReportingConfig(env),
     regularity: loadRegularityConfig(env),
     parentControls: loadParentControlsConfig(env),
+    sound: loadSoundConfig(env),
   };
 }
 
@@ -1273,6 +1347,15 @@ export function getRegularityConfig(): RegularityConfig {
  */
 export function getParentControlsConfig(): ParentControlsConfig {
   return getConfig().parentControls;
+}
+
+/**
+ * Bloc **réglages son** de la config applicative (mémoïsé). Consommé par les réglages du foyer
+ * (`lib/parent/settings.ts`, story 8.3) — défauts d'un foyer neuf (son/musique/volume). Source
+ * unique des ⚙️ son (STOCKÉS/validés en 8.3, ENFORCÉS par le moteur audio en 8.4).
+ */
+export function getSoundConfig(): SoundConfig {
+  return getConfig().sound;
 }
 
 /** Réinitialise le cache de config (tests / hot-reload). */

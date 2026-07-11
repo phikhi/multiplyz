@@ -134,7 +134,10 @@ describe("runMigrations", () => {
     // `attempts` — celui du `ledger` part avec son DROP TABLE ; tables worldgen 0009 :
     // worlds/jobs — sans FK, drop libre ; socle 0012 : socle_worlds ; réglages 0013 :
     // household_settings — sans FK — pour que leur `CREATE TABLE` puisse rejouer ;
-    // recalibrage 0014 : colonne `profiles.recalibration_requested` — pour que son `ADD COLUMN` rejoue).
+    // recalibrage 0014 : colonne `profiles.recalibration_requested` — pour que son `ADD COLUMN`
+    // rejoue ; son 0015 : colonnes `household_settings.sound_enabled`/`music_enabled`/`volume` —
+    // DROP TABLE household_settings ci-dessous suffit (0013 + 0015 rejouent tous deux sur la table
+    // recréée)).
     seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
@@ -201,8 +204,9 @@ describe("runMigrations", () => {
     // migration, ordinal 8 dans l'ordre chronologique — robuste à l'ajout ultérieur de
     // migrations, comme la régression #105). La dé-journalisation `>= OFFSET 8` retire
     // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets), 0012 (socle_worlds), 0013
-    // (household_settings) et 0014 (colonne `profiles.recalibration_requested`) → on drope ces
-    // tables + la colonne pour que leur `CREATE TABLE` / `ADD COLUMN` rejoue.
+    // (household_settings), 0014 (colonne `profiles.recalibration_requested`) et 0015 (colonnes
+    // son `household_settings`) → on drope ces tables + la colonne pour que leur
+    // `CREATE TABLE` / `ADD COLUMN` rejoue (DROP TABLE household_settings couvre 0013 ET 0015).
     seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
@@ -251,10 +255,13 @@ describe("runMigrations", () => {
   });
 
   // Story 7.3 (#216) : la migration 0013 (ADDITIVE) crée `household_settings` (table NEUVE →
-  // `NOT NULL` + défauts sans le piège #105). Garde observable sur les colonnes RENDUES (PRAGMA,
-  // cohérence schema.ts↔snapshot↔SQL) : rouge si une colonne disparaît / le SQL diverge. La table
-  // est vide au 1er lancement (foyer neuf) → le repli défauts de `readHouseholdSettings` s'applique.
-  it("0013 : household_settings créée (colonnes attendues) + vide au 1er lancement (#216)", () => {
+  // `NOT NULL` + défauts sans le piège #105). Story 8.3 (#256) : la migration 0015 (ADDITIVE, ADD
+  // COLUMN) ajoute `sound_enabled`/`music_enabled`/`volume` à la fin (SQLite ADD COLUMN append
+  // toujours en queue physique, indépendamment de l'ordre déclaré dans schema.ts). Garde observable
+  // sur les colonnes RENDUES (PRAGMA, cohérence schema.ts↔snapshot↔SQL) : rouge si une colonne
+  // disparaît / le SQL diverge. La table est vide au 1er lancement (foyer neuf) → le repli défauts
+  // de `readHouseholdSettings` s'applique.
+  it("0013+0015 : household_settings créée (colonnes attendues, son inclus) + vide au 1er lancement (#216/#256)", () => {
     const db = createDatabase(":memory:");
     runMigrations(db);
     const cols = db
@@ -268,6 +275,9 @@ describe("runMigrations", () => {
       "screen_time_hard_lock_enabled",
       "screen_time_hard_lock_minutes",
       "updated_at",
+      "sound_enabled",
+      "music_enabled",
+      "volume",
     ]);
     expect(db.get<{ n: number }>(sql`SELECT COUNT(*) AS n FROM household_settings`)?.n).toBe(0);
   });

@@ -11,6 +11,7 @@ import {
   getParentControlsConfig,
   getRegularityConfig,
   getReportingConfig,
+  getSoundConfig,
   getWorldGenConfig,
   loadAuthConfig,
   loadConfig,
@@ -20,6 +21,7 @@ import {
   loadParentControlsConfig,
   loadRegularityConfig,
   loadReportingConfig,
+  loadSoundConfig,
   loadWorldGenConfig,
   resetConfigCache,
 } from "./server-config";
@@ -936,6 +938,67 @@ describe("getParentControlsConfig — accès mémoïsé", () => {
 
   it("expose le bloc parentControls de la config applicative", () => {
     expect(getParentControlsConfig()).toBe(getConfig().parentControls);
+  });
+});
+
+describe("loadSoundConfig — défauts ⚙️ son/musique/volume (DETAILS §22, story 8.3)", () => {
+  it("applique les défauts quand l'environnement est vide", () => {
+    expect(loadSoundConfig({})).toEqual(CONFIG_DEFAULTS.sound);
+  });
+
+  it("bruitages/musique activés par défaut (opt-out), volume par défaut 70", () => {
+    const c = loadSoundConfig({});
+    expect(c.soundEnabledDefault).toBe(true);
+    expect(c.musicEnabledDefault).toBe(true);
+    expect(c.volumeDefault).toBe(70);
+  });
+});
+
+describe("loadSoundConfig — surcharges ⚙️ par env", () => {
+  it("surcharge les trois paramètres son", () => {
+    const c = loadSoundConfig({
+      SOUND_ENABLED_DEFAULT: "false",
+      MUSIC_ENABLED_DEFAULT: "false",
+      SOUND_VOLUME_DEFAULT: "40",
+    });
+    expect(c).toEqual({
+      soundEnabledDefault: false,
+      musicEnabledDefault: false,
+      volumeDefault: 40,
+    });
+  });
+
+  it("MUTATION-PROUVÉ borne volume : hors `[0,100]`/non numérique ⇒ défaut (retirer la borne → vert)", () => {
+    const d = CONFIG_DEFAULTS.sound;
+    expect(loadSoundConfig({ SOUND_VOLUME_DEFAULT: "-1" })).toEqual(d);
+    expect(loadSoundConfig({ SOUND_VOLUME_DEFAULT: "101" })).toEqual(d);
+    expect(loadSoundConfig({ SOUND_VOLUME_DEFAULT: "abc" })).toEqual(d);
+  });
+
+  // `Number.parseInt` tronque un suffixe décimal (comportement partagé avec `parsePositiveInt`,
+  // pas une garde spécifique à `parseIntInRange`) : "50.5" → 50, valeur entière valide dans les
+  // bornes → PAS un rejet. Documente l'écart avec `assertIntInRange` (settings.ts), qui rejette
+  // 20.5 car il reçoit un NOMBRE déjà parsé (patch JSON), pas une chaîne d'env à tronquer.
+  it('tronque un suffixe décimal (`Number.parseInt`, pas un rejet) : "50.5" ⇒ 50', () => {
+    expect(loadSoundConfig({ SOUND_VOLUME_DEFAULT: "50.5" }).volumeDefault).toBe(50);
+  });
+
+  it("valeurs aux bornes exactes (0/100) ⇒ acceptées (borne inclusive testée à la frontière)", () => {
+    expect(loadSoundConfig({ SOUND_VOLUME_DEFAULT: "0" }).volumeDefault).toBe(0);
+    expect(loadSoundConfig({ SOUND_VOLUME_DEFAULT: "100" }).volumeDefault).toBe(100);
+  });
+
+  it("un booléen non reconnu (ni true/false) retombe sur le défaut", () => {
+    expect(loadSoundConfig({ SOUND_ENABLED_DEFAULT: "yes" }).soundEnabledDefault).toBe(true);
+  });
+});
+
+describe("getSoundConfig — accès mémoïsé", () => {
+  beforeEach(() => resetConfigCache());
+  afterEach(() => resetConfigCache());
+
+  it("expose le bloc sound de la config applicative", () => {
+    expect(getSoundConfig()).toBe(getConfig().sound);
   });
 });
 

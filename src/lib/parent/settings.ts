@@ -3,7 +3,10 @@ import type { AppDatabase } from "@/lib/db";
 import { HOUSEHOLD_SETTINGS_ID, householdSettings, type ThemePreference } from "@/lib/db/schema";
 import {
   getParentControlsConfig,
+  getSoundConfig,
   getWorldGenConfig,
+  SOUND_VOLUME_MAX,
+  SOUND_VOLUME_MIN,
   type ParentControlsConfig,
 } from "@/config/server-config";
 
@@ -24,6 +27,11 @@ import {
  * `screenTimeNudgeMinutes`, `screenTimeHardLockEnabled`, `screenTimeHardLockMinutes` — **posés +
  * validés (bornes ⚙️ `parentControls`) + persistés** ; l'enforcement runtime (nudge de session /
  * verrou dur qui bloque l'app) dépend du **temps-joué persisté** (7.4 #217) et vit dans **7.8**.
+ *
+ * **Ce qui est STOCKÉ seulement (consommé en story 8.4, jamais enforcé ici — #127/#155)** :
+ * `soundEnabled`, `musicEnabled`, `volume` (DETAILS §22) — **posés + validés (bornes fixes
+ * `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]`) + persistés** ; le **moteur audio** (lecture/coupure réelle
+ * des bruitages/musique au volume réglé) n'existe pas encore — il est câblé en **story 8.4**.
  */
 
 /** Préférences de thème valides (source unique pour le parsing / la validation ⚙️). */
@@ -46,6 +54,12 @@ export interface HouseholdSettings {
   readonly screenTimeHardLockEnabled: boolean;
   /** Seuil du verrou dur (min/jour) — STOCKÉ + validé (borne ⚙️), consommé 7.8 #229. */
   readonly screenTimeHardLockMinutes: number;
+  /** Bruitages activés ? (DETAILS §22) — STOCKÉ + validé (consommé 8.4). */
+  readonly soundEnabled: boolean;
+  /** Musique activée ? (DETAILS §22) — STOCKÉ + validé (consommé 8.4). */
+  readonly musicEnabled: boolean;
+  /** Volume, pourcentage `[0,100]` (DETAILS §22 « + volume ») — STOCKÉ + validé (consommé 8.4). */
+  readonly volume: number;
 }
 
 /** Patch partiel (auto-save par contrôle) : chaque champ est optionnel. */
@@ -53,7 +67,7 @@ export type HouseholdSettingsPatch = Partial<HouseholdSettings>;
 
 /** Codes d'échec de validation — mappés vers `strings.parent.settings.errors`. */
 export type SettingsValidationErrorCode =
-  "THEME_INVALID" | "NUDGE_OUT_OF_RANGE" | "HARD_LOCK_OUT_OF_RANGE";
+  "THEME_INVALID" | "NUDGE_OUT_OF_RANGE" | "HARD_LOCK_OUT_OF_RANGE" | "VOLUME_OUT_OF_RANGE";
 
 /** Erreur typée de validation : **aucune écriture** (garde de forme serveur, AUTH §4 / LEARNINGS #99). */
 export class SettingsValidationError extends Error {
@@ -71,16 +85,21 @@ export class SettingsValidationError extends Error {
  *   `WORLDGEN_QA_PARENT_VALIDATION` reste le **défaut d'amorçage** d'un foyer qui n'a pas encore
  *   touché le réglage ; dès que le parent l'enregistre, la **ligne DB fait autorité** (source de
  *   vérité, cf. `readHouseholdSettings`) ;
- * - `screenTime*` = défauts ⚙️ `parentControls` (nudge / verrou dur), `enabled` = `false` (opt-in).
+ * - `screenTime*` = défauts ⚙️ `parentControls` (nudge / verrou dur), `enabled` = `false` (opt-in) ;
+ * - `soundEnabled`/`musicEnabled`/`volume` = défauts ⚙️ `sound` (story 8.3, DETAILS §22).
  */
 export function resolveSettingsDefaults(): HouseholdSettings {
   const controls = getParentControlsConfig();
+  const sound = getSoundConfig();
   return {
     theme: "system",
     parentWorldValidation: getWorldGenConfig().qa.parentValidationEnabled,
     screenTimeNudgeMinutes: controls.screenTimeNudgeDefaultMinutes,
     screenTimeHardLockEnabled: false,
     screenTimeHardLockMinutes: controls.screenTimeHardLockDefaultMinutes,
+    soundEnabled: sound.soundEnabledDefault,
+    musicEnabled: sound.musicEnabledDefault,
+    volume: sound.volumeDefault,
   };
 }
 
@@ -106,11 +125,19 @@ export function readHouseholdSettings(
     screenTimeNudgeMinutes: row.screenTimeNudgeMinutes,
     screenTimeHardLockEnabled: row.screenTimeHardLockEnabled,
     screenTimeHardLockMinutes: row.screenTimeHardLockMinutes,
+    soundEnabled: row.soundEnabled,
+    musicEnabled: row.musicEnabled,
+    volume: row.volume,
   };
 }
 
-/** Lève `SettingsValidationError(code)` si `value` n'est pas un entier dans `[min, max]` (bornes ⚙️). */
-function assertMinutesInRange(
+/**
+ * Lève `SettingsValidationError(code)` si `value` n'est pas un entier dans `[min, max]`. Générique
+ * (renommée depuis `assertMinutesInRange`, story 8.3) : sert les bornes ⚙️ calibrables (nudge/verrou
+ * dur, `parentControls`) ET les bornes fixes (volume `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]`) — même
+ * garde, source de bornes différente.
+ */
+function assertIntInRange(
   value: number,
   min: number,
   max: number,
@@ -127,8 +154,10 @@ function assertMinutesInRange(
  * par PK singleton `HOUSEHOLD_SETTINGS_ID` — idempotent). Renvoie les réglages **effectifs** écrits.
  *
  * Validation (jamais d'écriture si invalide) : `theme ∈ THEME_PREFERENCES`, nudge / verrou dur =
- * **entiers dans les bornes ⚙️** `parentControls`. Les booléens sont **coercés** (`=== true`) → une
- * valeur non-booléenne hostile ne peut pas s'écrire (`??` préserve `false`). `controls` injectable (tests).
+ * **entiers dans les bornes ⚙️** `parentControls`, `volume` = **entier dans les bornes fixes**
+ * `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]` (story 8.3, non-⚙️ — cf. `SoundConfig`). Les booléens sont
+ * **coercés** (`=== true`) → une valeur non-booléenne hostile ne peut pas s'écrire (`??` préserve
+ * `false`). `controls` injectable (tests).
  */
 export function writeHouseholdSettings(
   db: AppDatabase,
@@ -148,23 +177,29 @@ export function writeHouseholdSettings(
         ? current.screenTimeHardLockEnabled
         : patch.screenTimeHardLockEnabled === true,
     screenTimeHardLockMinutes: patch.screenTimeHardLockMinutes ?? current.screenTimeHardLockMinutes,
+    soundEnabled:
+      patch.soundEnabled === undefined ? current.soundEnabled : patch.soundEnabled === true,
+    musicEnabled:
+      patch.musicEnabled === undefined ? current.musicEnabled : patch.musicEnabled === true,
+    volume: patch.volume ?? current.volume,
   };
 
   if (!THEME_PREFERENCES.includes(next.theme)) {
     throw new SettingsValidationError("THEME_INVALID");
   }
-  assertMinutesInRange(
+  assertIntInRange(
     next.screenTimeNudgeMinutes,
     controls.screenTimeNudgeMinMinutes,
     controls.screenTimeNudgeMaxMinutes,
     "NUDGE_OUT_OF_RANGE",
   );
-  assertMinutesInRange(
+  assertIntInRange(
     next.screenTimeHardLockMinutes,
     controls.screenTimeHardLockMinMinutes,
     controls.screenTimeHardLockMaxMinutes,
     "HARD_LOCK_OUT_OF_RANGE",
   );
+  assertIntInRange(next.volume, SOUND_VOLUME_MIN, SOUND_VOLUME_MAX, "VOLUME_OUT_OF_RANGE");
 
   const now = new Date();
   db.insert(householdSettings)
@@ -189,14 +224,18 @@ export function dataThemeAttr(theme: ThemePreference): "light" | "dark" | undefi
 export const SCREEN_TIME_NUDGE_PRESETS = [15, 20, 30, 45, 60] as const;
 /** Présets d'affichage (min/jour) du verrou dur — offerts au `<select>`, filtrés aux bornes ⚙️. */
 export const SCREEN_TIME_HARD_LOCK_PRESETS = [30, 45, 60, 90, 120] as const;
+/** Présets d'affichage (%) du volume (DETAILS §22, story 8.3) — offerts au `<select>`, filtrés `[0,100]`. */
+export const SOUND_VOLUME_PRESETS = [0, 25, 50, 75, 100] as const;
 
 /**
- * Options de minutes offertes par un `<select>` : les `presets` **dans les bornes** `[min, max]`
- * ⚙️, **plus** la valeur `current` si elle-même dans les bornes (garantit qu'une valeur persistée
+ * Options entières offertes par un `<select>` : les `presets` **dans les bornes** `[min, max]`,
+ * **plus** la valeur `current` si elle-même dans les bornes (garantit qu'une valeur persistée
  * hors-préset, ex. un défaut ⚙️ modifié par env, reste **sélectionnable**). Dédupliqué + trié
- * croissant. Pure (testée) → la génération d'options du formulaire reste hors composant.
+ * croissant. Pure (testée) → la génération d'options du formulaire reste hors composant. Générique
+ * (renommée depuis `minuteOptions`, story 8.3) : sert les minutes (nudge/verrou dur) ET le volume
+ * (pourcentage) — même forme d'options, unité différente selon l'appelant.
  */
-export function minuteOptions(
+export function presetOptionsInRange(
   presets: readonly number[],
   current: number,
   min: number,

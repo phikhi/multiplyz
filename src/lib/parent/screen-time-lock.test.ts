@@ -30,6 +30,9 @@ function settings(overrides: Partial<HouseholdSettings> = {}): HouseholdSettings
     screenTimeNudgeMinutes: 20,
     screenTimeHardLockEnabled: false,
     screenTimeHardLockMinutes: 30,
+    soundEnabled: true,
+    musicEnabled: true,
+    volume: 70,
     ...overrides,
   };
 }
