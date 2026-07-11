@@ -35,6 +35,11 @@ const cardStyle = {
   gap: "var(--space-5)",
 } as const;
 
+// Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran,
+// chaque étape). `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1/7.5/7.9) : le focus
+// est programmatique, hors ordre clavier → l'anneau UA natif serait un artefact full-width sans
+// valeur a11y. Pas `mz-focusable` (ne stylise que `:focus-visible`, non matché par un focus
+// programmatique).
 const titleStyle = {
   fontFamily: "var(--font-family-display)",
   fontSize: "var(--font-size-xl)",
@@ -42,6 +47,7 @@ const titleStyle = {
   color: "var(--color-text-primary)",
   margin: 0,
   textAlign: "center",
+  outline: "none",
 } as const;
 
 const introStyle = {
@@ -64,12 +70,26 @@ const primaryButtonStyle = {
   cursor: "pointer",
 } as const;
 
+/**
+ * Style CTA + affordance désactivée (#240/#226, corrigé PR #250). L'état désactivé passe à un
+ * registre **neutre** (`--color-text-secondary` sur `--color-bg-tertiary`, ≥4.5:1 peint les 2
+ * thèmes) au lieu d'un `opacity:0.55` sur le CTA plein-accent — ce dernier compositait le texte
+ * blanc `--color-text-inverse` vers le fond de carte et le faisait tomber sous 4.5:1 peint. Même
+ * patron neutre que `disabledButtonStyle` de `ProfileManager` / `primaryStyle` d'`OnboardingFlow`.
+ * Le signal « désactivé » = fond atténué + `cursor:not-allowed` + `aria-disabled`, jamais une
+ * dilution du texte (rétro #226).
+ */
 function primaryStyle(disabled: boolean) {
-  return {
-    ...primaryButtonStyle,
-    opacity: disabled ? 0.55 : 1,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
+  if (disabled) {
+    return {
+      ...primaryButtonStyle,
+      color: "var(--color-text-secondary)",
+      backgroundColor: "var(--color-bg-tertiary)",
+      border: "1px solid var(--color-border-primary)",
+      cursor: "not-allowed",
+    };
+  }
+  return primaryButtonStyle;
 }
 
 const ghostButtonStyle = {
@@ -202,6 +222,7 @@ export function ParentRecoveryFlow() {
               type="button"
               className="mz-focusable"
               disabled={!canVerify || submitting}
+              aria-disabled={!canVerify || submitting}
               onClick={verifyCode}
               style={primaryStyle(!canVerify || submitting)}
             >
@@ -235,6 +256,7 @@ export function ParentRecoveryFlow() {
                 type="button"
                 className="mz-focusable"
                 disabled={!canSubmitPin || submitting}
+                aria-disabled={!canSubmitPin || submitting}
                 onClick={submitNewPin}
                 style={primaryStyle(!canSubmitPin || submitting)}
               >

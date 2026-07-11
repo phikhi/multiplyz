@@ -178,17 +178,25 @@ const dangerButtonStyle = {
 // `opacity`** — un `opacity:0.55` sur le bouton compositerait le TEXTE vers le fond de la carte et
 // le ferait tomber **sous 4.5:1** (piège #170/#104 « token résolu ≠ pixel réellement peint », ici
 // via l'opacité, pas l'occlusion). On garde donc le **texte à alpha pleine** (`--color-text-secondary`
-// sur `--color-bg-secondary` = contraste résolu ≥ 4.5:1 déjà prouvé) ; le signal « désactivé » vient
-// de `disabled`/`aria-disabled` + `cursor:not-allowed` + une bordure atténuée (`--color-border-secondary`),
+// sur `--color-bg-tertiary` = contraste résolu ≥ 4.5:1 déjà prouvé) ; le signal « désactivé » vient
+// de `disabled`/`aria-disabled` + `cursor:not-allowed` + un **fond atténué** (`--color-bg-tertiary`),
 // jamais d'une dilution du texte. Priorité : owner-« Supprimer » (désactivé EN PERMANENCE) reste lisible.
+//
+// Polish #227 : un simple `border-secondary` (≈1.1:1 sur `--color-bg-secondary`, quasi indiscernable
+// des boutons ghost actifs) ne suffisait pas à discriminer visuellement l'état désactivé (WCAG 1.4.11
+// exempte les contrôles inactifs — ce n'est pas un défaut de conformité, mais une affordance faible).
+// `--color-bg-tertiary` est le même token que le fond des touches du clavier PIN (`--keypad-key-bg`,
+// déjà un fond « en creux » visuellement établi dans l'app) — remplit le bouton d'un ton lavande pâle
+// clairement distinct du fond transparent (= carte blanche) des boutons actifs, sans jamais toucher
+// à l'alpha du texte.
 const disabledButtonStyle = {
   ...buttonBase,
   display: "inline-flex",
   alignItems: "center",
   gap: "var(--space-2)",
   color: "var(--color-text-secondary)",
-  backgroundColor: "transparent",
-  border: "1px solid var(--color-border-secondary)",
+  backgroundColor: "var(--color-bg-tertiary)",
+  border: "1px solid var(--color-border-primary)",
   cursor: "not-allowed",
 } as const;
 

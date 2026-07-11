@@ -46,6 +46,11 @@ const cardStyle = {
   gap: "var(--space-5)",
 } as const;
 
+// Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran,
+// chaque étape). `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1/7.5/7.9) : le focus
+// est programmatique, hors ordre clavier → l'anneau UA natif serait un artefact full-width sans
+// valeur a11y. Pas `mz-focusable` (ne stylise que `:focus-visible`, non matché par un focus
+// programmatique).
 const titleStyle = {
   fontFamily: "var(--font-family-display)",
   fontSize: "var(--font-size-xl)",
@@ -53,6 +58,7 @@ const titleStyle = {
   color: "var(--color-text-primary)",
   margin: 0,
   textAlign: "center",
+  outline: "none",
 } as const;
 
 const primaryButtonStyle = {
@@ -70,13 +76,26 @@ const primaryButtonStyle = {
   cursor: "pointer",
 } as const;
 
-/** Style CTA + affordance désactivée (grisé + curseur), quand `disabled`. */
+/**
+ * Style CTA + affordance désactivée (#240/#226, corrigé PR #250). L'état désactivé passe à un
+ * registre **neutre** (`--color-text-secondary` sur `--color-bg-tertiary`, ≥4.5:1 peint les 2
+ * thèmes) au lieu d'un `opacity:0.55` sur le CTA plein-accent — ce dernier compositait le texte
+ * blanc `--color-text-inverse` vers le fond de carte et le faisait tomber sous 4.5:1 peint
+ * (~2.17:1 light / ~2.51:1 dark). Même patron neutre que `disabledButtonStyle` de `ProfileManager`.
+ * Le signal « désactivé » vient du fond atténué + `cursor:not-allowed` + `aria-disabled`, jamais
+ * d'une dilution du texte (rétro #226 : ne pas diluer du texte par une `opacity` de sous-arbre).
+ */
 function primaryStyle(disabled: boolean) {
-  return {
-    ...primaryButtonStyle,
-    opacity: disabled ? 0.55 : 1,
-    cursor: disabled ? "not-allowed" : "pointer",
-  };
+  if (disabled) {
+    return {
+      ...primaryButtonStyle,
+      color: "var(--color-text-secondary)",
+      backgroundColor: "var(--color-bg-tertiary)",
+      border: "1px solid var(--color-border-primary)",
+      cursor: "not-allowed",
+    };
+  }
+  return primaryButtonStyle;
 }
 
 const ghostButtonStyle = {
@@ -248,6 +267,7 @@ export function OnboardingFlow() {
               type="button"
               className="mz-focusable"
               disabled={!canContinueProfile}
+              aria-disabled={!canContinueProfile}
               onClick={() => goto("childPin")}
               style={primaryStyle(!canContinueProfile)}
             >
@@ -284,6 +304,7 @@ export function OnboardingFlow() {
                 type="button"
                 className="mz-focusable"
                 disabled={childPin.length !== PIN_LENGTH}
+                aria-disabled={childPin.length !== PIN_LENGTH}
                 onClick={() => goto("parentPin")}
                 style={primaryStyle(childPin.length !== PIN_LENGTH)}
               >
@@ -330,6 +351,7 @@ export function OnboardingFlow() {
                 type="button"
                 className="mz-focusable"
                 disabled={parentPin.length !== PIN_LENGTH || submitting}
+                aria-disabled={parentPin.length !== PIN_LENGTH || submitting}
                 onClick={submit}
                 style={primaryStyle(parentPin.length !== PIN_LENGTH || submitting)}
               >

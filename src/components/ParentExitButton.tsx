@@ -15,6 +15,14 @@ import { logoutParentAction } from "@/app/parent/actions";
  * dans `startTransition` → `navPending` reste `true` jusqu'au COMMIT de la navigation
  * (état observable, pas un timeout fixe) ; le bouton reste désactivé jusqu'à l'affichage
  * réel du sélecteur.
+ *
+ * État désactivé (#240, rétro Frontend #226) : registre neutre « inactif » **sans `opacity`**
+ * — un `opacity:0.55` composite le TEXTE (bouton avec libellé) vers le fond de carte et le fait
+ * tomber sous 4.5:1 (piège #170/#104 « token résolu ≠ pixel peint »). Texte **plein-alpha**
+ * (`--color-text-secondary`, contraste déjà prouvé sur `--color-bg-tertiary`) ; le signal
+ * « désactivé » vient de `disabled`/`aria-disabled` + `cursor:not-allowed` + fond atténué
+ * (`--color-bg-tertiary`, même token que le clavier PIN — déjà discriminant du `--card-bg`
+ * environnant), jamais d'une dilution du texte.
  */
 export function ParentExitButton() {
   const router = useRouter();
@@ -41,6 +49,7 @@ export function ParentExitButton() {
       type="button"
       className="mz-focusable"
       disabled={disabled}
+      aria-disabled={disabled}
       onClick={onClick}
       style={{
         minHeight: "var(--tap-target-min)",
@@ -49,11 +58,10 @@ export function ParentExitButton() {
         fontSize: "var(--font-size-base)",
         fontWeight: "var(--font-weight-semibold)",
         color: "var(--color-text-secondary)",
-        backgroundColor: "transparent",
+        backgroundColor: disabled ? "var(--color-bg-tertiary)" : "transparent",
         border: "1px solid var(--color-border-primary)",
         borderRadius: "var(--border-radius-full)",
         cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.55 : 1,
       }}
     >
       {strings.parent.dashboard.exit}
