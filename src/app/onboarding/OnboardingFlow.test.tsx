@@ -4,6 +4,12 @@ import { OnboardingFlow } from "./OnboardingFlow";
 import { createHouseholdAction } from "./actions";
 import { strings } from "@/strings";
 import { AVATARS } from "@/config/avatars";
+import {
+  contrastRatio,
+  mixSrgb,
+  resolveTokenColor,
+  type Theme,
+} from "@/components/game/scaffolds/test-support/tokens-css";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
@@ -226,5 +232,58 @@ describe("OnboardingFlow — soumission", () => {
 
     resolveAction({ ok: true, recoveryCode: "WXYZ6789" });
     await waitFor(() => expect(screen.getByText("WXYZ6789")).toBeInTheDocument());
+  });
+});
+
+// ============================================================================
+// CTA désactivé : affordance SANS opacity diluante (#240/#226, corrigé PR #250). Le CTA primaire
+// plein-accent passait à `opacity:0.55` désactivé → texte blanc composité ~2.17:1 peint (light) /
+// ~2.51:1 (dark). Fix : registre neutre (texte-secondary sur bg-tertiary) ≥4.5:1 peint. Résolution
+// COMPOSITÉE post-blend (patron #226, resolveTokenColor/mixSrgb) — jamais la paire de tokens seule.
+// ============================================================================
+describe("OnboardingFlow — CTA désactivé : contraste composité peint (#240/#226)", () => {
+  const THEMES: Theme[] = ["light", "dark"];
+
+  it("« Continuer » désactivé : texte peint ≥4.5:1, aucune opacity diluante, fond atténué + aria-disabled", () => {
+    render(<OnboardingFlow />);
+    // Étape profil, rien saisi → « Continuer » DÉSACTIVÉ (canContinueProfile=false).
+    const cta = screen.getByRole("button", { name: nav.next });
+    expect(cta).toBeDisabled();
+
+    const opacity = cta.style.opacity === "" ? 1 : Number(cta.style.opacity);
+    expect(opacity).toBe(1); // garde directe : aucune opacity diluante sur le CTA plein-texte
+    expect(cta).toHaveAttribute("aria-disabled", "true");
+    expect(cta.style.cursor).toBe("not-allowed");
+    // Registre neutre désactivé (jamais le fond accent plein sous lequel le texte inverse dilué
+    // tombait sous 4.5:1) — ROUGIT si le fond désactivé repasse à `--color-accent-primary`.
+    expect(cta.style.backgroundColor).toBe("var(--color-bg-tertiary)");
+    expect(cta.style.color).toBe("var(--color-text-secondary)");
+
+    for (const theme of THEMES) {
+      const text = resolveTokenColor(theme, "color-text-secondary");
+      const bg = resolveTokenColor(theme, "color-bg-tertiary");
+      const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
+      expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("« Continuer » ACTIF : registre accent plein (texte inverse sur accent), pas le fond désactivé", () => {
+    render(<OnboardingFlow />);
+    // Saisir prénom + avatar → « Continuer » ACTIF.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
+    fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
+    const cta = screen.getByRole("button", { name: nav.next });
+    expect(cta).toBeEnabled();
+    // ROUGIT si le style désactivé (neutre) fuit sur l'état actif : l'actif reste plein-accent.
+    expect(cta.style.backgroundColor).toBe("var(--color-accent-primary)");
+    expect(cta.style.color).toBe("var(--color-text-inverse)");
+    for (const theme of THEMES) {
+      expect(
+        contrastRatio(
+          resolveTokenColor(theme, "color-text-inverse"),
+          resolveTokenColor(theme, "color-accent-primary"),
+        ),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

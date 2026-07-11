@@ -3,6 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogoutButton } from "./LogoutButton";
 import { logoutAction } from "@/app/login/actions";
 import { strings } from "@/strings";
+import {
+  contrastRatio,
+  mixSrgb,
+  resolveTokenColor,
+  type Theme,
+} from "@/components/game/scaffolds/test-support/tokens-css";
+
+const THEMES: Theme[] = ["light", "dark"];
 
 // `push`/`refresh` synchrones ici (le mock ne simule pas le délai réel d'une
 // navigation RSC) — la garde #88 ci-dessous vise le COUPLAGE `startTransition`,
@@ -54,5 +62,47 @@ describe("LogoutButton", () => {
     // corrigée #88 : jamais de navigation avant révocation serveur confirmée).
     expect(logoutActionMock).toHaveBeenCalledOnce();
     await waitFor(() => expect(button).not.toBeDisabled());
+  });
+
+  it("état DÉSACTIVÉ (pending) : texte COMPOSITÉ peint ≥4.5:1, aucune dilution par `opacity`, fond atténué (#240/#226)", async () => {
+    // Rétro Frontend #226 : un `opacity:0.55` sur ce bouton (avec texte) compositait le texte vers
+    // le fond → ~2.20:1 peint (light) / ~3.39:1 (dark). Ce test lit l'opacité RÉELLEMENT rendue en
+    // état désactivé et calcule la couleur post-blend effectivement peinte → ROUGIT si un `opacity`
+    // diluant revient. On tient `logoutAction` en attente pour capturer l'état `pending`/désactivé.
+    let resolveLogout: () => void = () => {};
+    logoutActionMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveLogout = resolve;
+        }),
+    );
+    render(<LogoutButton />);
+    const button = screen.getByRole("button", { name: strings.play.logout });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+
+    const opacity = button.style.opacity === "" ? 1 : Number(button.style.opacity);
+    expect(opacity).toBe(1); // garde directe : aucune opacity diluante sur le sous-arbre texte
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button.style.cursor).toBe("not-allowed");
+    // Fond atténué DISCRIMINANT (patron #227) — ROUGIT si le fond désactivé retombe à "transparent".
+    expect(button.style.backgroundColor).toBe("var(--color-bg-tertiary)");
+
+    for (const theme of THEMES) {
+      const text = resolveTokenColor(theme, "color-text-secondary");
+      const bg = resolveTokenColor(theme, "color-bg-tertiary");
+      const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
+      expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+
+    resolveLogout();
+    await waitFor(() => expect(logoutActionMock).toHaveBeenCalledOnce());
+  });
+
+  it("état ACTIF : fond transparent (pas de fill désactivé hors pending)", () => {
+    render(<LogoutButton />);
+    const button = screen.getByRole("button", { name: strings.play.logout });
+    expect(button.style.backgroundColor).toBe("transparent");
+    expect(button).not.toHaveAttribute("aria-disabled", "true");
   });
 });

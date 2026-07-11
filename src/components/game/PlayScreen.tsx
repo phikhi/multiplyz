@@ -210,20 +210,26 @@ export function PlayScreen() {
     retryLoadLevel();
   }, [retryLoadLevel]);
 
+  // `key` DISTINCT par état (#244) : `PlayScreen` retourne `<StatusMessage/>` depuis PLUSIEURS
+  // branches, même position/type → sans `key`, React réconcilie une transition (ex. loading→locked)
+  // comme une **UPDATE** (même Fiber, même nœud `<h1>` réutilisé) et le ref-callback `focusOnMount`
+  // ne se réinvoque JAMAIS sur le nœud cible → seul l'état initial recevrait un vrai `.focus()`. Un
+  // `key` distinct force un **REMOUNT** à chaque transition → le `<h1>` de l'état cible est un nouveau
+  // nœud → `focusOnMount` fire dessus (annonce SR de la nouvelle étape plein-écran). Verrou = prioritaire.
   if (screen.kind === "loading") {
-    return <StatusMessage text={strings.play.loading} />;
+    return <StatusMessage key="loading" text={strings.play.loading} />;
   }
 
   if (screen.kind === "error") {
     return (
-      <StatusMessage text={strings.play.loadError}>
+      <StatusMessage key="error" text={strings.play.loadError}>
         <ActionButton label={strings.play.loadErrorRetry} onClick={retryLoadLevel} />
       </StatusMessage>
     );
   }
 
   if (screen.kind === "empty") {
-    return <StatusMessage text={strings.play.emptyLevel} />;
+    return <StatusMessage key="empty" text={strings.play.emptyLevel} />;
   }
 
   if (screen.kind === "locked") {
@@ -234,6 +240,7 @@ export function PlayScreen() {
     // changer de joueur (LogoutButton, déjà porté par StatusMessage).
     return (
       <StatusMessage
+        key="locked"
         text={strings.play.screenTimeLocked.title}
         hint={strings.play.screenTimeLocked.hint}
       />
@@ -242,7 +249,11 @@ export function PlayScreen() {
 
   if (screen.kind === "diagnostic-intro") {
     return (
-      <StatusMessage text={strings.play.diagnostic.intro} hint={strings.play.diagnostic.hint}>
+      <StatusMessage
+        key="diagnostic-intro"
+        text={strings.play.diagnostic.intro}
+        hint={strings.play.diagnostic.hint}
+      >
         <ActionButton
           label={strings.play.correct.next}
           onClick={() => startDiagnostic(screen.items)}
@@ -421,10 +432,15 @@ function PlayingGame({
  * Écran de statut minimal (chargement / erreur / niveau vide / verrou temps d'écran / intro
  * diagnostic). **Focus a11y** (#244, patron `ResultsScreen.tsx`/LEARNINGS #36) : chaque état
  * remplace l'écran plein-écran précédent SANS annonce SR native (pas de changement de route) —
- * le titre reçoit donc le focus **programmatiquement** à son montage (ref-callback, couvre les
- * 2 branches montage/démontage). Prioritaire pour `locked` (verrou dur temps d'écran, story 7.8)
- * qui empêche l'entrée en jeu. `outline:"none"` **documenté** (STACK-TRAP #222) : focus hors
- * ordre clavier (`tabIndex={-1}`) → l'anneau UA serait un artefact sans valeur a11y ici.
+ * le titre doit donc recevoir le focus au montage. Le ref-callback `focusOnMount` appelle
+ * `.focus()` **au MONTAGE du nœud** `<h1>` ; ce montage n'a lieu à chaque transition QUE parce
+ * que l'appelant (`PlayScreen`) pose un **`key` distinct par état** sur chaque `<StatusMessage/>`
+ * → React REMONTE le composant (nouveau nœud `<h1>`) à chaque changement d'état, au lieu de le
+ * réutiliser en UPDATE (auquel cas le ref-callback ne se réinvoquerait pas et seul l'état initial
+ * serait focalisé — cf. commentaire du `key` côté `PlayScreen`). Prioritaire pour `locked` (verrou
+ * dur temps d'écran, story 7.8) qui empêche l'entrée en jeu. `outline:"none"` **documenté**
+ * (STACK-TRAP #222) : focus hors ordre clavier (`tabIndex={-1}`) → l'anneau UA serait un artefact
+ * sans valeur a11y ici.
  */
 function StatusMessage({
   text,

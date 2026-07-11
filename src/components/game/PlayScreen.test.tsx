@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PlayScreen } from "./PlayScreen";
 import { strings } from "@/strings";
@@ -9,6 +9,11 @@ import {
   startLevelAction,
   submitAttemptAction,
 } from "@/app/(app)/jouer/actions";
+
+/** Résultat résolu par `startLevelAction` (pour typer les promesses différées des tests #244). */
+type StartLevelResult = Awaited<ReturnType<typeof startLevelAction>>;
+/** Résultat résolu par `diagnosticPlanAction` (idem). */
+type DiagnosticPlanResult = Awaited<ReturnType<typeof diagnosticPlanAction>>;
 import { makeFact } from "@/lib/engine/facts";
 import type { LevelQuestion } from "@/lib/engine/service";
 
@@ -191,44 +196,87 @@ describe("PlayScreen — verrou dur temps d'écran (story 7.8 #229, DETAILS §27
 // le titre doit recevoir le focus PROGRAMMATIQUEMENT. `locked` est PRIORITAIRE (empêche l'entrée
 // en jeu, story 7.8). `outline:"none"` documenté (STACK-TRAP #222) : focus hors ordre clavier
 // (tabIndex=-1) → l'anneau UA natif serait un artefact sans valeur a11y ici.
+//
+// NON-VACUOUS (rétro #244) : `PlayScreen` retourne `<StatusMessage/>` depuis plusieurs branches,
+// même position/type → sans un `key` DISTINCT par état, React réconcilie la transition en UPDATE
+// (même `<h1>` réutilisé) et `focusOnMount` ne se réinvoque JAMAIS → seul l'état loading initial
+// serait focalisé, le titre CIBLE ne recevrait pas le focus. Un test qui rend directement l'état
+// cible passerait FAUSSEMENT (le même nœud loading reste `activeElement` pendant que son texte
+// mute en place). On exerce donc la VRAIE transition `loading → cible` et on DÉPLACE le focus
+// (blur) juste avant la transition : sans remount, `focusOnMount` ne re-fire pas → le titre cible
+// n'est PAS focalisé → le test ROUGIT. Retirer les `key` de `PlayScreen` fait rougir ces 3 tests.
 // ============================================================================
 describe("PlayScreen — StatusMessage : focus a11y au montage (#244)", () => {
-  it("écran verrou (locked) → focus déplacé sur le titre, SANS anneau UA — écran PRIORITAIRE", async () => {
-    startLevelMock.mockResolvedValue({
-      level: null,
-      starThresholds: STAR_THRESHOLDS,
-      locked: true,
-    });
+  it("transition loading → VERROU (locked) : le titre cible reçoit le focus au montage, SANS anneau UA — PRIORITAIRE", async () => {
+    let resolveStart!: (value: StartLevelResult) => void;
+    startLevelMock.mockReturnValue(
+      new Promise<StartLevelResult>((resolve) => {
+        resolveStart = resolve;
+      }),
+    );
     render(<PlayScreen />);
-    const heading = await screen.findByRole("heading", {
+    // L'effet de montage a appelé `startLevelAction` (pending) → l'écran reste `loading`.
+    await waitFor(() => expect(startLevelMock).toHaveBeenCalled());
+    // Le titre de l'état `loading` a reçu le focus À SON MONTAGE.
+    const loadingHeading = screen.getByRole("heading", { level: 1, name: strings.play.loading });
+    expect(document.activeElement).toBe(loadingHeading);
+    // On DÉPLACE le focus ailleurs : si la transition ne REMONTE pas le titre, `focusOnMount` ne
+    // se réinvoque pas → le titre cible ne sera pas focalisé (le test rougira).
+    loadingHeading.blur();
+    expect(document.activeElement).toBe(document.body);
+    // Transition loading → locked (résolution de la promesse différée).
+    await act(async () => {
+      resolveStart({ level: null, starThresholds: STAR_THRESHOLDS, locked: true });
+    });
+    const lockedHeading = screen.getByRole("heading", {
       level: 1,
       name: strings.play.screenTimeLocked.title,
     });
-    expect(document.activeElement).toBe(heading);
-    expect(heading.style.outline).toBe("none");
+    // Focus RÉ-APPLIQUÉ au montage du titre cible (remount forcé par `key`) — ROUGE sans le `key`.
+    expect(document.activeElement).toBe(lockedHeading);
+    expect(lockedHeading.style.outline).toBe("none");
   });
 
-  it("écran d'erreur → focus déplacé sur le titre, SANS anneau UA", async () => {
-    diagnosticPlanMock.mockResolvedValue({ items: null });
+  it("transition loading → ERREUR : le titre cible reçoit le focus au montage, SANS anneau UA", async () => {
+    let resolvePlan!: (value: DiagnosticPlanResult) => void;
+    diagnosticPlanMock.mockReturnValue(
+      new Promise<DiagnosticPlanResult>((resolve) => {
+        resolvePlan = resolve;
+      }),
+    );
     render(<PlayScreen />);
-    const heading = await screen.findByRole("heading", { level: 1, name: strings.play.loadError });
-    expect(document.activeElement).toBe(heading);
-    expect(heading.style.outline).toBe("none");
+    await waitFor(() => expect(diagnosticPlanMock).toHaveBeenCalled());
+    const loadingHeading = screen.getByRole("heading", { level: 1, name: strings.play.loading });
+    expect(document.activeElement).toBe(loadingHeading);
+    loadingHeading.blur();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {
+      resolvePlan({ items: null }); // session invalide → écran d'erreur
+    });
+    const errorHeading = screen.getByRole("heading", { level: 1, name: strings.play.loadError });
+    expect(document.activeElement).toBe(errorHeading);
+    expect(errorHeading.style.outline).toBe("none");
   });
 
-  it("niveau vide → focus déplacé sur le titre, SANS anneau UA", async () => {
-    startLevelMock.mockResolvedValue({
-      level: { questions: [] },
-      starThresholds: STAR_THRESHOLDS,
-      locked: false,
-    });
+  it("transition loading → NIVEAU VIDE : le titre cible reçoit le focus au montage, SANS anneau UA", async () => {
+    let resolveStart!: (value: StartLevelResult) => void;
+    startLevelMock.mockReturnValue(
+      new Promise<StartLevelResult>((resolve) => {
+        resolveStart = resolve;
+      }),
+    );
     render(<PlayScreen />);
-    const heading = await screen.findByRole("heading", {
-      level: 1,
-      name: strings.play.emptyLevel,
+    await waitFor(() => expect(startLevelMock).toHaveBeenCalled());
+    const loadingHeading = screen.getByRole("heading", { level: 1, name: strings.play.loading });
+    expect(document.activeElement).toBe(loadingHeading);
+    loadingHeading.blur();
+    expect(document.activeElement).toBe(document.body);
+    await act(async () => {
+      resolveStart({ level: { questions: [] }, starThresholds: STAR_THRESHOLDS, locked: false });
     });
-    expect(document.activeElement).toBe(heading);
-    expect(heading.style.outline).toBe("none");
+    const emptyHeading = screen.getByRole("heading", { level: 1, name: strings.play.emptyLevel });
+    expect(document.activeElement).toBe(emptyHeading);
+    expect(emptyHeading.style.outline).toBe("none");
   });
 });
 

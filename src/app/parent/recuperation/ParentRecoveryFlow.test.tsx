@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ParentRecoveryFlow } from "./ParentRecoveryFlow";
 import { resetParentPinAction, verifyRecoveryCodeAction } from "./actions";
 import { strings } from "@/strings";
+import {
+  contrastRatio,
+  mixSrgb,
+  resolveTokenColor,
+  type Theme,
+} from "@/components/game/scaffolds/test-support/tokens-css";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
@@ -147,5 +153,47 @@ describe("ParentRecoveryFlow — a11y titre focus-managé (rétro 7.1/7.9 #222)"
     const heading = screen.getByRole("heading", { level: 1, name: r.newPinTitle });
     expect(document.activeElement).toBe(heading);
     expect(heading.style.outline).toBe("none");
+  });
+});
+
+// ============================================================================
+// CTA désactivé : affordance SANS opacity diluante (#240/#226, corrigé PR #250). Le CTA primaire
+// plein-accent passait à `opacity:0.55` désactivé → texte blanc composité sous 4.5:1 peint. Fix :
+// registre neutre (texte-secondary sur bg-tertiary) ≥4.5:1 peint. Résolution COMPOSITÉE post-blend
+// (patron #226, resolveTokenColor/mixSrgb) — jamais la paire de tokens seule.
+// ============================================================================
+describe("ParentRecoveryFlow — CTA désactivé : contraste composité peint (#240/#226)", () => {
+  const THEMES: Theme[] = ["light", "dark"];
+
+  it("« Vérifier » désactivé : texte peint ≥4.5:1, aucune opacity diluante, fond atténué + aria-disabled", () => {
+    render(<ParentRecoveryFlow />);
+    // Étape code, champ vide → « Vérifier » DÉSACTIVÉ (canVerify=false).
+    const verify = screen.getByRole("button", { name: r.verify });
+    expect(verify).toBeDisabled();
+
+    const opacity = verify.style.opacity === "" ? 1 : Number(verify.style.opacity);
+    expect(opacity).toBe(1); // garde directe : aucune opacity diluante sur le CTA plein-texte
+    expect(verify).toHaveAttribute("aria-disabled", "true");
+    expect(verify.style.cursor).toBe("not-allowed");
+    // Registre neutre désactivé — ROUGIT si le fond désactivé repasse à `--color-accent-primary`.
+    expect(verify.style.backgroundColor).toBe("var(--color-bg-tertiary)");
+    expect(verify.style.color).toBe("var(--color-text-secondary)");
+
+    for (const theme of THEMES) {
+      const text = resolveTokenColor(theme, "color-text-secondary");
+      const bg = resolveTokenColor(theme, "color-bg-tertiary");
+      const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
+      expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("« Vérifier » ACTIF : registre accent plein (texte inverse sur accent), pas le fond désactivé", () => {
+    render(<ParentRecoveryFlow />);
+    enterCode(CODE); // format valide → « Vérifier » ACTIF
+    const verify = screen.getByRole("button", { name: r.verify });
+    expect(verify).toBeEnabled();
+    // ROUGIT si le style désactivé (neutre) fuit sur l'état actif : l'actif reste plein-accent.
+    expect(verify.style.backgroundColor).toBe("var(--color-accent-primary)");
+    expect(verify.style.color).toBe("var(--color-text-inverse)");
   });
 });

@@ -1442,8 +1442,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await exitButton.click();
     await expect(exitButton).toBeDisabled();
     await expect(exitButton).toHaveAttribute("aria-disabled", "true");
-    // ROUGIT si un `opacity` diluant est réintroduit sur le sous-arbre texte (rétro #226).
-    await expect(exitButton).not.toHaveCSS("opacity", "0.55");
+    // Assertion POSITIVE (esprit #239, durcie en review) : le texte reste plein-alpha. `opacity:"1"`
+    // ROUGIT pour TOUTE dilution réintroduite (0.55, 0.7, …), pas seulement la valeur exacte 0.55.
+    await expect(exitButton).toHaveCSS("opacity", "1");
     await expect(exitButton).toHaveCSS("cursor", "not-allowed");
 
     await page.screenshot({ path: "docs/captures/249-exit-pending.png", fullPage: true });
@@ -1664,6 +1665,14 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.goto("/parent/recuperation");
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { level: 1, name: rec.title })).toBeVisible();
+
+    // CTA « Vérifier » DÉSACTIVÉ (champ vide) : capture de l'affordance neutre corrigée
+    // (#240/#226 — texte lisible plein-alpha sur fond atténué, jamais un `opacity` diluant).
+    const verifyDisabled = page.getByRole("button", { name: rec.verify });
+    await expect(verifyDisabled).toBeDisabled();
+    await expect(verifyDisabled).toHaveCSS("opacity", "1");
+    await page.screenshot({ path: "docs/captures/249-recovery-cta-disabled.png", fullPage: true });
+
     await page.getByRole("textbox").fill(recoveryCode);
     await page.getByRole("button", { name: rec.verify }).click();
 
