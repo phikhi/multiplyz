@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { getCurrentParentSession } from "@/lib/auth/current-session";
+import { requestRecalibration } from "@/lib/engine/service";
 import {
   writeHouseholdSettings,
   SettingsValidationError,
@@ -26,6 +27,9 @@ import {
 /** Résultat générique : succès, ou code d'erreur (validation `SettingsValidationError` + session). */
 export type SettingsActionResult =
   { ok: true } | { ok: false; code: SettingsValidationErrorCode | "UNAUTHORIZED" };
+
+/** Résultat du déclencheur de recalibrage : succès, ou `UNAUTHORIZED` (pas de session parent). */
+export type RecalibrationActionResult = { ok: true } | { ok: false; code: "UNAUTHORIZED" };
 
 const REGLAGES_PATH = "/parent/reglages";
 
@@ -52,4 +56,26 @@ export async function saveSettingsAction(
     if (error instanceof SettingsValidationError) return { ok: false, code: error.code };
     throw error;
   }
+}
+
+/**
+ * **Arme le recalibrage** (story 7.6, DETAILS §29 « Recalibrer : relancer un mini-diagnostic »,
+ * PRODUCT §3.6, ADR 0016). Pose `profiles.recalibration_requested = true` sur **le profil enfant du
+ * foyer** — résolu comme `session.profileId` (le profil de la session parent EST le profil enfant/
+ * propriétaire, v1 mono-profil ; même résolution que le tableau de bord `page.tsx` et
+ * `mondes/actions.ts`). À la prochaine partie, l'enfant re-joue le mini-diagnostic et la fusion
+ * **monotone** relève les faits sous-amorcés sans jamais rétrograder (invariant ENGINE §2 préservé).
+ *
+ * **Anti-abus (SÉCU)** : ré-exige une session **`kind:"parent"` valide** (`getCurrentParentSession`
+ * filtre déjà `kind === "parent"`) — garde **répétée** par action (endpoint POST indépendant, même
+ * patron que `saveSettingsAction`/`profils`/`mondes`, rétro #206). Un enfant ne peut jamais
+ * s'auto-recalibrer. **N'écrit que le drapeau** (jamais `mastery`/`attempts`) : la maîtrise ne bouge
+ * qu'après que l'enfant a re-joué le diagnostic. Idempotent (armer un drapeau déjà armé est sûr).
+ */
+export async function requestRecalibrationAction(): Promise<RecalibrationActionResult> {
+  const session = await getCurrentParentSession();
+  if (session === null) return { ok: false, code: "UNAUTHORIZED" };
+  requestRecalibration(getDb(), session.profileId);
+  revalidatePath(REGLAGES_PATH);
+  return { ok: true };
 }

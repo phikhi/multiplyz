@@ -823,6 +823,28 @@ export const fr = {
         /** Libellé du réglage de seuil du verrou dur. */
         hardLockLabel: "Limite par jour",
       },
+      /**
+       * **Recalibrer** (DETAILS §29 « relancer un mini-diagnostic », PRODUCT §3.6, ADR 0016).
+       * Action **à confirmer** (registre calme, jamais alarmant). Insiste sur « la progression
+       * n'est jamais perdue » : la fusion est **MONOTONE** (ne relève jamais vers le bas, ADR 0016).
+       */
+      recalibrate: {
+        /** Légende du groupe. */
+        legend: "Recalibrer",
+        /** Consigne neutre : ce que fait le recalibrage + rassurance monotone (rien n'est perdu). */
+        hint: "Relancez un petit défi de calibrage à la prochaine partie. La progression déjà acquise n'est jamais perdue : le calibrage ne fait qu'ajuster vers le haut si besoin.",
+        /** Bouton d'ouverture de la confirmation. */
+        action: "Recalibrer",
+        /** Corps de la confirmation destructive-douce (pas de perte, juste une relance). */
+        confirmBody:
+          "À sa prochaine partie, un court défi de calibrage sera proposé. La progression reste intacte. Confirmer ?",
+        /** Bouton de confirmation. */
+        confirm: "Oui, recalibrer",
+        /** Bouton d'annulation. */
+        cancel: "Annuler",
+        /** Confirmation après armement (feedback succès). */
+        success: "Recalibrage prêt : le petit défi apparaîtra à la prochaine partie.",
+      },
       /** **Langue** (FR seule, grisée — DETAILS §5, future i18n). */
       language: {
         /** Légende du groupe. */

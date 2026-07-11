@@ -26,7 +26,7 @@
 - Thème clair/sombre.
 - **Temps d'écran** : nudge doux 15-20 min (défaut) **+ verrou dur optionnel** paramétrable (X min/jour → l'app se verrouille en douceur jusqu'au lendemain).
 - **Gérer les profils** : créer / renommer / **supprimer** (purge données) / **réinitialiser le PIN enfant**.
-- **Recalibrer** : relancer un mini-diagnostic.
+- **Recalibrer** : relancer un mini-diagnostic (à confirmer). Fusion **MONOTONE** — ne relève/crée jamais vers le bas, la progression acquise n'est jamais perdue (ADR 0016, ENGINE §3, PRODUCT §3.6).
 - **Validation des mondes** : toggle (auto-filtre seul ↔ approbation parent avant affichage, cf. WORLDGEN).
 - **Code de secours parent** : voir / régénérer (cf. AUTH).
 - Langue (FR) — grisé, future i18n.

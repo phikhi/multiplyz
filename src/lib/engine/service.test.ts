@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { attempts, mastery, masteryKey, profiles } from "@/lib/db/schema";
@@ -7,10 +7,13 @@ import { CONFIG_DEFAULTS, type EngineConfig } from "@/config/server-config";
 import { SKILLS } from "./domain";
 import { generateFacts, makeFact } from "./facts";
 import { loadMasteryState, upsertMastery } from "./persistence";
-import type { MasteryState } from "./mastery";
+import { boxDelayMs, type MasteryState } from "./mastery";
 import {
+  isRecalibrationRequested,
   needsDiagnostic,
+  requestRecalibration,
   seedDiagnostic,
+  seedRecalibration,
   startLevel,
   submitAttempt,
   type RawDiagnosticResponse,
@@ -442,5 +445,207 @@ describe("seedDiagnostic (ENGINE §3)", () => {
     );
     expect(seeded).toHaveLength(0);
     expect(needsDiagnostic(db, profileId)).toBe(true);
+  });
+});
+
+// ============================================================================
+// Recalibrage — drapeau + fusion MONOTONE du re-diagnostic (ENGINE §3, ADR 0016, #237 Option A)
+// ============================================================================
+
+/** Réponse brute de re-diagnostic juste + RAPIDE (fluente) sur comp10_7 → sonde box 3. */
+const FLUENT_COMP10_7: RawDiagnosticResponse = {
+  factKey: COMP10_7.key,
+  skill: "comp10",
+  correct: true,
+  responseMs: 1_200, // ≥ antiMash (600) et ≤ fluence comp10 (3000) → fluent → SEED_BOX_FLUENT (3)
+};
+
+describe("isRecalibrationRequested / requestRecalibration (drapeau, ADR 0016)", () => {
+  it("drapeau à false par défaut (profil neuf)", () => {
+    expect(isRecalibrationRequested(db, profileId)).toBe(false);
+  });
+
+  it("requestRecalibration ARME le drapeau (true)", () => {
+    requestRecalibration(db, profileId);
+    expect(isRecalibrationRequested(db, profileId)).toBe(true);
+  });
+
+  it("idempotent : (ré)armer un drapeau déjà armé reste sûr (une seule ligne profil)", () => {
+    requestRecalibration(db, profileId);
+    requestRecalibration(db, profileId);
+    expect(isRecalibrationRequested(db, profileId)).toBe(true);
+    expect(db.select().from(profiles).all()).toHaveLength(1);
+  });
+
+  it("n'écrit QUE le drapeau (jamais `mastery`/`attempts`) : la maîtrise ne bouge pas à l'armement", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    const before = db.select().from(mastery).where(eq(mastery.profileId, profileId)).all();
+    requestRecalibration(db, profileId);
+    expect(db.select().from(mastery).where(eq(mastery.profileId, profileId)).all()).toEqual(before);
+    expect(db.select().from(attempts).where(eq(attempts.profileId, profileId)).all()).toHaveLength(
+      0,
+    );
+  });
+});
+
+describe("seedRecalibration — fusion MONOTONE (ADR 0016, #237 Option A)", () => {
+  it("MONOTONE : un fait box 4 re-sondé juste+rapide (box 3) reste box 4 (JAMAIS rétrograde)", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(4));
+    requestRecalibration(db, profileId);
+    // Même une réponse PARFAITE (fluente, box 3) ne peut pas abaisser une boîte 4 acquise.
+    const written = seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(written).toHaveLength(0); // « keep » → aucune écriture
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(4);
+  });
+
+  it("RAISE : un fait sous-amorcé (box 1) re-sondé juste+rapide → RELEVÉ à 3, échéance recalculée, dernière-vue = now, COMPTEURS INCHANGÉS", () => {
+    const before: MasteryState = {
+      box: 1,
+      correctCount: 3,
+      wrongCount: 2,
+      avgResponseMs: 2_100,
+      lastSeen: NOW - 5,
+      nextDue: NOW - 5,
+    };
+    upsertMastery(db, profileId, COMP10_7, before);
+    requestRecalibration(db, profileId);
+    const written = seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(written).toHaveLength(1);
+    const after = loadMasteryState(db, profileId, COMP10_7.key);
+    expect(after?.box).toBe(3);
+    expect(after?.nextDue).toBe(NOW + boxDelayMs(3, config)); // échéance recalculée sur la boîte relevée
+    expect(after?.lastSeen).toBe(NOW);
+    // La sonde de calibrage ne pollue PAS la justesse/rapidité rapportées (agrégats parent dérivent
+    // d'`attempts`, ADR 0012/0014) : compteurs + moyenne de fluence STRICTEMENT préservés.
+    expect(after?.correctCount).toBe(3);
+    expect(after?.wrongCount).toBe(2);
+    expect(after?.avgResponseMs).toBe(2_100);
+  });
+
+  it("CREATE : un fait JAMAIS amorcé re-sondé juste+rapide → ligne créée box 3 (comme l'amorçage initial)", () => {
+    requestRecalibration(db, profileId);
+    seedRecalibration(
+      db,
+      profileId,
+      [{ factKey: MULT_6X8.key, skill: "mult", correct: true, responseMs: 1_200 }],
+      config,
+      NOW,
+    );
+    const after = loadMasteryState(db, profileId, MULT_6X8.key);
+    expect(after?.box).toBe(3);
+    expect(after?.correctCount).toBe(1);
+    expect(after?.wrongCount).toBe(0);
+  });
+
+  it("les faits NON re-sondés sont INCHANGÉS (byte-for-byte)", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    const untouched = makeFact("comp10", 3, 0);
+    upsertMastery(db, profileId, untouched, dueState(4));
+    const beforeUntouched = loadMasteryState(db, profileId, untouched.key);
+    requestRecalibration(db, profileId);
+    seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(loadMasteryState(db, profileId, untouched.key)).toEqual(beforeUntouched);
+  });
+
+  it("N'ÉCRIT JAMAIS `attempts` (sonde hors comptage de justesse — PARITÉ avec le diagnostic initial)", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    requestRecalibration(db, profileId);
+    seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(db.select().from(attempts).where(eq(attempts.profileId, profileId)).all()).toHaveLength(
+      0,
+    );
+    // Parité : le diagnostic INITIAL n'écrit pas `attempts` non plus (même contrat de sonde).
+    const other = seedProfile("Zoé");
+    seedDiagnostic(db, other, [FLUENT_COMP10_7], config, NOW);
+    expect(db.select().from(attempts).where(eq(attempts.profileId, other)).all()).toHaveLength(0);
+  });
+
+  it("cycle du drapeau : armé par requestRecalibration → EFFACÉ après un re-seed réussi", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    expect(isRecalibrationRequested(db, profileId)).toBe(false);
+    requestRecalibration(db, profileId);
+    expect(isRecalibrationRequested(db, profileId)).toBe(true);
+    seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(isRecalibrationRequested(db, profileId)).toBe(false); // demande consommée
+  });
+
+  it("GARDE ARMÉ : NON armé → no-op STRICT (aucune écriture, la maîtrise ne bouge pas)", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1)); // box 1
+    // PAS de requestRecalibration → drapeau false.
+    const before = db.select().from(mastery).where(eq(mastery.profileId, profileId)).all();
+    const written = seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(written).toHaveLength(0);
+    expect(db.select().from(mastery).where(eq(mastery.profileId, profileId)).all()).toEqual(before);
+    // Le fait box 1 N'EST PAS relevé : la garde armé bloque. Mutation de la garde (retrait de la
+    // condition `if (!isRecalibrationRequested(tx, …)) return []`) → le fait passerait à box 3 → ROUGE.
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(1);
+  });
+
+  it("un 2ᵉ re-seed (drapeau déjà consommé) est un no-op : ne rétrograde pas ce que le 1ᵉʳ a relevé", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    requestRecalibration(db, profileId);
+    seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(3);
+    // 2ᵉ re-seed SANS ré-armer : drapeau consommé → no-op (n'écrase pas, ne re-relève pas).
+    const written2 = seedRecalibration(
+      db,
+      profileId,
+      [{ factKey: COMP10_7.key, skill: "comp10", correct: false, responseMs: 5_000 }],
+      config,
+      NOW,
+    );
+    expect(written2).toHaveLength(0);
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(3); // pas rétrogradé
+  });
+
+  it("réponse forgée / hors-domaine → ignorée (garde de forme #36), le reste est fusionné", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    requestRecalibration(db, profileId);
+    const written = seedRecalibration(
+      db,
+      profileId,
+      [{ factKey: "garbage", skill: "comp10", correct: true, responseMs: 1_200 }, FLUENT_COMP10_7],
+      config,
+      NOW,
+    );
+    // La clé forgée est écartée ; seul comp10_7 est relevé (box 1 → 3).
+    expect(written).toHaveLength(1);
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(3);
+  });
+
+  // GARDE ROLLBACK / ATOMICITÉ (≥ 2 écritures : upsert mastery PUIS effacement du drapeau) —
+  // règle #122. On induit la panne à la **2ᵉ écriture GARDÉE** (l'UPDATE d'effacement du drapeau),
+  // APRÈS la 1ʳᵉ écriture (upsert mastery box 1→3), via un TRIGGER `BEFORE UPDATE ON profiles` qui
+  // `RAISE(ABORT)`. Le SELECT du garde armé (lecture `recalibration_requested`) N'est PAS affecté
+  // (trigger BEFORE UPDATE seulement) → il ne court-circuite PAS avant la 1ʳᵉ écriture (jamais une
+  // lecture en amont, règle #122). Le drapeau est armé AVANT la création du trigger (l'armement est
+  // lui-même un UPDATE profiles). Ordre observé :
+  //   1. upsert mastery (box 1 → 3) réussit          ← 1ʳᵉ écriture
+  //   2. UPDATE profiles (drapeau → false) LÈVE (trigger) ← 2ᵉ écriture GARDÉE
+  //   ⇒ ROLLBACK : la maîtrise reste box 1, le drapeau reste armé (jamais consommé à moitié).
+  // PREUVE : retirer le wrapper `db.transaction` de `seedRecalibration` casse PRÉCISÉMENT ce test
+  // (l'upsert box 3 persisterait malgré l'échec de l'effacement du drapeau). Vérifié par mutation.
+  it("ROLLBACK : panne de l'effacement du drapeau (2ᵉ écriture) ⇒ maîtrise relevée ANNULÉE + drapeau reste armé", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1)); // box 1
+    requestRecalibration(db, profileId); // armer AVANT le trigger (l'armement est un UPDATE profiles)
+    db.run(
+      sql`CREATE TRIGGER block_profiles_update BEFORE UPDATE ON profiles BEGIN SELECT RAISE(ABORT, 'boom'); END;`,
+    );
+
+    expect(() => seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW)).toThrow();
+
+    db.run(sql`DROP TRIGGER block_profiles_update;`);
+    // ROLLBACK PROUVÉ : la maîtrise relevée est annulée (box reste 1 — assertion PINNING de la
+    // transaction) ET le drapeau reste ARMÉ (demande jamais consommée à moitié).
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(1);
+    expect(isRecalibrationRequested(db, profileId)).toBe(true);
+  });
+
+  it("CONTRÔLE : sans panne, le même re-seed relève bien la maîtrise (box 3) ET efface le drapeau", () => {
+    upsertMastery(db, profileId, COMP10_7, dueState(1));
+    requestRecalibration(db, profileId);
+    seedRecalibration(db, profileId, [FLUENT_COMP10_7], config, NOW);
+    expect(loadMasteryState(db, profileId, COMP10_7.key)?.box).toBe(3);
+    expect(isRecalibrationRequested(db, profileId)).toBe(false);
   });
 });

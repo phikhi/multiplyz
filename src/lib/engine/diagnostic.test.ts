@@ -7,6 +7,7 @@ import {
   ADAPTIVE_PROBE_COUNT,
   adaptDiagnostic,
   PER_SKILL_TARGET,
+  recalibrateMastery,
   SEED_BOX_FLUENT,
   SEED_BOX_SLOW,
   SEED_BOX_WRONG,
@@ -15,6 +16,7 @@ import {
   type DiagnosticItem,
   type DiagnosticResponse,
 } from "./diagnostic";
+import type { MasteryState } from "./mastery";
 
 /**
  * Config moteur réelle (⚙️ défauts de 3.2) → on teste la logique contre le contrat
@@ -490,6 +492,152 @@ describe("seedDiagnosticMastery — non testé & dédoublonnage (ENGINE §3)", (
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].state.box).toBe(SEED_BOX_FLUENT);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// recalibrateMastery — fusion MONOTONE (max-merge) du re-diagnostic (ADR 0016, #237 Option A)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** État de maîtrise courant de test (compteurs/fluence non triviaux → détecte toute pollution). */
+function masteryState(overrides: Partial<MasteryState> = {}): MasteryState {
+  return {
+    box: 1,
+    correctCount: 2,
+    wrongCount: 1,
+    avgResponseMs: 1_800,
+    lastSeen: NOW - MS_PER_DAY,
+    nextDue: NOW - 1,
+    ...overrides,
+  };
+}
+
+describe("recalibrateMastery — CREATE (fait jamais amorcé, ADR 0016)", () => {
+  it("current null + réponse juste+rapide → ligne CRÉÉE, IDENTIQUE à l'amorçage initial (parité seedMasteryRow)", () => {
+    const resp = response(); // add fluent → box 3
+    const [row, ...rest] = recalibrateMastery([{ response: resp, current: null }], CONFIG, NOW);
+    expect(rest).toHaveLength(0);
+    expect(row.action).toBe("create");
+    // Parité EXACTE avec le diagnostic initial : la création réutilise `seedMasteryRow`.
+    const [seeded] = seedDiagnosticMastery([resp], CONFIG, NOW);
+    expect(row.state).toEqual(seeded.state);
+  });
+
+  it("current null + réponse fausse → ligne CRÉÉE en box 0 (compteur faux = 1)", () => {
+    const [row] = recalibrateMastery(
+      [{ response: response({ correct: false }), current: null }],
+      CONFIG,
+      NOW,
+    );
+    expect(row.state.box).toBe(SEED_BOX_WRONG);
+    expect(row.state.wrongCount).toBe(1);
+    expect(row.state.correctCount).toBe(0);
+  });
+});
+
+describe("recalibrateMastery — RAISE (relève un fait sous-amorcé, ADR 0016)", () => {
+  it("box 1 + réponse juste+rapide (box 3) → RELÈVE à 3, échéance recalculée, dernière-vue rafraîchie, COMPTEURS & fluence INCHANGÉS", () => {
+    const current = masteryState({
+      box: 1,
+      correctCount: 2,
+      wrongCount: 1,
+      avgResponseMs: 1_800,
+      lastSeen: NOW - MS_PER_DAY,
+      nextDue: NOW - 1,
+    });
+    const [row, ...rest] = recalibrateMastery([{ response: response(), current }], CONFIG, NOW);
+    expect(rest).toHaveLength(0);
+    expect(row.action).toBe("raise");
+    expect(row.factKey).toBe("add_3+8");
+    expect(row.state.box).toBe(SEED_BOX_FLUENT); // 3
+    expect(row.state.nextDue).toBe(NOW + delayMs(SEED_BOX_FLUENT)); // échéance recalculée sur la boîte relevée
+    expect(row.state.lastSeen).toBe(NOW);
+    // La sonde de calibrage ne DOIT PAS polluer la justesse/rapidité rapportées (agrégats parent
+    // dérivent d'`attempts`, ADR 0012/0014) : compteurs + moyenne de fluence STRICTEMENT préservés.
+    expect(row.state.correctCount).toBe(2);
+    expect(row.state.wrongCount).toBe(1);
+    expect(row.state.avgResponseMs).toBe(1_800);
+  });
+
+  it("box 0 + réponse juste-mais-LENTE (box 2) → relève à box 2 seulement (pas 3)", () => {
+    const current = masteryState({ box: 0 });
+    // add lent = responseMs > seuil fluence add (3000) → SEED_BOX_SLOW.
+    const [row] = recalibrateMastery(
+      [{ response: response({ responseMs: 3_500 }), current }],
+      CONFIG,
+      NOW,
+    );
+    expect(row.action).toBe("raise");
+    expect(row.state.box).toBe(SEED_BOX_SLOW); // 2
+  });
+});
+
+describe("recalibrateMastery — GARDE MONOTONE (jamais de régression, invariant ENGINE §2)", () => {
+  it("boîte courante > sondée → AUCUNE écriture (jamais rétrograde) — mutation `seed > box` → rouge", () => {
+    // box courant 4 ; réponse juste+rapide sonde box 3 < 4 → « keep », le fait est ABSENT de la sortie.
+    // Un mutant qui relèverait/écraserait inconditionnellement produirait une ligne box 3 (RÉGRESSION).
+    const current = masteryState({ box: 4 });
+    expect(recalibrateMastery([{ response: response(), current }], CONFIG, NOW)).toEqual([]);
+  });
+
+  it("boîte courante = sondée → AUCUNE écriture (spacing préservé) — mutation `>`→`>=` → rouge", () => {
+    // box courant 3 = box sondée (fluent) → « keep » : ne PAS ré-écrire (perturberait next_due/last_seen).
+    const current = masteryState({ box: SEED_BOX_FLUENT });
+    expect(recalibrateMastery([{ response: response(), current }], CONFIG, NOW)).toEqual([]);
+  });
+
+  it("réponse FAUSSE (box 0) sur un fait box 2 → AUCUNE écriture (0 ≤ 2, jamais rétrograde)", () => {
+    // La correction VERS LE BAS (enfant surestimé) reste gérée par le rétrograde Leitner normal
+    // pendant le jeu (−demoteBoxes sur faux, ENGINE §2) — JAMAIS par le recalibrage (ADR 0016).
+    const current = masteryState({ box: 2 });
+    expect(
+      recalibrateMastery([{ response: response({ correct: false }), current }], CONFIG, NOW),
+    ).toEqual([]);
+  });
+});
+
+describe("recalibrateMastery — mélange & dédoublonnage (ADR 0016)", () => {
+  it("relève les sous-amorcés, crée les neufs, OMET les « keep » (boîte ≥ sondée)", () => {
+    const upserts = recalibrateMastery(
+      [
+        {
+          response: response({ factKey: "add_3+8", skill: "add" }),
+          current: masteryState({ box: 1 }),
+        }, // raise 1→3
+        {
+          response: response({ factKey: "add_2+9", skill: "add" }),
+          current: masteryState({ box: 5 }),
+        }, // keep (5 ≥ 3)
+        {
+          response: response({ factKey: "mult_6x8", skill: "mult", responseMs: 1_200 }),
+          current: null,
+        }, // create (mult fluent → box 3)
+      ],
+      CONFIG,
+      NOW,
+    );
+    const byKey = new Map(upserts.map((u) => [u.factKey, u.action]));
+    expect(byKey.get("add_3+8")).toBe("raise");
+    expect(byKey.has("add_2+9")).toBe(false); // « keep » → ABSENT de la sortie (aucune écriture)
+    expect(byKey.get("mult_6x8")).toBe("create");
+    expect(upserts).toHaveLength(2);
+  });
+
+  it("dédoublonne par clé : la DERNIÈRE réponse d'un fait gagne (comme seedDiagnosticMastery)", () => {
+    const upserts = recalibrateMastery(
+      [
+        { response: response({ correct: false }), current: null }, // box 0
+        { response: response({ correct: true, responseMs: 1_200 }), current: null }, // fluent box 3
+      ],
+      CONFIG,
+      NOW,
+    );
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0].state.box).toBe(SEED_BOX_FLUENT);
+  });
+
+  it("aucune entrée → aucune écriture (no-op)", () => {
+    expect(recalibrateMastery([], CONFIG, NOW)).toEqual([]);
   });
 });
 

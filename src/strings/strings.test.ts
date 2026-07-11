@@ -274,9 +274,17 @@ describe("strings (i18n FR)", () => {
     expect(set.screenTime.hardLockHint).toContain("douceur");
     expect(set.screenTime.hardLockHint).toContain("lendemain");
     expect(set.screenTime.nudgeHint.toLowerCase()).toContain("bientôt");
-    // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant.
+    // Recalibrer (story 7.6, ADR 0016) : section présente, action à confirmer, rassurance monotone.
+    expect(set.recalibrate.legend.length).toBeGreaterThan(0);
+    expect(set.recalibrate.action.length).toBeGreaterThan(0);
+    expect(set.recalibrate.confirm.length).toBeGreaterThan(0);
+    expect(set.recalibrate.cancel.length).toBeGreaterThan(0);
+    expect(set.recalibrate.success.length).toBeGreaterThan(0);
+    // La consigne rassure : la progression n'est JAMAIS perdue (fusion MONOTONE, ADR 0016).
+    expect(set.recalibrate.hint.toLowerCase()).toContain("jamais perdue");
+    // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant — INCLUT la copie recalibrer.
     const settingsText =
-      `${set.intro} ${set.theme.hint} ${set.worlds.hint} ${set.screenTime.hardLockHint} ${set.errors.UNAUTHORIZED}`.toLowerCase();
+      `${set.intro} ${set.theme.hint} ${set.worlds.hint} ${set.screenTime.hardLockHint} ${set.recalibrate.hint} ${set.recalibrate.confirmBody} ${set.recalibrate.success} ${set.errors.UNAUTHORIZED}`.toLowerCase();
     expect(settingsText).not.toMatch(/\btu\b/);
     expect(settingsText).not.toMatch(/\bte\b/);
     expect(settingsText).not.toMatch(/\bton\b/);
