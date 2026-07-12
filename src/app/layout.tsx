@@ -73,13 +73,16 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       suppressHydrationWarning
     >
       <body>
+        {/* PWA : invite d'installation discrète, gatée aux surfaces enfant calmes (8.5 #258).
+            PREMIER enfant de <body> + EN FLUX (aucune position) → sa hauteur POUSSE le contenu
+            de page vers le bas quand elle est visible ⇒ ne recouvre JAMAIS le <h1> hôte
+            (rétro #170/#190, PO round 2). Rend `null` hors surface calme → aucun espace réservé. */}
+        <InstallPrompt householdExists={hasHousehold} />
         {children}
         {/* PWA : bannière douce si coupure réseau (cf. SYNC.md §3, strings.pwa.offline) */}
         <OfflineBanner />
         {/* PWA : enregistrement du service worker custom (cf. public/sw.js) */}
         <ServiceWorkerRegistration />
-        {/* PWA : invite d'installation discrète, gatée aux surfaces enfant calmes (8.5 #258) */}
-        <InstallPrompt householdExists={hasHousehold} />
       </body>
     </html>
   );

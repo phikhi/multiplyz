@@ -24,12 +24,20 @@ import { INSTALL_PROMPT_DISMISSED_KEY } from "@/config/pwa";
  * calme atteinte (`usePathname` re-rend au changement de route). Voir
  * `shouldShowInstallPromptOnSurface` (pur, testé branche par branche).
  *
- * **Élément superposé/positionné** (`position:fixed`, AC #170) — voir garde de
- * non-occlusion E2E (`e2e/pwa.spec.ts`, `boundingClientRect`/`elementFromPoint`) +
- * captures Playwright pixel-lookées (affiché/rejeté/iOS, desktop ET 375px). Positionné en
- * HAUT du viewport (`OfflineBanner` occupe déjà le bas ET `ActionBar` passe en
- * `position:fixed` bas sur téléphone pendant le jeu, cf. `ActionBar.tsx`) — zone haute
- * libre, aucun frère fixe connu à cette position (grep effectué avant de coder).
+ * **Bandeau EN FLUX qui RÉSERVE un espace réel, jamais un overlay `position:fixed` (rétro
+ * #170/#190, defect PO round 2).** Un overlay fixé recouvre le CONTENU EN FLUX de la surface
+ * hôte — d'abord le titre onboarding (corrigé par le gating), puis, une fois le gating posé, le
+ * `<h1>` propre des surfaces autorisées (`« Ma collection 🐾 »`, titre carte) réduit à un
+ * fragment d'emoji au-dessus de la carte. Le raisonnement « OfflineBanner en bas → zone haute
+ * libre » n'avait vérifié que les FRÈRES FIXES, jamais le `<h1>` en flux normal (piège #170/#190
+ * exact : mécanisme/token vert, pixel du contenu hôte jamais regardé). **Correctif** : monté en
+ * PREMIER enfant de `<body>` (avant `{children}`), en **flux normal** (aucune `position`) → sa
+ * hauteur POUSSE tout le contenu de page vers le bas ⇒ non-occlusion du `<h1>` hôte **par
+ * construction** (impossible de le recouvrir : il vit sous le bandeau, jamais dessous). Scrolle
+ * avec la page (pas `sticky`) → ne recouvre RIEN à AUCUNE position de scroll. Aucune coexistence
+ * à gérer avec `OfflineBanner`/`ActionBar` (eux `position:fixed` en BAS ; le bandeau est en flux
+ * en HAUT). Garde E2E de non-occlusion du `<h1>` HÔTE (`elementFromPoint`, `/collection` ET
+ * `/carte`) + captures pixel-lookées desktop ET 375px.
  *
  * Registre : voix de Teddy, tutoiement (invite montée dans l'aire ENFANT via le layout
  * global — cf. COPY §1/§5, la zone parent a son propre registre neutre ailleurs).
@@ -148,12 +156,20 @@ const HIDDEN_STATE: PromptState = { kind: "hidden" };
 // Glyphe décoratif (aria-hidden) — react/jsx-no-literals : aucun littéral rendu en JSX.
 const DISMISS_GLYPH = "×"; // ×
 
-const bannerStyle: CSSProperties = {
-  position: "fixed",
-  top: "var(--space-5)",
-  left: "50%",
-  transform: "translateX(-50%)",
-  zIndex: 9999,
+/**
+ * Enveloppe EN FLUX (aucune `position`) : premier bloc de `<body>`, sa hauteur POUSSE
+ * `{children}` vers le bas → réserve un espace réel, jamais un overlay (rétro #170/#190, PO
+ * round 2). Centre la carte horizontalement ; padding tokenisé (jamais de valeur en dur).
+ */
+const bannerContainerStyle: CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "var(--space-5) var(--space-4) 0",
+};
+
+const cardStyle: CSSProperties = {
   display: "flex",
   flexDirection: "column",
   gap: "var(--space-3)",
@@ -162,7 +178,9 @@ const bannerStyle: CSSProperties = {
   borderRadius: "var(--border-radius-lg)",
   boxShadow: "var(--shadow-md)",
   padding: "var(--space-4) var(--space-5)",
-  maxWidth: "min(var(--max-width-play), calc(100vw - var(--space-8)))",
+  // Bornée par la largeur du conteneur padé (100%) → jamais de débordement à 375px, tout en
+  // restant lisible sur desktop (--max-width-play).
+  maxWidth: "min(var(--max-width-play), 100%)",
   width: "max-content",
 };
 
@@ -323,38 +341,40 @@ export function InstallPrompt({ householdExists }: InstallPromptProps) {
   if (!shouldShowInstallPromptOnSurface(pathname, householdExists)) return null;
 
   return (
-    <div role="region" aria-label={strings.pwa.install.regionLabel} style={bannerStyle}>
-      <div style={headerRowStyle}>
-        <div>
-          <p style={titleStyle}>{strings.pwa.install.title}</p>
-          <p style={bodyStyle}>
-            {state.kind === "ios" ? strings.pwa.install.iosBody : strings.pwa.install.body}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="mz-focusable"
-          onClick={handleDismiss}
-          aria-label={strings.pwa.install.dismissAriaLabel}
-          style={dismissButtonStyle}
-        >
-          <span aria-hidden="true">{DISMISS_GLYPH}</span>
-        </button>
-      </div>
-      {state.kind === "chrome" && (
-        <div style={actionsRowStyle}>
+    <div style={bannerContainerStyle}>
+      <div role="region" aria-label={strings.pwa.install.regionLabel} style={cardStyle}>
+        <div style={headerRowStyle}>
+          <div>
+            <p style={titleStyle}>{strings.pwa.install.title}</p>
+            <p style={bodyStyle}>
+              {state.kind === "ios" ? strings.pwa.install.iosBody : strings.pwa.install.body}
+            </p>
+          </div>
           <button
             type="button"
             className="mz-focusable"
-            onClick={() => handleInstall(state.event)}
-            disabled={state.installing}
-            aria-disabled={state.installing}
-            style={installButtonStyle(state.installing)}
+            onClick={handleDismiss}
+            aria-label={strings.pwa.install.dismissAriaLabel}
+            style={dismissButtonStyle}
           >
-            {strings.pwa.install.installButton}
+            <span aria-hidden="true">{DISMISS_GLYPH}</span>
           </button>
         </div>
-      )}
+        {state.kind === "chrome" && (
+          <div style={actionsRowStyle}>
+            <button
+              type="button"
+              className="mz-focusable"
+              onClick={() => handleInstall(state.event)}
+              disabled={state.installing}
+              aria-disabled={state.installing}
+              style={installButtonStyle(state.installing)}
+            >
+              {strings.pwa.install.installButton}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

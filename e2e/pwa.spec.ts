@@ -112,6 +112,56 @@ async function readInstallPromptGeometry(page: Page) {
   }, strings.pwa.install.regionLabel);
 }
 
+/**
+ * Non-occlusion du **titre `<h1>` de la surface HÔTE** par l'invite (defect PO round 2,
+ * #170/#190). L'invite est en flux normal AVANT `<main>` → elle doit RÉSERVER l'espace et
+ * pousser le `<h1>` sous elle, jamais le recouvrir. On lit le PREMIER `<h1>` de `<main>`
+ * (texte quelconque : « Ma collection 🐾 », titre thématisé carte…) et on vérifie :
+ *  - le `<h1>` est visible (rect non vide) ET `elementFromPoint` en son centre le retourne
+ *    (ou un descendant) → aucun frère opaque par-dessus ;
+ *  - le bas de l'invite est AU-DESSUS (≤) du haut du `<h1>` → aucun chevauchement vertical.
+ * ROUGIT si l'invite repasse en overlay (`position:fixed`) et recouvre le titre.
+ */
+async function readHostTitleOcclusion(page: Page, regionLabel: string) {
+  return page.evaluate((label) => {
+    const region = [...document.querySelectorAll('[role="region"]')].find(
+      (el) => el.getAttribute("aria-label") === label,
+    );
+    const h1 = document.querySelector("main h1");
+    if (!region || !h1) return null;
+    const inviteRect = region.getBoundingClientRect();
+    const titleRect = h1.getBoundingClientRect();
+    const cx = (titleRect.left + titleRect.right) / 2;
+    const cy = (titleRect.top + titleRect.bottom) / 2;
+    const hit = document.elementFromPoint(cx, cy);
+    return {
+      titleText: (h1.textContent ?? "").trim(),
+      titleVisible: titleRect.width > 0 && titleRect.height > 0,
+      titleNotOccluded: hit !== null && h1.contains(hit),
+      inviteBottom: inviteRect.bottom,
+      titleTop: titleRect.top,
+    };
+  }, regionLabel);
+}
+
+/**
+ * Garde combinée : l'invite ET le `<h1>` hôte sont tous deux visibles/atteignables et ne se
+ * chevauchent pas. Utilisée sur CHAQUE surface autorisée (defect PO round 2).
+ */
+async function expectInviteAndHostTitleCoexist(page: Page) {
+  const invite = await readInstallPromptGeometry(page);
+  expect(invite).not.toBeNull();
+  expect(invite!.right).toBeLessThanOrEqual(invite!.innerWidth);
+  expect(invite!.notOccluded).toBe(true);
+
+  const host = await readHostTitleOcclusion(page, strings.pwa.install.regionLabel);
+  expect(host).not.toBeNull();
+  expect(host!.titleVisible).toBe(true);
+  expect(host!.titleNotOccluded).toBe(true);
+  // Invite ENTIÈREMENT au-dessus du titre → réservation d'espace, jamais overlay (#170/#190).
+  expect(host!.inviteBottom).toBeLessThanOrEqual(host!.titleTop);
+}
+
 test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
   test("beforeinstallprompt → invite affichée, non-occluse (#170), rejetable et persistante (AC1)", async ({
     page,
@@ -135,16 +185,15 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
       exact: true,
     });
     await expect(installBtn).toBeVisible();
+    // Le titre HÔTE reste visible (l'invite réserve l'espace, ne le recouvre pas).
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.collection.title }),
+    ).toBeVisible();
 
-    // Garde E2E de géométrie RENDUE (#170) : non-occlusion RÉELLE, pas un raisonnement.
-    const geometry = await readInstallPromptGeometry(page);
-    expect(geometry).not.toBeNull();
-    expect(geometry!.top).toBeGreaterThanOrEqual(0);
-    expect(geometry!.left).toBeGreaterThanOrEqual(0);
-    expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
-    expect(geometry!.notOccluded).toBe(true);
+    // Garde E2E #170/#190 : l'invite ET le `<h1>` hôte coexistent, non-occlus, sans chevauchement.
+    await expectInviteAndHostTitleCoexist(page);
 
-    // Opérabilité clavier RÉELLE (AC5) : Tab jusqu'au bouton puis activation — pas seulement `.click()`.
+    // Opérabilité clavier RÉELLE (AC5) : focus le bouton puis activation — pas seulement `.click()`.
     await installBtn.focus();
     await expect(installBtn).toBeFocused();
 
@@ -185,13 +234,13 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
       page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
     ).toBeVisible();
 
-    // À 375px, la carte (maxWidth `min(--max-width-play, calc(100vw - --space-8))`) doit rester
-    // DANS le cadre (pas de débordement horizontal) ET non-occluse.
-    const geometry = await readInstallPromptGeometry(page);
-    expect(geometry).not.toBeNull();
-    expect(geometry!.left).toBeGreaterThanOrEqual(0);
-    expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
-    expect(geometry!.notOccluded).toBe(true);
+    // À 375px, la carte (`maxWidth: min(--max-width-play, 100%)` dans un conteneur padé) doit
+    // rester DANS le cadre, non-occluse, ET le titre HÔTE « Ma collection 🐾 » reste visible
+    // sous elle (l'invite réserve l'espace, ne recouvre pas — defect PO round 2).
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.collection.title }),
+    ).toBeVisible();
+    await expectInviteAndHostTitleCoexist(page);
 
     // Capture DoD 375px (Chrome/Android) — AC6, contexte téléphone.
     await page.screenshot({ path: "docs/captures/258-install-prompt-mobile.png" });
@@ -217,11 +266,11 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
         page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
       ).not.toBeVisible();
 
-      // Non-occlusion à 375px sur iOS aussi.
-      const geometry = await readInstallPromptGeometry(page);
-      expect(geometry).not.toBeNull();
-      expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
-      expect(geometry!.notOccluded).toBe(true);
+      // Non-occlusion à 375px sur iOS aussi — invite ET titre hôte coexistent.
+      await expect(
+        page.getByRole("heading", { level: 1, name: strings.collection.title }),
+      ).toBeVisible();
+      await expectInviteAndHostTitleCoexist(page);
 
       // Capture DoD 375px (iOS Safari) — AC6.
       await page.screenshot({ path: "docs/captures/258-install-prompt-ios.png" });
@@ -281,6 +330,32 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     await expect(
       page.getByRole("region", { name: strings.pwa.install.regionLabel }),
     ).not.toBeVisible();
+  });
+
+  test("carte (`/carte`) : invite affichée SANS recouvrir le titre `<h1>` de la carte (defect PO round 2, desktop + 375px)", async ({
+    page,
+    context,
+  }) => {
+    await addCollectionSession(context);
+    await page.goto("/carte");
+    await page.waitForLoadState("networkidle");
+    // La carte charge son titre `<h1>` (thématisé « Monde {n} · {thème} »).
+    const mapTitle = page.getByRole("heading", { level: 1 });
+    await expect(mapTitle).toBeVisible();
+
+    // Desktop : invite affichée, titre hôte non recouvert.
+    await dispatchFakeBeforeInstallPrompt(page);
+    await expect(page.getByRole("region", { name: strings.pwa.install.regionLabel })).toBeVisible();
+    await expect(mapTitle).toBeVisible();
+    await expectInviteAndHostTitleCoexist(page);
+    await page.screenshot({ path: "docs/captures/258-install-prompt-carte.png" });
+
+    // 375px : même garde (le titre de carte a un scrim/casing opaque — non-occlusion réelle).
+    await page.setViewportSize(PHONE_VIEWPORT);
+    await expect(page.getByRole("region", { name: strings.pwa.install.regionLabel })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expectInviteAndHostTitleCoexist(page);
+    await page.screenshot({ path: "docs/captures/258-install-prompt-carte-mobile.png" });
   });
 });
 
