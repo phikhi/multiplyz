@@ -37,9 +37,10 @@ export function signedPercentPoints(delta: number): string {
  * Sélectionne le gabarit **singulier** ou **pluriel** selon `n` — règle FRANÇAISE : `0` ET `1`
  * prennent le SINGULIER (« 0 jour », « 1 jour »), `≥2` le PLURIEL (« 2 jours ») — jamais un
  * gabarit unique figé au pluriel (bug source : « 1 jours »/« 1 niveaux »/« 0 créatures »,
- * review Frontend PR #239). Même règle que `CollectionScreen.tsx` (`n === 1 ? count :
- * countPlural`), généralisée ici (`n <= 1`, couvre aussi le cas `0` que `CollectionScreen` ne
- * rencontre pas). Ne fait AUCUNE interpolation — l'appelant `fill()`-ie le gabarit choisi.
+ * review Frontend PR #239). Même règle que `CollectionScreen.tsx` (`countLabel`, borne
+ * `n <= 1` — le cas `0` y est bien ATTEIGNABLE au rendu, corrigé par #273 : le compteur
+ * s'affiche même quand la collection est vide), généralisée ici en helper partagé. Ne fait
+ * AUCUNE interpolation — l'appelant `fill()`-ie le gabarit choisi.
  */
 export function pluralize(n: number, singular: string, plural: string): string {
   return n <= 1 ? singular : plural;
