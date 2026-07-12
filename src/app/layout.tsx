@@ -3,6 +3,7 @@ import { BRAND_NAME } from "@/config/brand";
 import { PWA_THEME_COLOR } from "@/config/pwa";
 import { LOCALE, strings } from "@/strings";
 import { getDb } from "@/lib/db";
+import { householdExists } from "@/lib/auth/household";
 import { dataThemeAttr, readHouseholdSettings } from "@/lib/parent/settings";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
@@ -58,7 +59,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   // Thème du foyer (7.3) → `data-theme` app-wide. `system` = `undefined` → attribut omis par React.
-  const themeAttr = dataThemeAttr(readHouseholdSettings(getDb()).theme);
+  const db = getDb();
+  const themeAttr = dataThemeAttr(readHouseholdSettings(db).theme);
+  // Foyer présent ? Tranche l'ambiguïté de `/` pour le gating de l'invite d'installation (8.5) :
+  // onboarding premier-run (foyer absent) = surface à NE PAS recouvrir vs sélecteur/retour
+  // quotidien (foyer présent) = surface calme éligible. Lecture serveur = source de vérité.
+  const hasHousehold = householdExists(db);
   return (
     <html
       lang={LOCALE}
@@ -72,8 +78,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <OfflineBanner />
         {/* PWA : enregistrement du service worker custom (cf. public/sw.js) */}
         <ServiceWorkerRegistration />
-        {/* PWA : invite d'installation discrète (Chrome/Android + hint iOS, story 8.5 #258) */}
-        <InstallPrompt />
+        {/* PWA : invite d'installation discrète, gatée aux surfaces enfant calmes (8.5 #258) */}
+        <InstallPrompt householdExists={hasHousehold} />
       </body>
     </html>
   );

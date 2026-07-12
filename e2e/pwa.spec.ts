@@ -1,6 +1,7 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
+import { COLLECTION_SESSION_TOKEN, COLLECTION_CREATURES } from "./seed-collection";
 
 test.beforeAll(async () => {
   await mkdir("docs/captures", { recursive: true });
@@ -10,6 +11,38 @@ test.beforeAll(async () => {
 
 const IPHONE_SAFARI_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+
+const PHONE_VIEWPORT = { width: 375, height: 812 } as const; // iPhone SE / installation = contexte téléphone
+const BASE_URL = `http://localhost:${process.env.PORT || "3104"}`;
+
+/**
+ * Injecte le cookie de session enfant amorcé (`COLLECTION_SESSION_TOKEN`, profil `Nino` + 5
+ * créatures — cf. `seed-collection`) pour atteindre `/collection`, une **surface enfant calme
+ * ET déjà engagée** où l'invite d'installation a le DROIT d'apparaître (gating story 8.5). La
+ * base E2E est wipée à froid **sans foyer propriétaire** → `/` est l'écran d'ONBOARDING, où
+ * l'invite est justement GATÉE (testé séparément). Il faut donc une surface enfant réelle.
+ */
+async function addCollectionSession(context: BrowserContext): Promise<void> {
+  await context.addCookies([
+    {
+      name: "mz_session",
+      value: COLLECTION_SESSION_TOKEN,
+      url: BASE_URL,
+      httpOnly: true,
+      sameSite: "Lax",
+    },
+  ]);
+}
+
+/** Va sur la collection (surface calme) et attend que les créatures amorcées soient rendues. */
+async function gotoCalmChildSurface(page: Page): Promise<void> {
+  await page.goto("/collection");
+  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("heading", { level: 1, name: strings.collection.title }),
+  ).toBeVisible();
+  await expect(page.getByText(COLLECTION_CREATURES[0].nameDefault)).toBeVisible();
+}
 
 /**
  * Injecte un faux `beforeinstallprompt` — l'API réelle (heuristiques d'installabilité
@@ -82,9 +115,10 @@ async function readInstallPromptGeometry(page: Page) {
 test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
   test("beforeinstallprompt → invite affichée, non-occluse (#170), rejetable et persistante (AC1)", async ({
     page,
+    context,
   }) => {
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await addCollectionSession(context);
+    await gotoCalmChildSurface(page);
 
     // Rien avant l'événement.
     await expect(
@@ -96,9 +130,11 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     const region = page.getByRole("region", { name: strings.pwa.install.regionLabel });
     await expect(region).toBeVisible();
     await expect(page.getByText(strings.pwa.install.title)).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
-    ).toBeVisible();
+    const installBtn = page.getByRole("button", {
+      name: strings.pwa.install.installButton,
+      exact: true,
+    });
+    await expect(installBtn).toBeVisible();
 
     // Garde E2E de géométrie RENDUE (#170) : non-occlusion RÉELLE, pas un raisonnement.
     const geometry = await readInstallPromptGeometry(page);
@@ -108,11 +144,17 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
     expect(geometry!.notOccluded).toBe(true);
 
-    // Capture DoD (état AFFICHÉ) — AC6.
+    // Opérabilité clavier RÉELLE (AC5) : Tab jusqu'au bouton puis activation — pas seulement `.click()`.
+    await installBtn.focus();
+    await expect(installBtn).toBeFocused();
+
+    // Capture DoD (état AFFICHÉ, desktop) — AC6.
     await page.screenshot({ path: "docs/captures/258-install-prompt-affichee.png" });
 
-    // Rejet — cible ≥44px, opérable au clavier (bouton natif).
-    await page.getByRole("button", { name: strings.pwa.install.dismissAriaLabel }).click();
+    // Rejet au CLAVIER (bouton natif, ≥44px) : focus + Enter, pas un clic souris.
+    const dismissBtn = page.getByRole("button", { name: strings.pwa.install.dismissAriaLabel });
+    await dismissBtn.focus();
+    await page.keyboard.press("Enter");
     await expect(region).not.toBeVisible();
 
     // Capture DoD (état REJETÉ) — AC6.
@@ -128,14 +170,44 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     ).not.toBeVisible();
   });
 
-  test("hint iOS Safari (AC2) — affiché uniquement sur iOS Safari non-standalone", async ({
+  test("beforeinstallprompt à 375px (téléphone) → invite affichée, non-occluse, dans le cadre (AC6)", async ({
+    page,
+    context,
+  }) => {
+    await page.setViewportSize(PHONE_VIEWPORT);
+    await addCollectionSession(context);
+    await gotoCalmChildSurface(page);
+
+    await dispatchFakeBeforeInstallPrompt(page);
+    const region = page.getByRole("region", { name: strings.pwa.install.regionLabel });
+    await expect(region).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
+    ).toBeVisible();
+
+    // À 375px, la carte (maxWidth `min(--max-width-play, calc(100vw - --space-8))`) doit rester
+    // DANS le cadre (pas de débordement horizontal) ET non-occluse.
+    const geometry = await readInstallPromptGeometry(page);
+    expect(geometry).not.toBeNull();
+    expect(geometry!.left).toBeGreaterThanOrEqual(0);
+    expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
+    expect(geometry!.notOccluded).toBe(true);
+
+    // Capture DoD 375px (Chrome/Android) — AC6, contexte téléphone.
+    await page.screenshot({ path: "docs/captures/258-install-prompt-mobile.png" });
+  });
+
+  test("hint iOS Safari (AC2) à 375px — affiché uniquement sur iOS Safari, marche à suivre manuelle", async ({
     browser,
   }) => {
-    const context = await browser.newContext({ userAgent: IPHONE_SAFARI_UA });
+    const context = await browser.newContext({
+      userAgent: IPHONE_SAFARI_UA,
+      viewport: PHONE_VIEWPORT,
+    });
     try {
+      await addCollectionSession(context);
       const page = await context.newPage();
-      await page.goto("/");
-      await page.waitForLoadState("networkidle");
+      await gotoCalmChildSurface(page);
 
       const region = page.getByRole("region", { name: strings.pwa.install.regionLabel });
       await expect(region).toBeVisible();
@@ -145,13 +217,23 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
         page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
       ).not.toBeVisible();
 
+      // Non-occlusion à 375px sur iOS aussi.
+      const geometry = await readInstallPromptGeometry(page);
+      expect(geometry).not.toBeNull();
+      expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
+      expect(geometry!.notOccluded).toBe(true);
+
+      // Capture DoD 375px (iOS Safari) — AC6.
       await page.screenshot({ path: "docs/captures/258-install-prompt-ios.png" });
     } finally {
       await context.close();
     }
   });
 
-  test("AC3 — jamais affichée en mode standalone (display-mode: standalone)", async ({ page }) => {
+  test("AC3 — jamais affichée en mode standalone (display-mode: standalone)", async ({
+    page,
+    context,
+  }) => {
     // Force la media query AVANT tout script de page (le composant la lit au montage).
     await page.addInitScript(() => {
       const originalMatchMedia = window.matchMedia.bind(window);
@@ -170,10 +252,57 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
       }) as typeof window.matchMedia;
     });
 
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
+    await addCollectionSession(context);
+    await gotoCalmChildSurface(page);
     await dispatchFakeBeforeInstallPrompt(page);
 
+    await expect(
+      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).not.toBeVisible();
+  });
+
+  test("GATING — onboarding premier-run (`/` sans foyer) : invite JAMAIS rendue, titre Teddy NON recouvert (bloquant 1+4)", async ({
+    page,
+  }) => {
+    // Base E2E wipée à froid = aucun foyer propriétaire → `/` rend l'écran d'onboarding
+    // (premier contact enfant↔Teddy, PRODUCT §1.1). Contexte NEUF (aucun cookie de session).
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Le titre de bienvenue focus-managé est visible.
+    const welcome = page.getByRole("heading", { level: 1, name: strings.onboarding.profile.title });
+    await expect(welcome).toBeVisible();
+
+    // Même si un beforeinstallprompt survient, l'invite ne DOIT PAS s'afficher ici.
+    await dispatchFakeBeforeInstallPrompt(page);
+    await expect(
+      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).not.toBeVisible();
+
+    // Et le titre Teddy reste visible ET non recouvert (l'invite ne peut pas le masquer,
+    // preuve directe du bug pixel-looké par game-design/PO/Frontend).
+    await expect(welcome).toBeVisible();
+    const welcomeOccluded = await welcome.evaluate((h1) => {
+      const r = h1.getBoundingClientRect();
+      const el = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+      return el === null || !h1.contains(el);
+    });
+    expect(welcomeOccluded).toBe(false);
+
+    await page.screenshot({ path: "docs/captures/258-onboarding-non-recouvert.png" });
+  });
+
+  test("GATING — partie active (`/jouer`) : invite JAMAIS rendue même sur beforeinstallprompt (bloquant 1+4)", async ({
+    page,
+    context,
+  }) => {
+    await addCollectionSession(context);
+    await page.goto("/jouer");
+    await page.waitForLoadState("networkidle");
+    // L'écran de jeu est monté (un `<h1>` de jeu présent, quel que soit l'état diagnostic/niveau).
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    await dispatchFakeBeforeInstallPrompt(page);
     await expect(
       page.getByRole("region", { name: strings.pwa.install.regionLabel }),
     ).not.toBeVisible();

@@ -33,6 +33,8 @@ describe("strings (i18n FR)", () => {
     expect(strings.pwa.install.body).toContain("écran d'accueil");
     expect(strings.pwa.install.iosBody).toContain("Partager");
     expect(strings.pwa.install.iosBody).toContain("écran d'accueil");
+    // Voix Teddy 1ère personne jusque dans le hint iOS (pas une instruction sèche) — tutoiement.
+    expect(strings.pwa.install.iosBody).toContain("je t'attends");
     expect(strings.pwa.install.installButton.length).toBeGreaterThan(0);
     expect(strings.pwa.install.dismissAriaLabel.length).toBeGreaterThan(0);
   });

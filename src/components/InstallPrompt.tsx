@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { usePathname } from "next/navigation";
 import { strings } from "@/strings";
 import { INSTALL_PROMPT_DISMISSED_KEY } from "@/config/pwa";
 
@@ -11,16 +12,54 @@ import { INSTALL_PROMPT_DISMISSED_KEY } from "@/config/pwa";
  * composant complète la couche **UX d'installation** : invite Chrome/Android
  * (`beforeinstallprompt`), hint manuel iOS Safari, jamais si déjà installée.
  *
+ * **Gating de surface (AC1 « discrète »)** : montée globalement dans `layout.tsx`, mais
+ * ne se REND que sur des surfaces enfant **calmes et déjà engagées** — sélecteur de
+ * profil / retour quotidien (`/` avec foyer), carte (`/carte`), collection
+ * (`/collection`). JAMAIS pendant l'**onboarding premier-run** (`/` sans foyer — PRODUCT
+ * §1.1, premier contact enfant↔Teddy à ne pas recouvrir), JAMAIS pendant une **partie
+ * active** (`/jouer` — PRODUCT §3.5, « sessions douces, zéro pression »), JAMAIS dans
+ * l'**espace parent** (`/parent/*` — COPY §5, la voix Teddy ne fuite pas dans le registre
+ * neutre parent). L'événement `beforeinstallprompt` est **capturé quelle que soit la
+ * route** (il ne se re-déclenche pas), mais l'invite n'apparaît qu'une fois une surface
+ * calme atteinte (`usePathname` re-rend au changement de route). Voir
+ * `shouldShowInstallPromptOnSurface` (pur, testé branche par branche).
+ *
  * **Élément superposé/positionné** (`position:fixed`, AC #170) — voir garde de
- * non-occlusion E2E (`e2e/pwa.spec.ts`, `boundingClientRect`) + captures Playwright
- * pixel-lookées (état affiché + état rejeté). Positionné en HAUT du viewport
- * (`OfflineBanner` occupe déjà le bas ET `ActionBar` passe en `position:fixed` bas sur
- * téléphone pendant le jeu, cf. `ActionBar.tsx`) — zone haute libre, aucun frère fixe
- * connu à cette position (grep effectué avant de coder, story-start).
+ * non-occlusion E2E (`e2e/pwa.spec.ts`, `boundingClientRect`/`elementFromPoint`) +
+ * captures Playwright pixel-lookées (affiché/rejeté/iOS, desktop ET 375px). Positionné en
+ * HAUT du viewport (`OfflineBanner` occupe déjà le bas ET `ActionBar` passe en
+ * `position:fixed` bas sur téléphone pendant le jeu, cf. `ActionBar.tsx`) — zone haute
+ * libre, aucun frère fixe connu à cette position (grep effectué avant de coder).
  *
  * Registre : voix de Teddy, tutoiement (invite montée dans l'aire ENFANT via le layout
  * global — cf. COPY §1/§5, la zone parent a son propre registre neutre ailleurs).
  */
+
+/** Surfaces enfant **calmes** hors `/` (session-gated par `(app)/layout.tsx` — y être ⟹ foyer). */
+const CALM_CHILD_SURFACES: ReadonlySet<string> = new Set(["/carte", "/collection"]);
+
+/**
+ * L'invite peut-elle apparaître sur la surface courante ? (AC1 « discrète », gating game-design/PO).
+ *
+ * - `/carte` / `/collection` : surfaces enfant calmes, **déjà derrière la garde de session**
+ *   (`(app)/layout.tsx` redirige vers `/` sans session enfant valide → y être implique un foyer +
+ *   une session) → toujours éligibles.
+ * - `/` : **ambigu** — écran d'onboarding premier-run si `householdExists === false` (à NE PAS
+ *   recouvrir, PRODUCT §1.1), sélecteur de profil / retour quotidien si `true` (surface calme
+ *   éligible). Le foyer tranche.
+ * - tout le reste (`/jouer` partie active, `/parent/*` registre neutre, `/styleguide` outil dev,
+ *   routes futures) : **jamais** — allowlist stricte pour rester « discrète » et ne pas fuiter.
+ *
+ * Pur (aucun accès DOM/réseau) → testable branche par branche, à effet observable.
+ */
+export function shouldShowInstallPromptOnSurface(
+  pathname: string,
+  householdExists: boolean,
+): boolean {
+  if (CALM_CHILD_SURFACES.has(pathname)) return true;
+  if (pathname === "/") return householdExists;
+  return false;
+}
 
 /** Événement `beforeinstallprompt` (Chrome/Android) — non standard, absent de `lib.dom.ts`. */
 interface BeforeInstallPromptEvent extends Event {
@@ -188,7 +227,17 @@ function installButtonStyle(disabled: boolean): CSSProperties {
   };
 }
 
-export function InstallPrompt() {
+export interface InstallPromptProps {
+  /**
+   * Le foyer existe-t-il ? (lu côté serveur dans `layout.tsx`, source de vérité). Tranche
+   * l'ambiguïté de `/` (onboarding premier-run si `false` vs sélecteur/retour quotidien si
+   * `true`) — cf. `shouldShowInstallPromptOnSurface`.
+   */
+  householdExists: boolean;
+}
+
+export function InstallPrompt({ householdExists }: InstallPromptProps) {
+  const pathname = usePathname();
   const [state, setState] = useState<PromptState>(HIDDEN_STATE);
 
   useEffect(() => {
@@ -266,7 +315,12 @@ export function InstallPrompt() {
       });
   }, []);
 
+  // Rendu gaté (AC1 « discrète ») : l'événement/le hint peut être capturé sur n'importe quelle
+  // route, mais l'invite ne s'affiche que sur une surface enfant calme (jamais onboarding
+  // premier-run / partie active / espace parent). `usePathname` re-rend au changement de route,
+  // donc l'invite apparaît/disparaît en navigant (ex. `/jouer` → `/carte`).
   if (state.kind === "hidden") return null;
+  if (!shouldShowInstallPromptOnSurface(pathname, householdExists)) return null;
 
   return (
     <div role="region" aria-label={strings.pwa.install.regionLabel} style={bannerStyle}>

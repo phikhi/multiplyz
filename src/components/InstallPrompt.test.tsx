@@ -6,6 +6,7 @@ import {
   isStandaloneDisplayMode,
   persistInstallPromptDismissed,
   readInstallPromptDismissed,
+  shouldShowInstallPromptOnSurface,
 } from "./InstallPrompt";
 import { strings } from "@/strings";
 import { INSTALL_PROMPT_DISMISSED_KEY } from "@/config/pwa";
@@ -14,6 +15,13 @@ import {
   resolveTokenColor,
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
+
+// `usePathname` mock — pilotable par test via `mockNav.pathname` (hoisté avant la factory).
+// Défaut `/carte` = surface enfant calme où l'invite PEUT s'afficher (gating story 8.5).
+const mockNav = vi.hoisted(() => ({ pathname: "/carte" }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockNav.pathname,
+}));
 
 const THEMES: Theme[] = ["light", "dark"];
 
@@ -80,15 +88,26 @@ class FakeBeforeInstallPromptEvent extends Event {
   }
 }
 
+beforeEach(() => {
+  mockNav.pathname = "/carte"; // surface calme par défaut (l'invite peut s'afficher)
+});
+
 afterEach(() => {
   window.localStorage.clear();
 });
+
+/** Rend l'invite sur une surface calme (`/carte`) avec foyer présent, sauf override. */
+function renderPrompt(householdExists = true) {
+  return render(<InstallPrompt householdExists={householdExists} />);
+}
 
 /**
  * Laisse s'exécuter la microtâche différée de `InstallPrompt` (react-hooks/set-state-in-effect
  * — cf. commentaire du composant) : sans ce flush, un `dispatchEvent` juste après `render()`
  * arrive AVANT que les listeners `beforeinstallprompt`/`appinstalled` ne soient attachés → événement
- * perdu. Deux `Promise.resolve()` (marge de sécurité sur le nombre de sauts de microtâche).
+ * perdu, ET les gardes standalone/dismissed lues dans la microtâche ne se sont pas encore
+ * exécutées (course qui rendrait l'assertion vacuous, rétro #143). Deux `Promise.resolve()`
+ * (marge de sécurité sur le nombre de sauts de microtâche).
  */
 async function flushMountMicrotask() {
   await act(async () => {
@@ -96,6 +115,42 @@ async function flushMountMicrotask() {
     await Promise.resolve();
   });
 }
+
+// ─── shouldShowInstallPromptOnSurface (gating AC1 « discrète ») ──────────────
+
+describe("shouldShowInstallPromptOnSurface — gating de surface (AC1)", () => {
+  it("carte : surface calme session-gated → true (foyer présent ou non, la session l'implique)", () => {
+    expect(shouldShowInstallPromptOnSurface("/carte", true)).toBe(true);
+    expect(shouldShowInstallPromptOnSurface("/carte", false)).toBe(true);
+  });
+
+  it("collection : surface calme session-gated → true", () => {
+    expect(shouldShowInstallPromptOnSurface("/collection", true)).toBe(true);
+  });
+
+  it("racine `/` AVEC foyer (sélecteur / retour quotidien) → true", () => {
+    expect(shouldShowInstallPromptOnSurface("/", true)).toBe(true);
+  });
+
+  it("racine `/` SANS foyer (onboarding premier-run) → false (ne recouvre pas Teddy, PRODUCT §1.1)", () => {
+    expect(shouldShowInstallPromptOnSurface("/", false)).toBe(false);
+  });
+
+  it("jouer : partie active → false (PRODUCT §3.5, zéro pression)", () => {
+    expect(shouldShowInstallPromptOnSurface("/jouer", true)).toBe(false);
+  });
+
+  it("espace parent → false (COPY §5, voix Teddy ne fuite pas dans le registre neutre)", () => {
+    expect(shouldShowInstallPromptOnSurface("/parent", true)).toBe(false);
+    expect(shouldShowInstallPromptOnSurface("/parent/reglages", true)).toBe(false);
+    expect(shouldShowInstallPromptOnSurface("/parent/mondes", true)).toBe(false);
+  });
+
+  it("route inconnue / dev (styleguide) → false (allowlist stricte, pas de fuite)", () => {
+    expect(shouldShowInstallPromptOnSurface("/styleguide", true)).toBe(false);
+    expect(shouldShowInstallPromptOnSurface("/une-route-future", true)).toBe(false);
+  });
+});
 
 // ─── isStandaloneDisplayMode (AC3) ──────────────────────────────────────────
 
@@ -230,7 +285,58 @@ describe("readInstallPromptDismissed / persistInstallPromptDismissed", () => {
   });
 });
 
-// ─── Composant InstallPrompt ─────────────────────────────────────────────────
+// ─── Composant — gating de surface (AC1 « discrète ») ────────────────────────
+
+describe("InstallPrompt — gating de surface (rendu)", () => {
+  it("onboarding premier-run (`/` sans foyer) : le hint iOS est CAPTURÉ mais PAS rendu (ne recouvre pas Teddy)", async () => {
+    mockNav.pathname = "/";
+    await withUserAgent(IPHONE_SAFARI_UA, 5, async () => {
+      renderPrompt(false); // householdExists=false → onboarding
+      await flushMountMicrotask();
+      expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    });
+  });
+
+  it("partie active (`/jouer`) : `beforeinstallprompt` capturé mais invite PAS rendue", async () => {
+    mockNav.pathname = "/jouer";
+    renderPrompt(true);
+    await flushMountMicrotask();
+    await act(async () => {
+      window.dispatchEvent(new FakeBeforeInstallPromptEvent());
+    });
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  });
+
+  it("espace parent (`/parent/reglages`) : invite PAS rendue (registre neutre, COPY §5)", async () => {
+    mockNav.pathname = "/parent/reglages";
+    renderPrompt(true);
+    await flushMountMicrotask();
+    await act(async () => {
+      window.dispatchEvent(new FakeBeforeInstallPromptEvent());
+    });
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+  });
+
+  it("navigation partie active → carte : l'événement CAPTURÉ sur `/jouer` s'affiche une fois `/carte` atteint", async () => {
+    mockNav.pathname = "/jouer";
+    const { rerender } = render(<InstallPrompt householdExists />);
+    await flushMountMicrotask();
+    await act(async () => {
+      window.dispatchEvent(new FakeBeforeInstallPromptEvent());
+    });
+    // Capturé mais gaté sur `/jouer`.
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+
+    // Le joueur revient à la carte (boucle jouer→résultats→carte) → l'invite apparaît.
+    mockNav.pathname = "/carte";
+    rerender(<InstallPrompt householdExists />);
+    expect(
+      screen.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).toBeInTheDocument();
+  });
+});
+
+// ─── Composant — AC3 déjà installée (standalone) ────────────────────────────
 
 describe("InstallPrompt — AC3 déjà installée (standalone)", () => {
   it("n'affiche rien, même si un beforeinstallprompt survient ensuite", async () => {
@@ -239,7 +345,8 @@ describe("InstallPrompt — AC3 déjà installée (standalone)", () => {
       .fn()
       .mockReturnValue({ matches: true }) as unknown as typeof window.matchMedia;
     try {
-      render(<InstallPrompt />);
+      renderPrompt(true);
+      await flushMountMicrotask();
       expect(screen.queryByRole("region")).not.toBeInTheDocument();
 
       await act(async () => {
@@ -252,10 +359,13 @@ describe("InstallPrompt — AC3 déjà installée (standalone)", () => {
   });
 });
 
+// ─── Composant — AC1 rejet déjà persisté ────────────────────────────────────
+
 describe("InstallPrompt — AC1 rejet déjà persisté", () => {
   it("n'affiche rien au montage, et n'affiche toujours rien après un beforeinstallprompt (pas de boucle)", async () => {
     window.localStorage.setItem(INSTALL_PROMPT_DISMISSED_KEY, "1");
-    render(<InstallPrompt />);
+    renderPrompt(true);
+    await flushMountMicrotask();
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
 
     await act(async () => {
@@ -265,10 +375,12 @@ describe("InstallPrompt — AC1 rejet déjà persisté", () => {
   });
 });
 
+// ─── Composant — AC2 hint iOS Safari ────────────────────────────────────────
+
 describe("InstallPrompt — AC2 hint iOS Safari", () => {
   it("affiche le hint « Partager » (après la microtâche de décision), aria-label consommée", async () => {
     await withUserAgent(IPHONE_SAFARI_UA, 5, async () => {
-      render(<InstallPrompt />);
+      renderPrompt(true);
 
       const region = await screen.findByRole("region", { name: strings.pwa.install.regionLabel });
       expect(region).toBeInTheDocument();
@@ -290,7 +402,7 @@ describe("InstallPrompt — AC2 hint iOS Safari", () => {
 
   it("clic sur fermer → masque le hint ET persiste le rejet", async () => {
     await withUserAgent(IPHONE_SAFARI_UA, 5, async () => {
-      render(<InstallPrompt />);
+      renderPrompt(true);
       const dismissBtn = await screen.findByRole("button", {
         name: strings.pwa.install.dismissAriaLabel,
       });
@@ -302,14 +414,17 @@ describe("InstallPrompt — AC2 hint iOS Safari", () => {
   });
 });
 
+// ─── Composant — AC1 invite Chrome/Android (beforeinstallprompt) ────────────
+
 describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", () => {
-  it("rien avant l'événement", () => {
-    render(<InstallPrompt />);
+  it("rien avant l'événement", async () => {
+    renderPrompt(true);
+    await flushMountMicrotask();
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 
   it("un événement NON conforme (sans .prompt()) est ignoré — garde de type", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     await act(async () => {
       window.dispatchEvent(new Event("beforeinstallprompt", { cancelable: true }));
@@ -318,7 +433,7 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
   });
 
   it("beforeinstallprompt conforme → invite affichée, preventDefault appelé (supprime la mini-infobar)", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     const event = new FakeBeforeInstallPromptEvent();
 
@@ -336,7 +451,7 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
   });
 
   it("clic « Installer » : déclenche prompt(), attend userChoice, masque l'invite et persiste (accepted)", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     let resolvePrompt: () => void = () => {};
     const event = new FakeBeforeInstallPromptEvent(
@@ -368,7 +483,7 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
   });
 
   it("clic « Installer » avec issue 'dismissed' du dialogue natif : masque et persiste quand même (AC1 anti-boucle)", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     const event = new FakeBeforeInstallPromptEvent("dismissed");
 
@@ -382,8 +497,39 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
     expect(window.localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY)).toBe("1");
   });
 
+  it("bouton « Installer » opérable au CLAVIER (Enter déclenche l'install) — bouton natif, pas un div", async () => {
+    renderPrompt(true);
+    await flushMountMicrotask();
+    let resolvePrompt: () => void = () => {};
+    const event = new FakeBeforeInstallPromptEvent(
+      "accepted",
+      () => new Promise<void>((resolve) => (resolvePrompt = resolve)),
+    );
+    await act(async () => {
+      window.dispatchEvent(event);
+    });
+
+    const installBtn = screen.getByRole("button", { name: strings.pwa.install.installButton });
+    installBtn.focus();
+    expect(installBtn).toHaveFocus();
+    // Un <button> natif focalisé traduit Enter en `click` (comportement UA que jsdom ne simule
+    // pas seul) → on prouve l'opérabilité clavier via la combinaison focus + activation. Le rôle
+    // "button" + l'élément <button> garantit cette traduction dans un vrai navigateur (doublé par
+    // l'E2E qui presse réellement Enter).
+    fireEvent.keyDown(installBtn, { key: "Enter", code: "Enter" });
+    fireEvent.click(installBtn);
+    expect(event.promptCalls).toBe(1);
+
+    await act(async () => {
+      resolvePrompt();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(screen.queryByRole("region")).not.toBeInTheDocument());
+  });
+
   it("clic « Plus tard » (fermer) : masque l'invite ET persiste — un nouvel événement ne la ré-affiche PLUS", async () => {
-    const { unmount } = render(<InstallPrompt />);
+    const { unmount } = renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     await act(async () => {
       window.dispatchEvent(new FakeBeforeInstallPromptEvent());
@@ -397,7 +543,7 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
     // TOUTE réapparition, même face à un nouveau beforeinstallprompt (AC1, rougit sans la
     // persistance — cf. suite "AC1 rejet déjà persisté" qui prouve la même garde au montage).
     unmount();
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask();
     await act(async () => {
       window.dispatchEvent(new FakeBeforeInstallPromptEvent());
@@ -406,7 +552,7 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
   });
 
   it("événement `appinstalled` : masque l'invite et persiste le rejet", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     await act(async () => {
       window.dispatchEvent(new FakeBeforeInstallPromptEvent());
@@ -420,42 +566,59 @@ describe("InstallPrompt — AC1 invite Chrome/Android (beforeinstallprompt)", ()
     expect(screen.queryByRole("region")).not.toBeInTheDocument();
     expect(window.localStorage.getItem(INSTALL_PROMPT_DISMISSED_KEY)).toBe("1");
   });
+});
 
-  it("démontage : retire les listeners (pas de fuite / erreur sur événement post-unmount)", async () => {
-    const { unmount } = render(<InstallPrompt />);
-    // Flush AVANT démontage : les listeners doivent être réellement attachés pour que ce test
-    // prouve leur RETRAIT (sinon il passerait vacuously, aucun listener n'ayant jamais existé).
+// ─── Composant — cycle de vie de l'effet (gardes anti-fuite, mutation-prouvées) ──
+
+describe("InstallPrompt — cycle de vie de l'effet", () => {
+  it("garde `cancelled` : démontage AVANT la microtâche → AUCUN listener attaché (rougit si le garde est retiré)", async () => {
+    // Observable robuste = spy `addEventListener` (React 19 a SUPPRIMÉ l'avertissement
+    // « setState on unmounted component », donc une assertion console.error serait elle-même
+    // vacuous, rétro #143). Sans le garde `if (cancelled) return`, la microtâche différée
+    // s'exécute APRÈS le démontage et attache quand même les listeners → ce spy voit ≥1 appel.
+    const addSpy = vi.spyOn(window, "addEventListener");
+    try {
+      const { unmount } = renderPrompt(true);
+      unmount(); // AVANT le flush → la microtâche verra `cancelled === true`
+      await flushMountMicrotask();
+
+      const bipAdds = addSpy.mock.calls.filter(([type]) => type === "beforeinstallprompt");
+      const appAdds = addSpy.mock.calls.filter(([type]) => type === "appinstalled");
+      expect(bipAdds).toHaveLength(0);
+      expect(appAdds).toHaveLength(0);
+    } finally {
+      addSpy.mockRestore();
+    }
+  });
+
+  it("cleanup `removeListeners` : démontage APRÈS la microtâche → listeners RETIRÉS (rougit si le cleanup est retiré)", async () => {
+    // Observable robuste = spy `removeEventListener` (même raison React 19 que ci-dessus). Sans
+    // `removeListeners?.()` dans le cleanup, les listeners attachés par la microtâche restent
+    // branchés après démontage → `removeEventListener` n'est JAMAIS appelé pour eux.
+    const removeSpy = vi.spyOn(window, "removeEventListener");
+    try {
+      const { unmount } = renderPrompt(true);
+      await flushMountMicrotask(); // listeners RÉELLEMENT attachés
+      unmount(); // cleanup → removeListeners?.()
+
+      const bipRemoves = removeSpy.mock.calls.filter(([type]) => type === "beforeinstallprompt");
+      const appRemoves = removeSpy.mock.calls.filter(([type]) => type === "appinstalled");
+      expect(bipRemoves.length).toBeGreaterThanOrEqual(1);
+      expect(appRemoves.length).toBeGreaterThanOrEqual(1);
+    } finally {
+      removeSpy.mockRestore();
+    }
+  });
+
+  it("démontage après attachement : un événement post-unmount ne ré-affiche rien (pas de throw non plus)", async () => {
+    const { unmount } = renderPrompt(true);
     await flushMountMicrotask();
     unmount();
     expect(() => {
       window.dispatchEvent(new FakeBeforeInstallPromptEvent());
       window.dispatchEvent(new Event("appinstalled"));
     }).not.toThrow();
-  });
-
-  it("démontage AVANT que la microtâche différée ne s'exécute : le garde `cancelled` empêche tout setState tardif", async () => {
-    // ROUGIT sans le garde `if (cancelled) return` (InstallPrompt.tsx) : la microtâche
-    // planifiée par l'effet (`Promise.resolve().then(...)`) résoudrait APRÈS le démontage
-    // (aucun `flushMountMicrotask` avant `unmount` ici, contrairement au test précédent) et
-    // appellerait `setState` sur un composant démonté → avertissement React explicite.
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const { unmount } = render(<InstallPrompt />);
-      unmount();
-
-      // Laisse la microtâche différée s'exécuter MAINTENANT (post-démontage).
-      await act(async () => {
-        await Promise.resolve();
-        await Promise.resolve();
-      });
-
-      const stateUpdateWarning = consoleError.mock.calls.some((args) =>
-        String(args[0]).includes("unmounted component"),
-      );
-      expect(stateUpdateWarning).toBe(false);
-    } finally {
-      consoleError.mockRestore();
-    }
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
   });
 });
 
@@ -490,12 +653,8 @@ describe("InstallPrompt — contraste WCAG résolu (tokens.css, light + dark)", 
 // ─── A11y : cibles ≥44px (tokens, pas de valeur en dur) ─────────────────────
 
 describe("InstallPrompt — cibles tactiles ≥44px (token --tap-target-min)", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
   it("bouton fermer utilise --tap-target-min en min-width/min-height", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     await act(async () => {
       window.dispatchEvent(new FakeBeforeInstallPromptEvent());
@@ -506,7 +665,7 @@ describe("InstallPrompt — cibles tactiles ≥44px (token --tap-target-min)", (
   });
 
   it("bouton Installer utilise --tap-target-min en min-height", async () => {
-    render(<InstallPrompt />);
+    renderPrompt(true);
     await flushMountMicrotask(); // listeners attachés avant de dispatcher
     await act(async () => {
       window.dispatchEvent(new FakeBeforeInstallPromptEvent());

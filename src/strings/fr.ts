@@ -38,9 +38,10 @@ export const fr = {
       /** Titre commun aux deux variantes. */
       title: "Garde-moi à portée de patte ! 🐾",
       /** Corps — variante Chrome/Android (bouton d'installation natif disponible). */
-      body: "Installe-moi sur ton écran d'accueil : je m'ouvre en un clin d'œil, même sans passer par le navigateur.",
-      /** Corps — variante iOS Safari (pas de bouton natif, marche à suivre manuelle). */
-      iosBody: "Appuie sur Partager, puis choisis « Sur l'écran d'accueil ».",
+      body: "Installe-moi sur ton écran d'accueil : je m'ouvre en un clin d'œil, on est prêts à jouer tout de suite !",
+      /** Corps — variante iOS Safari (pas de bouton natif, marche à suivre manuelle + voix Teddy). */
+      iosBody:
+        "Appuie sur Partager, puis choisis « Sur l'écran d'accueil » — je t'attends là-bas !",
       /** Bouton d'installation (déclenche le prompt natif `beforeinstallprompt`). */
       installButton: "Installer",
       /** aria-label du bouton de fermeture (icône ✕ seule, consommé par InstallPrompt). */
