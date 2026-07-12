@@ -304,12 +304,48 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.onboarding.profile.title }),
-    ).toBeVisible();
+    const welcome = page.getByRole("heading", {
+      level: 1,
+      name: strings.onboarding.profile.title,
+    });
+    await expect(welcome).toBeVisible();
     await expect(page.getByRole("textbox")).toBeVisible();
 
     await page.screenshot({ path: "docs/captures/30-onboarding.png", fullPage: true });
+
+    // GATING invite d'installation PWA (story 8.5, #258, bloquant review 1+4) — DÉTERMINISTE ICI :
+    // ce test serial `foyer vide` s'exécute AVANT la création du foyer (retries:0), seul moment où
+    // `/` rend l'onboarding (premier contact enfant↔Teddy, PRODUCT §1.1). L'invite ne DOIT PAS
+    // apparaître ni recouvrir le titre Teddy focus-managé. Placé dans ce bloc serial (pas dans
+    // `pwa.spec.ts` en parallèle) car l'état single-tenant « aucun foyer » est OPPOSÉ à celui que
+    // ce parcours crée juste après (LEARNINGS : specs à état single-tenant opposé ne partagent pas
+    // une base wipée-à-froid en parallèle).
+    await page.evaluate(() => {
+      class FakeBeforeInstallPromptEvent extends Event {
+        constructor() {
+          super("beforeinstallprompt", { cancelable: true });
+        }
+        prompt() {
+          return Promise.resolve();
+        }
+        get userChoice() {
+          return Promise.resolve({ outcome: "accepted" as const, platform: "web" });
+        }
+      }
+      window.dispatchEvent(new FakeBeforeInstallPromptEvent());
+    });
+    await expect(
+      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).not.toBeVisible();
+    // Le titre Teddy reste visible ET non recouvert (reproduction directe du bug pixel-looké).
+    await expect(welcome).toBeVisible();
+    const welcomeOccluded = await welcome.evaluate((h1) => {
+      const r = h1.getBoundingClientRect();
+      const el = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+      return el === null || !h1.contains(el);
+    });
+    expect(welcomeOccluded).toBe(false);
+    await page.screenshot({ path: "docs/captures/258-onboarding-non-recouvert.png" });
   });
 
   test("création → code de secours affiché une fois (capture)", async ({ page }) => {

@@ -261,36 +261,11 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     ).not.toBeVisible();
   });
 
-  test("GATING — onboarding premier-run (`/` sans foyer) : invite JAMAIS rendue, titre Teddy NON recouvert (bloquant 1+4)", async ({
-    page,
-  }) => {
-    // Base E2E wipée à froid = aucun foyer propriétaire → `/` rend l'écran d'onboarding
-    // (premier contact enfant↔Teddy, PRODUCT §1.1). Contexte NEUF (aucun cookie de session).
-    await page.goto("/");
-    await page.waitForLoadState("networkidle");
-
-    // Le titre de bienvenue focus-managé est visible.
-    const welcome = page.getByRole("heading", { level: 1, name: strings.onboarding.profile.title });
-    await expect(welcome).toBeVisible();
-
-    // Même si un beforeinstallprompt survient, l'invite ne DOIT PAS s'afficher ici.
-    await dispatchFakeBeforeInstallPrompt(page);
-    await expect(
-      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
-    ).not.toBeVisible();
-
-    // Et le titre Teddy reste visible ET non recouvert (l'invite ne peut pas le masquer,
-    // preuve directe du bug pixel-looké par game-design/PO/Frontend).
-    await expect(welcome).toBeVisible();
-    const welcomeOccluded = await welcome.evaluate((h1) => {
-      const r = h1.getBoundingClientRect();
-      const el = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
-      return el === null || !h1.contains(el);
-    });
-    expect(welcomeOccluded).toBe(false);
-
-    await page.screenshot({ path: "docs/captures/258-onboarding-non-recouvert.png" });
-  });
+  // NB : la NON-apparition sur l'ONBOARDING premier-run (`/` sans foyer) est prouvée dans
+  // `auth.spec.ts` (test serial `foyer vide → écran 1er usage`) — seul endroit DÉTERMINISTE où
+  // aucun foyer n'existe. Ici la base E2E peut avoir un foyer (créé par le parcours auth en //),
+  // donc `/` rendrait le sélecteur (surface calme) : tester l'onboarding depuis pwa.spec en
+  // parallèle serait un flake d'ordre (LEARNINGS : états single-tenant opposés + base partagée).
 
   test("GATING — partie active (`/jouer`) : invite JAMAIS rendue même sur beforeinstallprompt (bloquant 1+4)", async ({
     page,
