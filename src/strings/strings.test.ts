@@ -27,6 +27,16 @@ describe("strings (i18n FR)", () => {
     expect(strings.pwa.coldStart).toContain("jouer");
   });
 
+  it("fournit l'invite d'installation PWA — voix Teddy, tutoiement (story 8.5, #258)", () => {
+    expect(strings.pwa.install.regionLabel.length).toBeGreaterThan(0);
+    expect(strings.pwa.install.title).toContain("!");
+    expect(strings.pwa.install.body).toContain("écran d'accueil");
+    expect(strings.pwa.install.iosBody).toContain("Partager");
+    expect(strings.pwa.install.iosBody).toContain("écran d'accueil");
+    expect(strings.pwa.install.installButton.length).toBeGreaterThan(0);
+    expect(strings.pwa.install.dismissAriaLabel.length).toBeGreaterThan(0);
+  });
+
   it("expose les libellés a11y du pavé PIN (gabarits interpolables)", () => {
     expect(strings.pinPad.digit).toContain("{d}");
     expect(strings.pinPad.dotFilled).toContain("{n}");

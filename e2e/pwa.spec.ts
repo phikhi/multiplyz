@@ -1,8 +1,183 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { strings } from "../src/strings";
 
 test.beforeAll(async () => {
   await mkdir("docs/captures", { recursive: true });
+});
+
+// ─── Invite d'installation PWA (story 8.5, #258) ────────────────────────────
+
+const IPHONE_SAFARI_UA =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
+
+/**
+ * Injecte un faux `beforeinstallprompt` — l'API réelle (heuristiques d'installabilité
+ * Chromium) n'est pas déclenchable de façon fiable en E2E headless. Le composant ne
+ * distingue pas un vrai événement navigateur d'un événement synthétique conforme à la
+ * même forme (`.prompt()` + `.userChoice`), donc ceci exerce fidèlement le VRAI chemin
+ * de code (`InstallPrompt.tsx`, garde de type `isBeforeInstallPromptEvent`).
+ */
+async function dispatchFakeBeforeInstallPrompt(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    class FakeBeforeInstallPromptEvent extends Event {
+      constructor() {
+        super("beforeinstallprompt", { cancelable: true });
+      }
+      prompt() {
+        return Promise.resolve();
+      }
+      get userChoice() {
+        return Promise.resolve({ outcome: "accepted" as const, platform: "web" });
+      }
+    }
+    window.dispatchEvent(new FakeBeforeInstallPromptEvent());
+  });
+}
+
+/**
+ * Géométrie + non-occlusion RÉELLES de l'invite (#170 : un token/contraste résolu ne
+ * prouve JAMAIS la visibilité d'un élément superposé/positionné). Échantillonne le centre
+ * + les 4 MILIEUX D'ARÊTE de la bounding box réelle (pas les coins : `border-radius-lg`
+ * arrondit visuellement les coins → Chromium exclut cette zone du hit-testing
+ * `elementFromPoint` même sans `overflow:hidden` — un coin échantillonné y retomberait
+ * sur le frère DERRIÈRE par construction géométrique, pas par occlusion réelle ; constaté
+ * en exécutant ce test, pas supposé). `elementFromPoint` doit retourner l'invite (ou un
+ * descendant) à CHAQUE point — un frère opaque empilé par-dessus romprait au moins un
+ * des 5 échantillons.
+ */
+async function readInstallPromptGeometry(page: Page) {
+  // `strings.pwa.install.regionLabel` (module Node) passé en argument sérialisable — `evaluate`
+  // n'a pas accès aux fermetures du contexte Node, seulement à ce qu'on lui transmet explicitement.
+  return page.evaluate((regionLabel) => {
+    const region = [...document.querySelectorAll('[role="region"]')].find(
+      (el) => el.getAttribute("aria-label") === regionLabel,
+    );
+    if (!region) return null;
+    const rect = region.getBoundingClientRect();
+    const midX = (rect.left + rect.right) / 2;
+    const midY = (rect.top + rect.bottom) / 2;
+    const points: [number, number][] = [
+      [midX, rect.top + 4], // milieu du bord HAUT
+      [midX, rect.bottom - 4], // milieu du bord BAS
+      [rect.left + 4, midY], // milieu du bord GAUCHE
+      [rect.right - 4, midY], // milieu du bord DROIT
+      [midX, midY], // centre
+    ];
+    const notOccluded = points.every(([x, y]) => {
+      const el = document.elementFromPoint(x, y);
+      return el !== null && region.contains(el);
+    });
+    return {
+      top: rect.top,
+      left: rect.left,
+      right: rect.right,
+      bottom: rect.bottom,
+      innerWidth: window.innerWidth,
+      notOccluded,
+    };
+  }, strings.pwa.install.regionLabel);
+}
+
+test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
+  test("beforeinstallprompt → invite affichée, non-occluse (#170), rejetable et persistante (AC1)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+
+    // Rien avant l'événement.
+    await expect(
+      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).not.toBeVisible();
+
+    await dispatchFakeBeforeInstallPrompt(page);
+
+    const region = page.getByRole("region", { name: strings.pwa.install.regionLabel });
+    await expect(region).toBeVisible();
+    await expect(page.getByText(strings.pwa.install.title)).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
+    ).toBeVisible();
+
+    // Garde E2E de géométrie RENDUE (#170) : non-occlusion RÉELLE, pas un raisonnement.
+    const geometry = await readInstallPromptGeometry(page);
+    expect(geometry).not.toBeNull();
+    expect(geometry!.top).toBeGreaterThanOrEqual(0);
+    expect(geometry!.left).toBeGreaterThanOrEqual(0);
+    expect(geometry!.right).toBeLessThanOrEqual(geometry!.innerWidth);
+    expect(geometry!.notOccluded).toBe(true);
+
+    // Capture DoD (état AFFICHÉ) — AC6.
+    await page.screenshot({ path: "docs/captures/258-install-prompt-affichee.png" });
+
+    // Rejet — cible ≥44px, opérable au clavier (bouton natif).
+    await page.getByRole("button", { name: strings.pwa.install.dismissAriaLabel }).click();
+    await expect(region).not.toBeVisible();
+
+    // Capture DoD (état REJETÉ) — AC6.
+    await page.screenshot({ path: "docs/captures/258-install-prompt-rejetee.png" });
+
+    // AC1 anti-boucle : après un RECHARGEMENT (nouveau montage), même un nouveau
+    // beforeinstallprompt ne doit PLUS jamais ré-afficher l'invite (rejet persisté).
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await dispatchFakeBeforeInstallPrompt(page);
+    await expect(
+      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).not.toBeVisible();
+  });
+
+  test("hint iOS Safari (AC2) — affiché uniquement sur iOS Safari non-standalone", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ userAgent: IPHONE_SAFARI_UA });
+    try {
+      const page = await context.newPage();
+      await page.goto("/");
+      await page.waitForLoadState("networkidle");
+
+      const region = page.getByRole("region", { name: strings.pwa.install.regionLabel });
+      await expect(region).toBeVisible();
+      await expect(page.getByText(strings.pwa.install.iosBody)).toBeVisible();
+      // Pas de bouton "Installer" côté iOS (pas de beforeinstallprompt natif).
+      await expect(
+        page.getByRole("button", { name: strings.pwa.install.installButton, exact: true }),
+      ).not.toBeVisible();
+
+      await page.screenshot({ path: "docs/captures/258-install-prompt-ios.png" });
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("AC3 — jamais affichée en mode standalone (display-mode: standalone)", async ({ page }) => {
+    // Force la media query AVANT tout script de page (le composant la lit au montage).
+    await page.addInitScript(() => {
+      const originalMatchMedia = window.matchMedia.bind(window);
+      window.matchMedia = ((query: string): MediaQueryList => {
+        if (query !== "(display-mode: standalone)") return originalMatchMedia(query);
+        return {
+          matches: true,
+          media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => false,
+        };
+      }) as typeof window.matchMedia;
+    });
+
+    await page.goto("/");
+    await page.waitForLoadState("networkidle");
+    await dispatchFakeBeforeInstallPrompt(page);
+
+    await expect(
+      page.getByRole("region", { name: strings.pwa.install.regionLabel }),
+    ).not.toBeVisible();
+  });
 });
 
 // ─── Manifest ────────────────────────────────────────────────────────────────

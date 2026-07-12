@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db";
 import { dataThemeAttr, readHouseholdSettings } from "@/lib/parent/settings";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import { InstallPrompt } from "@/components/InstallPrompt";
 import { Baloo_2, Nunito } from "next/font/google";
 import "./globals.css";
 
@@ -71,6 +72,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <OfflineBanner />
         {/* PWA : enregistrement du service worker custom (cf. public/sw.js) */}
         <ServiceWorkerRegistration />
+        {/* PWA : invite d'installation discrète (Chrome/Android + hint iOS, story 8.5 #258) */}
+        <InstallPrompt />
       </body>
     </html>
   );

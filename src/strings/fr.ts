@@ -25,6 +25,27 @@ export const fr = {
      * Démarrage alors que la connexion est déjà absente — invite à se connecter.
      */
     coldStart: "Connecte-toi à internet pour jouer 🌐",
+    /**
+     * Invite d'installation PWA (story 8.5, #258). Voix de Teddy (1ère personne), tutoiement,
+     * emoji parcimonieux (COPY §1/§6). Rejetable, ne réapparaît pas en boucle (état persistant
+     * `localStorage`, cf. `src/config/pwa.ts`). Deux variantes selon la plateforme :
+     * `beforeinstallprompt` (Chrome/Android, bouton natif) vs hint iOS Safari (pas d'API
+     * `beforeinstallprompt` sur iOS — instruction manuelle Partager → écran d'accueil).
+     */
+    install: {
+      /** aria-label du bandeau — landmark `role="region"` (consommé par InstallPrompt). */
+      regionLabel: "Invitation à installer l'application",
+      /** Titre commun aux deux variantes. */
+      title: "Garde-moi à portée de patte ! 🐾",
+      /** Corps — variante Chrome/Android (bouton d'installation natif disponible). */
+      body: "Installe-moi sur ton écran d'accueil : je m'ouvre en un clin d'œil, même sans passer par le navigateur.",
+      /** Corps — variante iOS Safari (pas de bouton natif, marche à suivre manuelle). */
+      iosBody: "Appuie sur Partager, puis choisis « Sur l'écran d'accueil ».",
+      /** Bouton d'installation (déclenche le prompt natif `beforeinstallprompt`). */
+      installButton: "Installer",
+      /** aria-label du bouton de fermeture (icône ✕ seule, consommé par InstallPrompt). */
+      dismissAriaLabel: "Fermer l'invitation à installer",
+    },
   },
   /**
    * Pavé PIN partagé (composant `PinPad`, réutilisé par la connexion #2.3).
