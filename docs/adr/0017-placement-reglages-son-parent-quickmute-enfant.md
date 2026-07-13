@@ -3,7 +3,7 @@
 - **Statut** : accepted (arbitrage propriétaire « Option A » sur #277, 2026-07-13)
 - **Type** : product (touche une décision **verrouillée** DETAILS §7)
 - **Portée** : majeure (sign-off humain — décision verrouillée)
-- **Liens** : issue #277 (arbitrage drift) · #256 / PR #276 (story 8.3, contrat data) · #257 (story 8.4, moteur audio) · #282 (story 8.6, quick-mute enfant) · spec(s) impactée(s) : **DETAILS §3, DETAILS §7 l.78**, PRODUCT §1.4/§4
+- **Liens** : issue #277 (arbitrage drift) · #256 / PR #276 (story 8.3, contrat data) · #257 (story 8.4, moteur audio) · #282 (story 8.6, quick-mute enfant) · spec(s) impactée(s) : **DETAILS §3, DETAILS §7 (ligne « Réglages »)**, PRODUCT §1.4/§4
 
 ## Contexte
 
@@ -12,7 +12,7 @@ Deux specs canoniques se **contredisent directement** sur *qui* contrôle le son
 | Spec | Dit |
 |---|---|
 | **DETAILS §3** (« Accès enfant, rapide, sans PIN ») | son on/off, musique on/off (+ volume) **côté enfant** |
-| **DETAILS §7 l.78** (table des décisions **VERROUILLÉES**) | « Réglages \| Split enfant (son) / parent (le reste) » |
+| **DETAILS §7 (ligne « Réglages »)** (table des décisions **VERROUILLÉES**) | « Réglages \| Split enfant (son) / parent (le reste) » |
 | **PRODUCT §1.4 l.30** | « Réglages **parent** : son/musique… » |
 | **PRODUCT §4 l.121** | « **Contrôles parent** (optionnels) : … couper le son. » |
 
@@ -34,7 +34,7 @@ Les deux surfaces écrivent la **même** ligne `household_settings` (`writeHouse
 
 ## Conséquences
 
-- **DETAILS §7 l.78** mis à jour : « Parent possède l'écran Réglages (PIN, son/musique/volume + le reste) ; l'enfant a un **quick-mute son/musique no-PIN** in-game (ADR 0017) ».
+- **DETAILS §7 (ligne « Réglages »)** mis à jour : « Parent possède l'écran Réglages (PIN, son/musique/volume + le reste) ; l'enfant a un **quick-mute son/musique no-PIN** in-game (ADR 0017) ».
 - **DETAILS §3** mis à jour : accès enfant no-PIN = **quick-mute** son/musique on/off (le **volume** et les réglages complets vivent côté parent).
 - **PRODUCT §1.4/§4** : parent contrôle le son (inchangé) + **renvoi** au quick-mute enfant (ADR 0017).
 - **PR #276 (8.3) débloquée** : mergeable après (a) fix registre `fr.ts` (vouvoiement de `soundHint`/`musicHint`), (b) correction des citations « accès enfant sans PIN » / §78 → référencer cet ADR (le placement parent est **canonique**, plus « intérimaire »).

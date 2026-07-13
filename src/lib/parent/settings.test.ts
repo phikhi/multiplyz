@@ -24,7 +24,7 @@ import {
 
 /**
  * Tests des **réglages du foyer** (story 7.3, DETAILS §3 ; son/musique/volume story 8.3, DETAILS
- * §22). Base réelle (SQLite `:memory:` + migrations). Source de vérité serveur : lecture (défauts
+ * §3). Base réelle (SQLite `:memory:` + migrations). Source de vérité serveur : lecture (défauts
  * si absent) / écriture (validation + upsert singleton). Chaque garde de validation est
  * **mutation-prouvée** (test nommé qui rougit si la borne / l'enum est retirée). `dataThemeAttr`
  * (consommé par `layout.tsx`, exclu du coverage) est testé ici en fonction pure.

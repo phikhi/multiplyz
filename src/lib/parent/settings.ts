@@ -29,7 +29,7 @@ import {
  * verrou dur qui bloque l'app) dépend du **temps-joué persisté** (7.4 #217) et vit dans **7.8**.
  *
  * **Ce qui est STOCKÉ seulement (consommé en story 8.4, jamais enforcé ici — #127/#155)** :
- * `soundEnabled`, `musicEnabled`, `volume` (DETAILS §22) — **posés + validés (bornes fixes
+ * `soundEnabled`, `musicEnabled`, `volume` (DETAILS §3) — **posés + validés (bornes fixes
  * `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]`) + persistés** ; le **moteur audio** (lecture/coupure réelle
  * des bruitages/musique au volume réglé) n'existe pas encore — il est câblé en **story 8.4**.
  */
@@ -54,11 +54,11 @@ export interface HouseholdSettings {
   readonly screenTimeHardLockEnabled: boolean;
   /** Seuil du verrou dur (min/jour) — STOCKÉ + validé (borne ⚙️), consommé 7.8 #229. */
   readonly screenTimeHardLockMinutes: number;
-  /** Bruitages activés ? (DETAILS §22) — STOCKÉ + validé (consommé 8.4). */
+  /** Bruitages activés ? (DETAILS §3) — STOCKÉ + validé (consommé 8.4). */
   readonly soundEnabled: boolean;
-  /** Musique activée ? (DETAILS §22) — STOCKÉ + validé (consommé 8.4). */
+  /** Musique activée ? (DETAILS §3) — STOCKÉ + validé (consommé 8.4). */
   readonly musicEnabled: boolean;
-  /** Volume, pourcentage `[0,100]` (DETAILS §22 « + volume ») — STOCKÉ + validé (consommé 8.4). */
+  /** Volume, pourcentage `[0,100]` (DETAILS §3 (volume — côté parent, ADR 0017)) — STOCKÉ + validé (consommé 8.4). */
   readonly volume: number;
 }
 
@@ -86,7 +86,7 @@ export class SettingsValidationError extends Error {
  *   touché le réglage ; dès que le parent l'enregistre, la **ligne DB fait autorité** (source de
  *   vérité, cf. `readHouseholdSettings`) ;
  * - `screenTime*` = défauts ⚙️ `parentControls` (nudge / verrou dur), `enabled` = `false` (opt-in) ;
- * - `soundEnabled`/`musicEnabled`/`volume` = défauts ⚙️ `sound` (story 8.3, DETAILS §22).
+ * - `soundEnabled`/`musicEnabled`/`volume` = défauts ⚙️ `sound` (story 8.3, DETAILS §3).
  */
 export function resolveSettingsDefaults(): HouseholdSettings {
   const controls = getParentControlsConfig();
@@ -224,7 +224,7 @@ export function dataThemeAttr(theme: ThemePreference): "light" | "dark" | undefi
 export const SCREEN_TIME_NUDGE_PRESETS = [15, 20, 30, 45, 60] as const;
 /** Présets d'affichage (min/jour) du verrou dur — offerts au `<select>`, filtrés aux bornes ⚙️. */
 export const SCREEN_TIME_HARD_LOCK_PRESETS = [30, 45, 60, 90, 120] as const;
-/** Présets d'affichage (%) du volume (DETAILS §22, story 8.3) — offerts au `<select>`, filtrés `[0,100]`. */
+/** Présets d'affichage (%) du volume (DETAILS §3, story 8.3) — offerts au `<select>`, filtrés `[0,100]`. */
 export const SOUND_VOLUME_PRESETS = [0, 25, 50, 75, 100] as const;
 
 /**

@@ -941,7 +941,7 @@ describe("getParentControlsConfig — accès mémoïsé", () => {
   });
 });
 
-describe("loadSoundConfig — défauts ⚙️ son/musique/volume (DETAILS §22, story 8.3)", () => {
+describe("loadSoundConfig — défauts ⚙️ son/musique/volume (DETAILS §3, story 8.3)", () => {
   it("applique les défauts quand l'environnement est vide", () => {
     expect(loadSoundConfig({})).toEqual(CONFIG_DEFAULTS.sound);
   });

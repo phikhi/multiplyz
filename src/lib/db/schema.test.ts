@@ -1305,7 +1305,7 @@ describe("schéma socle_worlds (socle de secours — WORLDGEN §7, story 6.6)", 
 });
 
 // ============================================================================
-// Réglages du foyer (story 7.3, DETAILS §3 ; son/musique/volume story 8.3, DETAILS §22)
+// Réglages du foyer (story 7.3, DETAILS §3 ; son/musique/volume story 8.3, DETAILS §3)
 // ============================================================================
 
 describe("schéma household_settings (réglages foyer — story 7.3/8.3)", () => {
@@ -1329,7 +1329,7 @@ describe("schéma household_settings (réglages foyer — story 7.3/8.3)", () =>
     expect(row?.updatedAt).toBeInstanceOf(Date);
   });
 
-  it("persiste son/musique désactivés + volume personnalisé (round-trip, story 8.3)", () => {
+  it("persiste son/musique désactivés et volume personnalisé (round-trip, story 8.3)", () => {
     const db = freshDb();
     db.insert(householdSettings)
       .values({ id: HOUSEHOLD_SETTINGS_ID, soundEnabled: false, musicEnabled: false, volume: 30 })

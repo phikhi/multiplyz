@@ -187,7 +187,7 @@ describe("SettingsForm — temps d'écran (STOCKÉ seulement, enforcement 7.8 #2
   });
 });
 
-// ───────────────────────────── son/musique/volume (STOCKÉ, consommé 8.4 — DETAILS §22) ─────────────────────────────
+// ───────────────────────────── son/musique/volume (STOCKÉ, consommé 8.4 — DETAILS §3) ─────────────────────────────
 
 describe("SettingsForm — son/musique/volume (STOCKÉ seulement, contrat 8.3, moteur audio 8.4)", () => {
   it("reflète les réglages persistés : bruitages/musique ON, volume affiché", () => {

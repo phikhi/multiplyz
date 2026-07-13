@@ -846,7 +846,7 @@ export const fr = {
         hardLockLabel: "Limite par jour",
       },
       /**
-       * **Son & musique** (DETAILS §22 « son on/off, musique on/off + volume », story 8.3). Contrat
+       * **Son & musique** (DETAILS §3 « son on/off, musique on/off, volume », story 8.3). Contrat
        * **DÉCLARÉ + VALIDÉ + STOCKÉ seulement** — le moteur audio réel (lecture/coupure effective)
        * est câblé en **story 8.4** (#155, même registre « Bientôt » que `screenTime.nudgeHint`
        * avant son propre câblage 7.8 — ne PAS affirmer un effet actif tant que 8.4 n'existe pas).
