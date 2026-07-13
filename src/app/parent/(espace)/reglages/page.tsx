@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7 ; son/musique/
+ * Écran **« Réglages »** (story 7.3, DETAILS §3 (Espace parent) liste VERROUILLÉE, WIREFRAMES §7 ; son/musique/
  * volume ajoutés story 8.3, DETAILS §3). Charge les réglages effectifs du foyer (source de vérité
  * serveur) + calcule les options offertes (présets filtrés aux **bornes** — ⚙️ `parentControls` pour
  * les minutes, **fixes** `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]` pour le volume — + la valeur courante)

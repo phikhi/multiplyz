@@ -815,7 +815,7 @@ export const socleWorlds = sqliteTable("socle_worlds", {
 
 // ============================================================================
 // Réglages du foyer (epic #7, story 7.3) — préférences parent persistées
-// (DETAILS.md §3/§25-32 liste VERROUILLÉE, PRODUCT.md §1.4, ADR 0013). Source de
+// (DETAILS.md §3 (Espace parent) liste VERROUILLÉE, PRODUCT.md §1.4, ADR 0013). Source de
 // vérité SERVEUR : le worker lit `parent_world_validation` (câblage 6.5), la carte
 // lit le thème. **Portée FOYER** (single-tenant, AUTH.md §1) : réglages **partagés**
 // du foyer (thème app-wide, validation des mondes, temps d'écran), pas des données
@@ -841,7 +841,7 @@ export type ThemePreference = "system" | "light" | "dark";
 export const HOUSEHOLD_SETTINGS_ID = "household";
 
 /**
- * **Réglages du foyer** (DETAILS §3/§25-32, story 7.3). **Une seule ligne** (single-tenant,
+ * **Réglages du foyer** (DETAILS §3 (Espace parent), story 7.3). **Une seule ligne** (single-tenant,
  * AUTH.md §1) : PK **texte constante** `HOUSEHOLD_SETTINGS_ID` (`"household"`) → upsert
  * idempotent (`onConflictDoUpdate` par id, `writeHouseholdSettings`). Aucun callback
  * `sqliteTable` d'extras (index/PK composite) qui casserait le gate 100 % fonctions (LEARNINGS

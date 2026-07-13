@@ -795,7 +795,7 @@ export const fr = {
       },
     },
     /**
-     * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, PRODUCT §1.4,
+     * Écran **« Réglages »** (story 7.3, DETAILS §3 (Espace parent) liste VERROUILLÉE, PRODUCT §1.4,
      * WIREFRAMES §7). Registre **neutre/vouvoiement** (COPY §5, pas la voix de Teddy). Le gabarit
      * `{min}` (minutes) est interpolé côté composant. Aucun texte en dur ailleurs.
      */

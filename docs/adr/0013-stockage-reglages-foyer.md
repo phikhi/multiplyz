@@ -3,7 +3,7 @@
 - **Statut** : accepted
 - **Type** : data
 - **Portée** : mineure (in-contract — architect/orchestrateur autonome, ADR 0003/0004 ; aucune décision verrouillée PLAN/pédagogie/éco/sécurité modifiée)
-- **Liens** : issue #216 (story 7.3) · PR #… · specs : `DETAILS.md` §3/§25-32 (liste réglages VERROUILLÉE), `PRODUCT.md` §1.4, `WORLDGEN.md` §6, `AUTH.md` §1 ; ADR 0002 (config centrale), ADR 0008 (validation parent ⚙️)
+- **Liens** : issue #216 (story 7.3) · PR #… · specs : `DETAILS.md` §3 (Espace parent, liste réglages VERROUILLÉE), `PRODUCT.md` §1.4, `WORLDGEN.md` §6, `AUTH.md` §1 ; ADR 0002 (config centrale), ADR 0008 (validation parent ⚙️)
 
 ## Contexte
 

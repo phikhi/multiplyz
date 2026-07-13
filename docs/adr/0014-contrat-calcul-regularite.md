@@ -3,7 +3,7 @@
 - **Statut** : accepté
 - **Type** : product (sémantiques de reporting) — dérivé, ne modifie aucune décision moteur/data/SYNC
 - **Portée** : mineure (architect-review autonome — in-contract, aucune décision ENGINE/PLAN/SYNC verrouillée touchée)
-- **Liens** : issue #217 (story 7.4) · spec [PLAN.md](../../PLAN.md) §Espace parent :83 · [WIREFRAMES.md](../../WIREFRAMES.md) §7 · [DETAILS.md](../../DETAILS.md) §27 · frère de l'ADR 0012 (contrat de calcul justesse/rapidité/maîtrise/à-revoir)
+- **Liens** : issue #217 (story 7.4) · spec [PLAN.md](../../PLAN.md) §Espace parent :83 · [WIREFRAMES.md](../../WIREFRAMES.md) §7 · [DETAILS.md §3 (Temps d'écran)](../../DETAILS.md) · frère de l'ADR 0012 (contrat de calcul justesse/rapidité/maîtrise/à-revoir)
 
 ## Contexte
 

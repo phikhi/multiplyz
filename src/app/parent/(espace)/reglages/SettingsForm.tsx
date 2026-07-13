@@ -12,7 +12,7 @@ import type {
 import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 
 /**
- * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7 ; son/
+ * Écran **« Réglages »** (story 7.3, DETAILS §3 (Espace parent) liste VERROUILLÉE, WIREFRAMES §7 ; son/
  * musique/volume ajoutés story 8.3, DETAILS §3 « son on/off, musique on/off, volume »). Le parent
  * **possède** cet écran (source de vérité complète, PIN) ; l'enfant a un quick-mute son/musique no-PIN
  * in-game en story 8.6 #282 (**ADR 0017**, réconcilie DETAILS §7 / PRODUCT §30). Rendu sous garde de session parent
