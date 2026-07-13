@@ -13,7 +13,9 @@ import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 
 /**
  * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7 ; son/
- * musique/volume ajoutés story 8.3, DETAILS §22). Rendu sous garde de session parent
+ * musique/volume ajoutés story 8.3, DETAILS §3 « son on/off, musique on/off + volume »). Le parent
+ * **possède** cet écran (source de vérité complète, PIN) ; l'enfant a un quick-mute son/musique no-PIN
+ * in-game en story 8.6 #282 (**ADR 0017**, réconcilie DETAILS §7 / PRODUCT §30). Rendu sous garde de session parent
  * (`(espace)/layout.tsx`) ; le **serveur reste la source de vérité** (`saveSettingsAction`
  * re-vérifie la session + valide + upsert). Registre **neutre/vouvoiement** (COPY §5, pas Teddy).
  * Auto-save par contrôle. Tokens uniquement, cibles ≥ 44 px, feedback **doublé d'icône**

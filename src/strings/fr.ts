@@ -835,11 +835,11 @@ export const fr = {
         /** Libellé du toggle des bruitages. */
         soundToggle: "Bruitages",
         /** Consigne des bruitages — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
-        soundHint: "Bientôt : active ou coupe les petits bruitages du jeu.",
+        soundHint: "Bientôt : activez ou coupez les petits bruitages du jeu.",
         /** Libellé du toggle de la musique. */
         musicToggle: "Musique",
         /** Consigne de la musique — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
-        musicHint: "Bientôt : active ou coupe la musique de fond.",
+        musicHint: "Bientôt : activez ou coupez la musique de fond.",
         /** Libellé du réglage de volume. */
         volumeLabel: "Volume",
         /** Libellé accessible d'une valeur de volume (gabarit, pourcentage). */

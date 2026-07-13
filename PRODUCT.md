@@ -118,7 +118,7 @@ Ajouter un profil enfant depuis l'accueil (modèle DB déjà compatible). Chaque
 - **Anti-frustration** : no-fail, indices, « je ne sais pas », jamais de chrono visible.
 - **Anti-triche / spam** : la fluence (temps) repère les réponses tapées au hasard ; pas de récompense à marteler.
 - **Onboarding parent** : courte explication de la méthode (Leitner/espacée, no-fail) + pose du PIN parent.
-- **Contrôles parent** (optionnels) : plafond de temps quotidien (verrou doux), réinitialiser/recalibrer, couper le son.
+- **Contrôles parent** (optionnels) : plafond de temps quotidien (verrou doux), réinitialiser/recalibrer, couper le son (source de vérité ; l'enfant a aussi un **quick-mute son/musique no-PIN** in-game — ADR 0017).
 - **Notifications** : **aucune en v1** (habitude portée par le nudge in-app). Détails : [DETAILS.md](./DETAILS.md).
 - **Confidentialité enfant (RGPD)** : données minimales (**prénom + PIN**, pas d'email), usage familial. **Modération des images IA** (sûr pour enfant) avant affichage.
 - **Modération contenu généré** : noms/thèmes de mondes et créatures filtrés (kid-safe), fallback pré-généré si doute.

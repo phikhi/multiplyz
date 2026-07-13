@@ -18,12 +18,13 @@
 
 ## 3. Écran Réglages
 
-**Accès enfant (rapide, sans PIN)** :
-- Son on/off, musique on/off (+ volume).
+**Accès enfant (rapide, sans PIN)** — *quick-mute in-game (ADR 0017)* :
+- Son on/off, musique on/off (muter vite dans une pièce calme). Le **volume** et les réglages complets vivent côté parent.
 - (Thème clair/sombre — ou laissé au parent, au choix au build.)
 
 **Espace parent (PIN parent)** :
 - Thème clair/sombre.
+- **Son & musique** : son on/off, musique on/off, **volume** (source de vérité unique ; l'enfant peut muter son/musique sans PIN via le quick-mute in-game — ADR 0017).
 - **Temps d'écran** : nudge doux 15-20 min (défaut) **+ verrou dur optionnel** paramétrable (X min/jour → l'app se verrouille en douceur jusqu'au lendemain).
 - **Gérer les profils** : créer / renommer / **supprimer** (purge données) / **réinitialiser le PIN enfant**.
 - **Recalibrer** : relancer un mini-diagnostic (à confirmer). Fusion **MONOTONE** — ne relève/crée jamais vers le bas, la progression acquise n'est jamais perdue (ADR 0016, ENGINE §3, PRODUCT §3.6).
@@ -75,5 +76,5 @@
 | TTS | **Reporté** (Web Speech plus tard) ; histoire en beats courts en attendant |
 | Temps d'écran | Nudge doux **+ verrou dur optionnel** (parent) |
 | i18n | FR seul, **strings centralisées** |
-| Réglages | Split enfant (son) / parent (le reste) |
+| Réglages | Parent possède l'écran Réglages (PIN, son/musique/volume + le reste) ; l'enfant a un **quick-mute son/musique no-PIN** in-game (ADR 0017, réconcilie PRODUCT §30) |
 | Playtest | Boucle observer → calibrer `⚙️` → re-tester |

@@ -901,7 +901,8 @@ export const householdSettings = sqliteTable("household_settings", {
    */
   screenTimeHardLockMinutes: integer("screen_time_hard_lock_minutes").notNull().default(45),
   /**
-   * **Bruitages** activés ? (DETAILS §22 « son on/off », accès enfant sans PIN). **STOCKÉ + validé
+   * **Bruitages** activés ? (DETAILS §3 « son on/off » ; **ADR 0017** : parent = source de vérité,
+   * édité ici — l'enfant a un quick-mute son/musique no-PIN in-game en story 8.6 #282). **STOCKÉ + validé
    * seulement (story 8.3)** — la lecture/coupure réelle des bruitages est consommée en **story 8.4**.
    * Défaut `true` (audio v1 = bruitages + musique, PRODUCT §2/§137 — activé par défaut, opt-out).
    * Bool SQLite (0/1).
