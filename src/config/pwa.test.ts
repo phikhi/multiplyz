@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PWA_BG_COLOR, PWA_THEME_COLOR } from "./pwa";
+import { INSTALL_PROMPT_DISMISSED_KEY, PWA_BG_COLOR, PWA_THEME_COLOR } from "./pwa";
 
 describe("config/pwa", () => {
   it("exporte une theme_color hexadécimale valide (#RRGGBB)", () => {
@@ -16,5 +16,9 @@ describe("config/pwa", () => {
 
   it("background_color correspond au fond primaire light (lavande crème)", () => {
     expect(PWA_BG_COLOR).toBe("#FAF7FF");
+  });
+
+  it("expose une clé localStorage préfixée mz- pour le rejet de l'invite d'installation (#258)", () => {
+    expect(INSTALL_PROMPT_DISMISSED_KEY).toBe("mz-install-prompt-dismissed");
   });
 });

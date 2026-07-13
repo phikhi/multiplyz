@@ -83,10 +83,9 @@ describe("CollectionScreen — affichage (WIREFRAMES §5)", () => {
   it("collection vide → message d'encouragement (posture douce, jamais d'échec)", async () => {
     await renderReady([]);
     expect(screen.getByText(strings.collection.empty)).toBeInTheDocument();
-    // Compteur « 0 créature » (pluriel géré par la logique, 0 ≠ 1).
-    expect(
-      screen.getByText(strings.collection.countPlural.replace("{n}", "0")),
-    ).toBeInTheDocument();
+    // Compteur « 0 créature » — SINGULIER (règle FR n<=1 : 0 ET 1 prennent le singulier, jamais
+    // le pluriel figé « 0 créatures » — story #273/rétro #239).
+    expect(screen.getByText(strings.collection.count.replace("{n}", "0"))).toBeInTheDocument();
   });
 
   it("affiche chaque créature possédée (nom + histoire + carte a11y)", async () => {
@@ -100,10 +99,23 @@ describe("CollectionScreen — affichage (WIREFRAMES §5)", () => {
     expect(screen.getByLabelText(label)).toBeInTheDocument();
   });
 
-  it("compteur singulier/pluriel selon le nombre de créatures", async () => {
-    const { unmount } = await renderReady([entry()]);
+  /**
+   * GARDE mutation-preuve (story #273, rétro #239) : forme EXACTE du compteur pour n=0/1/2.
+   * `countLabel` doit choisir le gabarit sur la borne `n <= 1` — si elle régresse à `n === 1`
+   * (le bug source de #273), le cas n=0 rendrait `strings.collection.countPlural` (« 0
+   * créature**s** ») au lieu de `strings.collection.count` (« 0 créature ») : l'assertion n=0
+   * ci-dessous est la seule des trois qui DISTINGUE les deux bornes (n=1 et n=2 donnent le même
+   * résultat sous les deux bornes) → elle ROUGIT si la borne régresse à `n === 1`.
+   */
+  it("compteur singulier/pluriel selon le nombre de créatures (n=0/1/2, borne n<=1→singulier)", async () => {
+    const { unmount: unmount0 } = await renderReady([]);
+    expect(screen.getByText(strings.collection.count.replace("{n}", "0"))).toBeInTheDocument();
+    unmount0();
+
+    const { unmount: unmount1 } = await renderReady([entry()]);
     expect(screen.getByText(strings.collection.count.replace("{n}", "1"))).toBeInTheDocument();
-    unmount();
+    unmount1();
+
     await renderReady([entry({ characterId: "a" }), entry({ characterId: "b" })]);
     expect(
       screen.getByText(strings.collection.countPlural.replace("{n}", "2")),

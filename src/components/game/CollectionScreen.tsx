@@ -40,9 +40,14 @@ function fill(template: string, replacements: Record<string, string>): string {
   );
 }
 
-/** Libellé du compteur « N créature(s) » (singulier/pluriel). */
+/**
+ * Libellé du compteur « N créature(s) » (singulier/pluriel) — règle FRANÇAISE : `0` ET `1`
+ * prennent le SINGULIER (« 0 créature », « 1 créature »), `≥2` le PLURIEL (« 2 créatures »).
+ * Borne `n <= 1` (jamais `n === 1` seul, qui ferait retomber `0` au pluriel figé « 0 créatures »
+ * — bug source #273, même règle que `pluralize()` de `dashboard-format.ts`, rétro #239).
+ */
 function countLabel(n: number): string {
-  const template = n === 1 ? strings.collection.count : strings.collection.countPlural;
+  const template = n <= 1 ? strings.collection.count : strings.collection.countPlural;
   return fill(template, { n: String(n) });
 }
 
