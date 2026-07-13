@@ -187,9 +187,9 @@ describe("SettingsForm — temps d'écran (STOCKÉ seulement, enforcement 7.8 #2
   });
 });
 
-// ───────────────────────────── son/musique/volume (STOCKÉ, consommé 8.4 — DETAILS §3) ─────────────────────────────
+// ───────────────────────────── son/musique/volume (persistés ici, enforcés par le moteur 8.4 au prochain /jouer — DETAILS §3) ─────────────────────────────
 
-describe("SettingsForm — son/musique/volume (STOCKÉ seulement, contrat 8.3, moteur audio 8.4)", () => {
+describe("SettingsForm — son/musique/volume (persistance formulaire ; enforcement par le moteur audio 8.4 #257 dans /jouer, pas ici)", () => {
   it("reflète les réglages persistés : bruitages/musique ON, volume affiché", () => {
     renderForm();
     expect(screen.getByRole("switch", { name: s.sound.soundToggle })).toHaveAttribute(
@@ -235,11 +235,13 @@ describe("SettingsForm — son/musique/volume (STOCKÉ seulement, contrat 8.3, m
     expect(saveMock).toHaveBeenCalledWith({ volume: 25 });
   });
 
-  it("aucun effet audio immédiat (contrairement au thème) : pas d'appel avant la confirmation serveur", async () => {
+  it("aucun effet audio immédiat DEPUIS CE FORMULAIRE (contrairement au thème) : pas d'appel avant la confirmation serveur", async () => {
     renderForm();
     fireEvent.click(screen.getByRole("switch", { name: s.sound.soundToggle }));
-    // Le seul effet synchrone est l'état visuel du switch — aucune API audio/DOM n'est touchée
-    // (contrat 8.3 : STOCKÉ seulement, le moteur audio est 8.4). La confirmation vient du serveur.
+    // Le seul effet synchrone est l'état visuel du switch — aucune API audio/DOM n'est touchée ICI
+    // (ce formulaire ne monte pas `SoundProvider` : l'enforcement réel vit dans `/jouer`, story
+    // 8.4 #257, au prochain chargement — même contrat de fraîcheur que le thème). La confirmation
+    // visible vient du serveur.
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(s.saved));
   });
 });

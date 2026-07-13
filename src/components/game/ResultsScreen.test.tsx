@@ -1,9 +1,22 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ResultsScreen } from "./ResultsScreen";
 import { strings } from "@/strings";
 import type { StarCount } from "@/lib/engine/stars";
 import { contrastRatio, resolveTokenColor, type Theme } from "./scaffolds/test-support/tokens-css";
+
+// Moteur son (story 8.4, #257) mocké à la frontière `useSound` — patron identique à
+// `PlayScreen.test.tsx` (frontière I/O mockée, pas la logique de câblage elle-même).
+const soundMocks = vi.hoisted(() => ({
+  playSfx: vi.fn(),
+  playMusic: vi.fn(),
+  stopMusic: vi.fn(),
+}));
+vi.mock("@/lib/sound/SoundProvider", () => ({ useSound: () => soundMocks }));
+
+beforeEach(() => {
+  soundMocks.playSfx.mockClear();
+});
 
 describe("ResultsScreen — jamais d'échec (ENGINE §5/§9)", () => {
   it("le titre reçoit le focus au montage (a11y, LEARNINGS #36)", () => {
@@ -230,4 +243,44 @@ describe("ResultsScreen — contraste WCAG résolu de la carte légendaire (rét
       expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
+});
+
+describe("ResultsScreen — son : SFX résultats + légendaire (story 8.4, #257 AC #1)", () => {
+  it("MUTATION-PROOF : joue le SFX 'results' au montage (mount-only correct — un seul montage réel par niveau, cf. JSDoc)", () => {
+    render(<ResultsScreen stars={2} coins={20} onContinue={vi.fn()} />);
+    expect(soundMocks.playSfx).toHaveBeenCalledWith("results");
+  });
+
+  it("legendary=null (niveau non-boss) ⇒ SFX 'legendary' JAMAIS joué", () => {
+    render(<ResultsScreen stars={2} coins={20} onContinue={vi.fn()} />);
+    expect(soundMocks.playSfx).not.toHaveBeenCalledWith("legendary");
+  });
+
+  it("legendary DÉJÀ connu au 1er rendu (boss) ⇒ SFX 'legendary' joué", () => {
+    render(<ResultsScreen stars={1} coins={60} legendary={FAKE_LEGENDARY} onContinue={vi.fn()} />);
+    expect(soundMocks.playSfx).toHaveBeenCalledWith("legendary");
+  });
+
+  // MUTATION-PROOF (STACK-TRAP #244, cf. JSDoc `LegendaryReveal`) : `legendary` arrive souvent
+  // APRÈS le 1er rendu (résolution serveur async, `finishLevelAction` fire-and-forget) — le
+  // rendu optimiste (legendary=null) précède le rendu résolu. `LegendaryReveal` n'existe pas
+  // tant que `legendary === null` (rendu conditionnel) → son APPARITION plus tard doit rester un
+  // montage réel qui joue le SFX, pas un effet mount-only manqué. Rougit si `LegendaryReveal`
+  // était rendue INCONDITIONNELLEMENT avec un SFX gated par une garde qui ne se réexécute pas.
+  it("MUTATION-PROOF (#244) : legendary ARRIVE APRÈS le 1er rendu (rerender null→objet) ⇒ SFX 'legendary' joué à la révélation", () => {
+    const { rerender } = render(<ResultsScreen stars={1} coins={null} onContinue={vi.fn()} />);
+    expect(soundMocks.playSfx).not.toHaveBeenCalledWith("legendary");
+
+    rerender(
+      <ResultsScreen stars={1} coins={60} legendary={FAKE_LEGENDARY} onContinue={vi.fn()} />,
+    );
+    expect(soundMocks.playSfx).toHaveBeenCalledWith("legendary");
+  });
+
+  it("le SFX 'results' ne rejoue PAS à un simple re-rendu sans démontage (mount-only respecté)", () => {
+    const { rerender } = render(<ResultsScreen stars={1} coins={null} onContinue={vi.fn()} />);
+    expect(soundMocks.playSfx).toHaveBeenCalledTimes(1);
+    rerender(<ResultsScreen stars={1} coins={60} onContinue={vi.fn()} />);
+    expect(soundMocks.playSfx).toHaveBeenCalledTimes(1);
+  });
 });

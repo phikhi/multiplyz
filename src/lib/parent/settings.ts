@@ -22,16 +22,19 @@ import {
  * - `parentWorldValidation` → **source de vérité** lue par le worker (`processNextJob` via
  *   `readHouseholdSettings`) : câble le ⚙️ existant `qa.parentValidationEnabled` (6.5) sur le réglage
  *   parent persisté (toggle ON → monde QA-validé reste `buffered` ; OFF → `active`).
+ * - `soundEnabled`/`musicEnabled`/`volume` (story 8.4 #257) → lus par `app/(app)/jouer/page.tsx`
+ *   (RSC, **même contrat de fraîcheur que `theme`** : pas de live-update, un réglage parent modifié
+ *   ne s'applique qu'au **prochain chargement** de la route `/jouer`) et projetés
+ *   (`pickSoundSettings`, `@/lib/sound/settings`) vers `PlayScreen` → `SoundProvider`
+ *   (`@/lib/sound/SoundProvider`) → moteur (`@/lib/sound/engine`, `createSoundEngine`).
+ *   `soundEnabled=false` coupe tout SFX (bonne réponse/combo/résultats/légendaire) ; `musicEnabled`
+ *   gate la musique de fond jouée pendant une partie active ; `volume` fixe le gain des deux
+ *   (mutation-prouvé, `@/lib/sound/engine.test.ts`).
  *
  * **Ce qui est STOCKÉ seulement (consommé en story 7.8 #229, jamais enforcé ici — #127/#155)** :
  * `screenTimeNudgeMinutes`, `screenTimeHardLockEnabled`, `screenTimeHardLockMinutes` — **posés +
  * validés (bornes ⚙️ `parentControls`) + persistés** ; l'enforcement runtime (nudge de session /
  * verrou dur qui bloque l'app) dépend du **temps-joué persisté** (7.4 #217) et vit dans **7.8**.
- *
- * **Ce qui est STOCKÉ seulement (consommé en story 8.4, jamais enforcé ici — #127/#155)** :
- * `soundEnabled`, `musicEnabled`, `volume` (DETAILS §3) — **posés + validés (bornes fixes
- * `[SOUND_VOLUME_MIN, SOUND_VOLUME_MAX]`) + persistés** ; le **moteur audio** (lecture/coupure réelle
- * des bruitages/musique au volume réglé) n'existe pas encore — il est câblé en **story 8.4**.
  */
 
 /** Préférences de thème valides (source unique pour le parsing / la validation ⚙️). */
@@ -54,11 +57,11 @@ export interface HouseholdSettings {
   readonly screenTimeHardLockEnabled: boolean;
   /** Seuil du verrou dur (min/jour) — STOCKÉ + validé (borne ⚙️), consommé 7.8 #229. */
   readonly screenTimeHardLockMinutes: number;
-  /** Bruitages activés ? (DETAILS §3) — STOCKÉ + validé (consommé 8.4). */
+  /** Bruitages activés ? (DETAILS §3) — AGIT (gate SFX, story 8.4 #257, `@/lib/sound/engine`). */
   readonly soundEnabled: boolean;
-  /** Musique activée ? (DETAILS §3) — STOCKÉ + validé (consommé 8.4). */
+  /** Musique activée ? (DETAILS §3) — AGIT (gate musique de fond, story 8.4 #257). */
   readonly musicEnabled: boolean;
-  /** Volume, pourcentage `[0,100]` (DETAILS §3 (volume — côté parent, ADR 0017)) — STOCKÉ + validé (consommé 8.4). */
+  /** Volume, pourcentage `[0,100]` (DETAILS §3 (volume — côté parent, ADR 0017)) — AGIT (gain SFX+musique, story 8.4 #257). */
   readonly volume: number;
 }
 
@@ -105,9 +108,10 @@ export function resolveSettingsDefaults(): HouseholdSettings {
 
 /**
  * **Lit** les réglages effectifs du foyer (source de vérité serveur). Ligne présente → ses valeurs ;
- * **absente** (foyer neuf, jamais réglé) → `defaults` (composés de la config ⚙️). Point de lecture
- * **unique** consommé par `app/layout.tsx` (thème), le worker (`parentWorldValidation`) et la page
- * de réglages. `defaults` injectable pour les tests (mêmes conventions que `resolveWorkerDeps`).
+ * **absente** (foyer neuf, jamais réglé) → `defaults` (composés de la config ⚙️). Points de lecture
+ * consommés par `app/layout.tsx` (thème), le worker (`parentWorldValidation`), la page de réglages
+ * ET `app/(app)/jouer/page.tsx` (son/musique/volume, story 8.4 #257, `pickSoundSettings`).
+ * `defaults` injectable pour les tests (mêmes conventions que `resolveWorkerDeps`).
  */
 export function readHouseholdSettings(
   db: AppDatabase,

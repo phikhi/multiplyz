@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { strings } from "@/strings";
 import type { StarCount } from "@/lib/engine/stars";
 import type { GrantedLegendary } from "@/lib/game/finish-level";
+import { useSound } from "@/lib/sound/SoundProvider";
 
 /**
  * Écran de résultats de fin de niveau (WIREFRAMES §4, ENGINE §5, ECONOMY §4.1, gains #126).
@@ -19,6 +20,12 @@ import type { GrantedLegendary } from "@/lib/game/finish-level";
  * qui échouent le contraste sur fond neutre, cf. tokens.css / rétro #104/#125). Les étoiles
  * utilisent de même `--results-star-filled`/`--results-star-empty` (tokens texte fiables,
  * jamais `--color-star`/`-empty`, mêmes accents décoratifs qui échouaient le contraste ici).
+ *
+ * **Son (story 8.4, #257, AC #1)** : SFX `"results"` au montage du titre (`<h1>`, ref-callback,
+ * même nœud que `focusOnMount` — `ResultsScreen` ne monte RÉELLEMENT qu'une fois par niveau,
+ * `PlayScreen` retraverse toujours `"loading"` entre 2 résultats, cf. commentaire du `key`
+ * distinct côté `PlayScreen.tsx` — un ref-callback mount-only est donc le contrat CORRECT ici,
+ * contrairement à `LegendaryReveal` ci-dessous).
  */
 export interface ResultsScreenProps {
   readonly stars: StarCount;
@@ -54,11 +61,30 @@ function fill(template: string, token: string, value: string): string {
  * nom + l'annonce sont **doublés d'un texte** (jamais la seule icône/couleur, a11y). Tokens
  * `--collection-*` (texte fiable ≥4.5:1 sur le fond de carte, jamais `--color-star` sur fond
  * neutre — rétro #126). L'ensemble est un `role="img"` au nom accessible explicite.
+ *
+ * **Son (story 8.4, #257, AC #1 « ouverture d'œuf »)** : SFX `"legendary"` au montage de CE
+ * `<div>` racine. `legendary` arrive fréquemment APRÈS le 1er rendu de `ResultsScreen` (résolution
+ * serveur async de `finishLevelAction`, fire-and-forget) : `ResultsScreen` réutilise alors le
+ * MÊME `<h1>` (UPDATE, pas remount — cf. commentaire du son sur `ResultsScreen`), mais cette
+ * sous-arborescence `LegendaryReveal` n'existe PAS tant que `legendary === null` (rendu
+ * conditionnel `{legendary !== null && <LegendaryReveal .../>}`) → son APPARITION est un montage
+ * RÉEL au sens React, que ce soit au tout 1er rendu (legendary déjà connu) ou plus tard (arrivée
+ * async). Un ref-callback ici capture donc naturellement les 2 cas SANS jamais retomber dans le
+ * STACK-TRAP #244 (élément mount-only réutilisé entre branches) : il n'y a rien à réutiliser, le
+ * nœud n'existait simplement pas avant.
  */
 function LegendaryReveal({ legendary }: { readonly legendary: GrantedLegendary }) {
+  const { playSfx } = useSound();
+  const playLegendarySfxOnMount = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node !== null) playSfx("legendary");
+    },
+    [playSfx],
+  );
   const label = fill(strings.play.results.legendaryLabel, "{nom}", legendary.name);
   return (
     <div
+      ref={playLegendarySfxOnMount}
       role="img"
       aria-label={label}
       data-results-legendary={legendary.characterId}
@@ -135,11 +161,17 @@ function LegendaryReveal({ legendary }: { readonly legendary: GrantedLegendary }
 }
 
 export function ResultsScreen({ stars, coins, legendary = null, onContinue }: ResultsScreenProps) {
+  const { playSfx } = useSound();
   // Ref-callback : focus le titre dès qu'il est monté (LEARNINGS #36 — évite la
-  // branche `current === null` non couverte d'un `useEffect` + `?.`).
-  const focusOnMount = useCallback((node: HTMLHeadingElement | null) => {
-    node?.focus();
-  }, []);
+  // branche `current === null` non couverte d'un `useEffect` + `?.`) ET joue le SFX
+  // `"results"` (story 8.4, #257 AC #1 — mount-only CORRECT ici, cf. JSDoc du composant).
+  const focusAndPlayResultsSfxOnMount = useCallback(
+    (node: HTMLHeadingElement | null) => {
+      node?.focus();
+      if (node !== null) playSfx("results");
+    },
+    [playSfx],
+  );
 
   const starsLabel =
     stars === 1
@@ -167,7 +199,7 @@ export function ResultsScreen({ stars, coins, legendary = null, onContinue }: Re
       }}
     >
       <h1
-        ref={focusOnMount}
+        ref={focusAndPlayResultsSfxOnMount}
         tabIndex={-1}
         style={{
           fontFamily: "var(--font-family-display)",
