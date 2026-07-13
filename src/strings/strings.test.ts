@@ -112,6 +112,29 @@ describe("strings (i18n FR)", () => {
     expect(strings.play.logout.length).toBeGreaterThan(0);
   });
 
+  it("quick-mute enfant NO-PIN (story 8.6, #282, DETAILS §3, ADR 0017) : 4 libellés présents, icône DOUBLÉE d'un texte DISTINCT par état, registre enfant (jamais le vouvoiement parent)", () => {
+    const sq = strings.play.soundQuickMute;
+    expect(sq.legend.length).toBeGreaterThan(0);
+    expect(sq.soundOn.length).toBeGreaterThan(0);
+    expect(sq.soundOff.length).toBeGreaterThan(0);
+    expect(sq.musicOn.length).toBeGreaterThan(0);
+    expect(sq.musicOff.length).toBeGreaterThan(0);
+    // Icône DOUBLÉE d'un texte (jamais la seule icône/couleur, daltonisme #125/#239) : le libellé
+    // ON et le libellé OFF de CHAQUE contrôle sont des chaînes DISTINCTES.
+    expect(sq.soundOn).not.toBe(sq.soundOff);
+    expect(sq.musicOn).not.toBe(sq.musicOff);
+    // Volume ABSENT (délibéré, ADR 0017 : le réglage fin reste parent, story 8.3).
+    expect(sq).not.toHaveProperty("volumeLabel");
+    expect(sq).not.toHaveProperty("volumeOn");
+    // Registre : jamais le vouvoiement neutre du parent (7.3/8.3) sur cette surface enfant —
+    // contrairement à `strings.parent.settings.sound.soundHint` (« activez »/« coupez »), ces
+    // libellés courts ne conjuguent AUCUN verbe au vouvoiement.
+    const childText = `${sq.legend} ${sq.soundOn} ${sq.soundOff} ${sq.musicOn} ${sq.musicOff}`;
+    expect(childText).not.toMatch(/\bactivez\b/);
+    expect(childText).not.toMatch(/\bcoupez\b/);
+    expect(childText).not.toMatch(/\bréglez\b/);
+  });
+
   it("écran de jeu = posture croissance (jamais « faux »/« erreur ») + no-fail", () => {
     const retryTexts = [...strings.play.retry.variants, strings.play.retry.tryAgain];
     for (const text of retryTexts) {

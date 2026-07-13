@@ -14,11 +14,13 @@ import { finishLevel, type FinishLevelResult } from "@/lib/game/finish-level";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
 import { evaluateScreenTimeLock } from "@/lib/parent/screen-time-lock";
-import { readHouseholdSettings } from "@/lib/parent/settings";
+import { readHouseholdSettings, writeHouseholdSettings } from "@/lib/parent/settings";
 import {
   diagnosticPlanAction,
   finishLevelAction,
   seedDiagnosticAction,
+  setChildMusicEnabledAction,
+  setChildSoundEnabledAction,
   startLevelAction,
   submitAttemptAction,
   unlockedWorldCountAction,
@@ -92,7 +94,10 @@ vi.mock("@/lib/game/unlock", () => ({
   getUnlockedWorldCount: vi.fn(),
   resolveCurrentLevelTarget: vi.fn(),
 }));
-vi.mock("@/lib/parent/settings", () => ({ readHouseholdSettings: vi.fn() }));
+vi.mock("@/lib/parent/settings", () => ({
+  readHouseholdSettings: vi.fn(),
+  writeHouseholdSettings: vi.fn(),
+}));
 vi.mock("@/lib/parent/screen-time-lock", () => ({ evaluateScreenTimeLock: vi.fn() }));
 
 const profileMock = vi.mocked(getCurrentChildProfileId);
@@ -107,6 +112,7 @@ const finishLevelMock = vi.mocked(finishLevel);
 const getUnlockedWorldCountMock = vi.mocked(getUnlockedWorldCount);
 const resolveTargetMock = vi.mocked(resolveCurrentLevelTarget);
 const readHouseholdSettingsMock = vi.mocked(readHouseholdSettings);
+const writeHouseholdSettingsMock = vi.mocked(writeHouseholdSettings);
 const evaluateScreenTimeLockMock = vi.mocked(evaluateScreenTimeLock);
 
 /** Décomposition de gain factice (le service la renvoie ; l'action la transmet au client). */
@@ -504,3 +510,83 @@ describe("unlockedWorldCountAction", () => {
     expect(levelsArg).toBe(FAKE_MAP_CONFIG.levelsPerWorld);
   });
 });
+
+// ============================================================================
+// Quick-mute enfant NO-PIN (story 8.6, #282, DETAILS §3, ADR 0017)
+// ============================================================================
+
+describe("setChildSoundEnabledAction", () => {
+  it("NO-PIN mais session enfant EXIGÉE : non authentifié → { ok: false }, AUCUNE écriture", async () => {
+    profileMock.mockResolvedValue(null);
+    await expect(setChildSoundEnabledAction(false)).resolves.toEqual({ ok: false });
+    expect(writeHouseholdSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("authentifié (session enfant, PAS de PIN requis) → écrit `soundEnabled`, { ok: true }", async () => {
+    profileMock.mockResolvedValue(7);
+    await expect(setChildSoundEnabledAction(true)).resolves.toEqual({ ok: true });
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledTimes(1);
+    const [dbArg] = writeHouseholdSettingsMock.mock.calls[0];
+    expect(dbArg).toBe("DB");
+  });
+
+  // SÉCURITÉ (SCOPING NARROW, AC #282, mutation-prouvé) : le patch écrit est un objet EXACT à 1
+  // champ (`{ soundEnabled: true }`) — `toHaveBeenCalledWith` compare une égalité PROFONDE, donc
+  // ROUGIT si le patch est un jour élargi (ex. `{ soundEnabled: true, volume: 100 }`) pour inclure
+  // volume/thème/temps d'écran/profils/PIN. Preuve : muter l'action pour ajouter `volume: 100` au
+  // patch fait échouer CET exact test (vérifié manuellement pendant le build, cf. reçu PR).
+  it("SÉCU — patch EXACT à 1 CHAMP `{ soundEnabled }` : ne peut JAMAIS écrire volume/thème/temps d'écran/profils/PIN", async () => {
+    profileMock.mockResolvedValue(7);
+    await setChildSoundEnabledAction(true);
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledWith("DB", { soundEnabled: true });
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("SÉCU — coercition stricte : une valeur non-booléenne hostile ne peut écrire `soundEnabled: true`", async () => {
+    profileMock.mockResolvedValue(7);
+    // `unknown` hostile forcé via cast — un payload transport corrompu ne doit JAMAIS s'écrire tel
+    // quel (`=== true` coercé, même patron que `writeHouseholdSettings` lui-même).
+    await setChildSoundEnabledAction("yes" as unknown as boolean);
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledWith("DB", { soundEnabled: false });
+  });
+
+  it("bascule OFF (false) → écrit `{ soundEnabled: false }` (pas seulement le cas ON)", async () => {
+    profileMock.mockResolvedValue(7);
+    await setChildSoundEnabledAction(false);
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledWith("DB", { soundEnabled: false });
+  });
+});
+
+describe("setChildMusicEnabledAction", () => {
+  it("NO-PIN mais session enfant EXIGÉE : non authentifié → { ok: false }, AUCUNE écriture", async () => {
+    profileMock.mockResolvedValue(null);
+    await expect(setChildMusicEnabledAction(false)).resolves.toEqual({ ok: false });
+    expect(writeHouseholdSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("authentifié (session enfant, PAS de PIN requis) → écrit `musicEnabled`, { ok: true }", async () => {
+    profileMock.mockResolvedValue(7);
+    await expect(setChildMusicEnabledAction(true)).resolves.toEqual({ ok: true });
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  // SÉCURITÉ — même garde que `setChildSoundEnabledAction`, sur le champ `musicEnabled` (patch
+  // EXACT à 1 champ, mutation-prouvé : un élargissement du patch fait rougir ce test).
+  it("SÉCU — patch EXACT à 1 CHAMP `{ musicEnabled }` : ne peut JAMAIS écrire volume/thème/temps d'écran/profils/PIN", async () => {
+    profileMock.mockResolvedValue(7);
+    await setChildMusicEnabledAction(true);
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledWith("DB", { musicEnabled: true });
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("bascule OFF (false) → écrit `{ musicEnabled: false }` (pas seulement le cas ON)", async () => {
+    profileMock.mockResolvedValue(7);
+    await setChildMusicEnabledAction(false);
+    expect(writeHouseholdSettingsMock).toHaveBeenCalledWith("DB", { musicEnabled: false });
+  });
+});
+
+// SÉCU — les 2 actions sont DISJOINTES de `saveSettingsAction` (parent, PIN, patch arbitraire,
+// `(espace)/reglages/actions.ts`) : aucune de ces 2 fonctions n'accepte de patch en paramètre — le
+// signature `(enabled: boolean)` rend structurellement impossible de faire transiter un champ
+// autre que celui codé en dur, contrairement à `saveSettingsAction(patch: HouseholdSettingsPatch)`.

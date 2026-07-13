@@ -6,6 +6,8 @@ import {
   diagnosticPlanAction,
   finishLevelAction,
   seedDiagnosticAction,
+  setChildMusicEnabledAction,
+  setChildSoundEnabledAction,
   startLevelAction,
   submitAttemptAction,
 } from "@/app/(app)/jouer/actions";
@@ -24,6 +26,8 @@ vi.mock("@/app/(app)/jouer/actions", () => ({
   diagnosticPlanAction: vi.fn(),
   finishLevelAction: vi.fn(),
   seedDiagnosticAction: vi.fn(),
+  setChildMusicEnabledAction: vi.fn(),
+  setChildSoundEnabledAction: vi.fn(),
   startLevelAction: vi.fn(),
   submitAttemptAction: vi.fn(),
 }));
@@ -34,13 +38,30 @@ vi.mock("@/app/(app)/jouer/actions", () => ({
 // contrôlables. Les NOUVEAUX tests de câblage sonore (fin de fichier) assertent sur ces espions ;
 // la logique RÉELLE de résolution (`resolveAnswerSfx`, seuil combo) n'est PAS mockée — seule la
 // frontière audio I/O l'est (patron déjà suivi pour `@/lib/db`/actions ailleurs dans ce dépôt).
+//
+// `soundProviderSettingsSpy` (story 8.6, #282) : capture CHAQUE `settings` reçu par ce passthrough
+// — preuve d'INTÉGRATION que l'état `PlayScreen` (mis à jour par le quick-mute enfant, EN SESSION)
+// atteint RÉELLEMENT la prop `settings` de `SoundProvider`, SANS navigation/reload. Le câblage
+// ENGINE (coupe/relance immédiate) est testé séparément, au niveau unitaire, dans
+// `SoundProvider.test.tsx` (ce fichier-ci ne re-teste pas le moteur, seulement le FIL D'EAU
+// PlayScreen→SoundProvider).
 const soundMocks = vi.hoisted(() => ({
   playSfx: vi.fn(),
   playMusic: vi.fn(),
   stopMusic: vi.fn(),
+  soundProviderSettingsSpy: vi.fn(),
 }));
 vi.mock("@/lib/sound/SoundProvider", () => ({
-  SoundProvider: ({ children }: { readonly children: React.ReactNode }) => children,
+  SoundProvider: ({
+    children,
+    settings,
+  }: {
+    readonly children: React.ReactNode;
+    readonly settings: unknown;
+  }) => {
+    soundMocks.soundProviderSettingsSpy(settings);
+    return children;
+  },
   useSound: () => soundMocks,
 }));
 
@@ -49,6 +70,8 @@ const finishLevelActionMock = vi.mocked(finishLevelAction);
 const seedDiagnosticMock = vi.mocked(seedDiagnosticAction);
 const startLevelMock = vi.mocked(startLevelAction);
 const submitAttemptMock = vi.mocked(submitAttemptAction);
+const setChildSoundEnabledMock = vi.mocked(setChildSoundEnabledAction);
+const setChildMusicEnabledMock = vi.mocked(setChildMusicEnabledAction);
 
 const STAR_THRESHOLDS = [0.6, 0.85, 1] as const;
 
@@ -90,6 +113,8 @@ beforeEach(() => {
     legendaryAdded: false,
     error: null,
   });
+  setChildSoundEnabledMock.mockResolvedValue({ ok: true });
+  setChildMusicEnabledMock.mockResolvedValue({ ok: true });
 });
 
 describe("PlayScreen — chargement", () => {
@@ -903,5 +928,132 @@ describe("PlayScreen — son : SFX bonne réponse/combo + musique de fond (story
     // Sans la garde `isRetrying`, la série (comboCountBefore > seuil) rejouerait "combo" ici.
     expect(soundMocks.playSfx).toHaveBeenCalledWith("correct");
     expect(soundMocks.playSfx).not.toHaveBeenCalledWith("combo");
+  });
+});
+
+describe("PlayScreen — quick-mute enfant NO-PIN in-game (story 8.6, #282, DETAILS §3, ADR 0017)", () => {
+  const sq = strings.play.soundQuickMute;
+
+  it("visible PENDANT une question, à côté du bouton de déconnexion (même écran « in-game »)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    expect(screen.getByRole("switch", { name: sq.soundOn })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: sq.musicOn })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument();
+  });
+
+  it("reflète l'état INITIAL fourni par le serveur (`sound` prop, pas un défaut figé)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen sound={{ soundEnabled: false, musicEnabled: true, volume: 40 }} />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    expect(screen.getByRole("switch", { name: sq.soundOff })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("switch", { name: sq.musicOn })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("MUTATION-PROOF (in-session live-sync, AC #282) : clique Son → l'UI bascule IMMÉDIATEMENT ET `SoundProvider` reçoit le settings mis à jour SANS remount/reload", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen sound={{ soundEnabled: true, musicEnabled: true, volume: 70 }} />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+
+    const callsBefore = soundMocks.soundProviderSettingsSpy.mock.calls.length;
+    fireEvent.click(screen.getByRole("switch", { name: sq.soundOn }));
+
+    // (a) L'UI reflète le nouvel état SANS attendre de round-trip réseau.
+    expect(screen.getByRole("switch", { name: sq.soundOff })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    // (b) `SoundProvider` (le moteur) est RE-RENDU avec un `settings.soundEnabled` À JOUR — preuve
+    // que `PlayScreen` fait bien VARIER son état (pas une prop figée passée une seule fois au
+    // montage). Si `PlayScreen` régressait vers une valeur statique, ce spy ne recevrait JAMAIS
+    // `soundEnabled: false` — ce test rougirait.
+    expect(soundMocks.soundProviderSettingsSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+    const lastCall =
+      soundMocks.soundProviderSettingsSpy.mock.calls[
+        soundMocks.soundProviderSettingsSpy.mock.calls.length - 1
+      ];
+    expect(lastCall[0]).toEqual({ soundEnabled: false, musicEnabled: true, volume: 70 });
+
+    // (c) Persistance serveur narrow — fire-and-forget, no-fail (jamais bloquant pour l'affichage).
+    await waitFor(() => expect(setChildSoundEnabledMock).toHaveBeenCalledWith(false));
+  });
+
+  it("MUTATION-PROOF : clique Musique bascule INDÉPENDAMMENT de Son (settings.soundEnabled inchangé) + persiste narrow", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen sound={{ soundEnabled: true, musicEnabled: true, volume: 70 }} />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("switch", { name: sq.musicOn }));
+
+    expect(screen.getByRole("switch", { name: sq.musicOff })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    // Son INCHANGÉ (toujours ON) — les 2 contrôles sont indépendants.
+    expect(screen.getByRole("switch", { name: sq.soundOn })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await waitFor(() => expect(setChildMusicEnabledMock).toHaveBeenCalledWith(false));
+    expect(setChildSoundEnabledMock).not.toHaveBeenCalled();
+  });
+
+  it("NO-PIN : aucune navigation/prompt PIN n'apparaît au clic — reste sur l'écran de jeu", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("switch", { name: sq.soundOn }));
+    // Toujours sur l'écran de jeu (la question reste affichée) — aucun pavé PIN n'apparaît (un
+    // pavé PIN afficherait des boutons "Chiffre {d}", jamais présents sur `/jouer`).
+    expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: strings.pinPad.digit.replace("{d}", "0") }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("reste visible pendant le FEEDBACK (branche non-« asking ») — pas seulement pendant la question", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    const fact68 = makeFact("mult", 6, 8);
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    expect(screen.getByRole("switch", { name: sq.soundOn })).toBeInTheDocument();
   });
 });

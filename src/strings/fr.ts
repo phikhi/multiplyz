@@ -169,6 +169,25 @@ export const fr = {
   play: {
     /** Déconnexion (formulé pour un enfant : « changer de joueur »). */
     logout: "Changer de joueur",
+    /**
+     * **Quick-mute enfant NO-PIN** (story 8.6, #282, DETAILS §3 « muter vite dans une pièce
+     * calme », ADR 0017). Registre ENFANT (jamais le vouvoiement du parent 7.3/8.3, COPY §5) —
+     * libellés courts (icône DOUBLÉE de texte, jamais la seule icône, daltonisme #125/#239) plutôt
+     * que des phrases conjuguées, cohérent avec `logout` ci-dessus (même famille de contrôle
+     * persistant in-game). **Volume ABSENT** (délibéré, ADR 0017 : le réglage fin reste parent).
+     */
+    soundQuickMute: {
+      /** Nom accessible du groupe des 2 contrôles (`role="group"`). */
+      legend: "Son",
+      /** Bruitages activés — état + icône 🔊 (doublage a11y). */
+      soundOn: "Son activé 🔊",
+      /** Bruitages coupés — état + icône 🔇 (glyphe DISTINCT de soundOn, pas la seule couleur). */
+      soundOff: "Son coupé 🔇",
+      /** Musique activée — état + icône 🎵. */
+      musicOn: "Musique activée 🎵",
+      /** Musique coupée — état + icône 🔕 (glyphe DISTINCT de musicOn). */
+      musicOff: "Musique coupée 🔕",
+    },
     /** Chargement du niveau (lecture serveur avant affichage de la 1re question). */
     loading: "Je prépare tes calculs…",
     /** Erreur générique de chargement (session expirée / réseau) — posture douce. */
