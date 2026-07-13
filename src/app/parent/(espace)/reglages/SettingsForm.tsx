@@ -12,16 +12,21 @@ import type {
 import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 
 /**
- * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7). Rendu sous
- * garde de session parent (`(espace)/layout.tsx`) ; le **serveur reste la source de vérité**
- * (`saveSettingsAction` re-vérifie la session + valide + upsert). Registre **neutre/vouvoiement**
- * (COPY §5, pas Teddy). Auto-save par contrôle. Tokens uniquement, cibles ≥ 44 px, feedback
- * **doublé d'icône** (daltonisme), strings centralisées.
+ * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7 ; son/
+ * musique/volume ajoutés story 8.3, DETAILS §3 « son on/off, musique on/off, volume »). Le parent
+ * **possède** cet écran (source de vérité complète, PIN) ; l'enfant a un quick-mute son/musique no-PIN
+ * in-game en story 8.6 #282 (**ADR 0017**, réconcilie DETAILS §7 / PRODUCT §30). Rendu sous garde de session parent
+ * (`(espace)/layout.tsx`) ; le **serveur reste la source de vérité** (`saveSettingsAction`
+ * re-vérifie la session + valide + upsert). Registre **neutre/vouvoiement** (COPY §5, pas Teddy).
+ * Auto-save par contrôle. Tokens uniquement, cibles ≥ 44 px, feedback **doublé d'icône**
+ * (daltonisme), strings centralisées.
  *
  * **Ce qui AGIT** : le thème s'applique **immédiatement** (`data-theme` sur `<html>`, cohérent avec
  * `app/layout.tsx` côté serveur) ; la validation des mondes persiste et pilote le worker (6.5).
  * **Ce qui est STOCKÉ seulement (7.8 #229)** : le temps d'écran (nudge + verrou dur) — persisté ici,
- * **jamais enforcé** en 7.3.
+ * **jamais enforcé** en 7.3. **Ce qui est STOCKÉ seulement (8.4, #155)** : son/musique/volume —
+ * **contrat déclaré + validé + persisté ici**, le moteur audio réel (lecture/coupure effective) est
+ * consommé en **story 8.4**, jamais « agit » avant ce câblage.
  */
 export interface SettingsFormProps {
   /** Réglages effectifs du foyer (servis par la page serveur). */
@@ -30,6 +35,8 @@ export interface SettingsFormProps {
   nudgeOptions: number[];
   /** Options (min/jour) du verrou dur, calculées serveur depuis les bornes ⚙️ + la valeur courante. */
   hardLockOptions: number[];
+  /** Options (%) du volume, calculées serveur depuis les bornes fixes `[0,100]` + la valeur courante. */
+  volumeOptions: number[];
 }
 
 // Glyphes décoratifs (aria-hidden) — react/jsx-no-literals : aucun littéral rendu en JSX.
@@ -364,7 +371,17 @@ function minutesLabel(minutes: number): string {
   return s.screenTime.minutesOption.replace("{min}", String(minutes));
 }
 
-export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: SettingsFormProps) {
+/** Libellé d'un volume en pourcentage (gabarit `{volume}`, story 8.3). */
+function volumeLabel(volume: number): string {
+  return s.sound.volumeOption.replace("{volume}", String(volume));
+}
+
+export function SettingsForm({
+  settings,
+  nudgeOptions,
+  hardLockOptions,
+  volumeOptions,
+}: SettingsFormProps) {
   const router = useRouter();
   const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
     node?.focus();
@@ -381,6 +398,9 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
   const [nudgeMinutes, setNudgeMinutes] = useState(settings.screenTimeNudgeMinutes);
   const [hardLockEnabled, setHardLockEnabled] = useState(settings.screenTimeHardLockEnabled);
   const [hardLockMinutes, setHardLockMinutes] = useState(settings.screenTimeHardLockMinutes);
+  const [soundEnabled, setSoundEnabled] = useState(settings.soundEnabled);
+  const [musicEnabled, setMusicEnabled] = useState(settings.musicEnabled);
+  const [volume, setVolume] = useState(settings.volume);
   const [recalibrateConfirming, setRecalibrateConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: FeedbackKind; text: string } | null>(null);
@@ -434,6 +454,26 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
     void runSave({ screenTimeHardLockMinutes: minutes });
   };
 
+  // Son/musique/volume (story 8.3) : STOCKÉ + validé seulement — même auto-save par contrôle que
+  // le reste de l'écran, mais AUCUN effet audio immédiat (contrairement au thème) tant que le
+  // moteur sonore (8.4) n'existe pas.
+  const onSoundToggle = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    void runSave({ soundEnabled: next });
+  };
+
+  const onMusicToggle = () => {
+    const next = !musicEnabled;
+    setMusicEnabled(next);
+    void runSave({ musicEnabled: next });
+  };
+
+  const onVolumeChange = (next: number) => {
+    setVolume(next);
+    void runSave({ volume: next });
+  };
+
   // **Recalibrer** (story 7.6, ADR 0016) : action à CONFIRMER (destructive-douce). L'ouverture
   // n'arme rien — seul « Oui, recalibrer » appelle la server action (re-gardée session parent).
   const openRecalibrate = () => {
@@ -463,6 +503,7 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
   };
 
   const st = s.screenTime;
+  const snd = s.sound;
   const rc = s.recalibrate;
 
   return (
@@ -561,6 +602,55 @@ export function SettingsForm({ settings, nudgeOptions, hardLockOptions }: Settin
               </select>
             </label>
           )}
+        </fieldset>
+
+        <fieldset style={fieldsetStyle}>
+          <legend style={legendStyle}>{snd.legend}</legend>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={soundEnabled}
+            className="mz-focusable"
+            disabled={pending}
+            onClick={onSoundToggle}
+            style={soundEnabled ? switchOnStyle : switchOffStyle}
+          >
+            <span aria-hidden="true">{soundEnabled ? SWITCH_ON : SWITCH_OFF}</span>
+            {snd.soundToggle}
+          </button>
+          <p style={hintStyle}>{snd.soundHint}</p>
+
+          <button
+            type="button"
+            role="switch"
+            aria-checked={musicEnabled}
+            className="mz-focusable"
+            disabled={pending}
+            onClick={onMusicToggle}
+            style={musicEnabled ? switchOnStyle : switchOffStyle}
+          >
+            <span aria-hidden="true">{musicEnabled ? SWITCH_ON : SWITCH_OFF}</span>
+            {snd.musicToggle}
+          </button>
+          <p style={hintStyle}>{snd.musicHint}</p>
+
+          <label style={selectLabelStyle}>
+            <span style={selectLabelTextStyle}>{snd.volumeLabel}</span>
+            <select
+              value={volume}
+              disabled={pending}
+              onChange={(event) => onVolumeChange(Number(event.target.value))}
+              style={selectStyle}
+            >
+              {volumeOptions.map((option) => (
+                <option key={option} value={option}>
+                  {volumeLabel(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p style={hintStyle}>{snd.volumeHint}</p>
         </fieldset>
 
         <fieldset style={fieldsetStyle}>

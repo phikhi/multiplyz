@@ -2193,6 +2193,52 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       page.getByRole("switch", { name: settings.screenTime.hardLockToggle }),
     ).toHaveAttribute("aria-checked", "true");
 
+    // ── Son/musique/volume (story 8.3, #256) : contrat DÉCLARÉ+VALIDÉ+PERSISTÉ (STOCKÉ, moteur
+    // audio réel = story 8.4) ── Prouve : (a) les deux switches + le sélecteur de volume sont
+    // RÉELLEMENT VISIBLES (pixels + géométrie non recouverte, garde #170) ; (b) les trois valeurs
+    // persistent au reload (source de vérité serveur), comme le reste de l'écran.
+    const snd = settings.sound;
+    const soundSwitch = page.getByRole("switch", { name: snd.soundToggle });
+    const musicSwitch = page.getByRole("switch", { name: snd.musicToggle });
+    const volumeSelect = page.getByRole("combobox", { name: snd.volumeLabel });
+    await soundSwitch.scrollIntoViewIfNeeded();
+    await expect(soundSwitch).toBeVisible();
+    await expect(soundSwitch).toBeInViewport();
+    await expect(musicSwitch).toBeVisible();
+    await expect(volumeSelect).toBeVisible();
+    const soundBox = await soundSwitch.boundingBox();
+    expect(soundBox).not.toBeNull();
+    expect(soundBox!.height).toBeGreaterThanOrEqual(44); // cible tactile ≥ 44 px (a11y)
+    // Capture DÉDIÉE (avant toute mutation) : les 3 contrôles son visibles à l'écran, non recouverts.
+    await page.screenshot({ path: "docs/captures/8.3-reglages-son.png", fullPage: true });
+
+    // Défauts d'un foyer neuf : bruitages + musique ON.
+    await expect(soundSwitch).toHaveAttribute("aria-checked", "true");
+    await expect(musicSwitch).toHaveAttribute("aria-checked", "true");
+
+    // Couper les bruitages → persiste au reload (indépendant de la musique).
+    await soundSwitch.click();
+    await expect(page.getByText(settings.saved).first()).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("switch", { name: snd.soundToggle })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(page.getByRole("switch", { name: snd.musicToggle })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    ); // la musique n'a PAS été couplée au toggle des bruitages
+
+    // Changer le volume → persiste au reload.
+    await page.getByRole("combobox", { name: snd.volumeLabel }).selectOption("25");
+    await expect(page.getByText(settings.saved).first()).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("combobox", { name: snd.volumeLabel })).toHaveValue("25");
+
+    // Réactiver les bruitages (état propre pour les foyers suivants du fichier de specs).
+    await page.getByRole("switch", { name: snd.soundToggle }).click();
+    await expect(page.getByText(settings.saved).first()).toBeVisible();
+
     // Revenir en thème clair pour la capture claire + laisser un état propre.
     await page.getByRole("button", { name: settings.theme.light }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");

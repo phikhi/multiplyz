@@ -859,6 +859,14 @@ export const HOUSEHOLD_SETTINGS_ID = "household";
  * du ⚙️ 6.5). **Ce qui est STOCKÉ seulement (consommé en story 7.8 #229)** : les trois colonnes
  * `screen_time_*` (nudge + verrou dur optionnel) — **posées + validées + persistées ici**, jamais
  * **enforced** en 7.3 (l'enforcement dépend du temps-joué persisté 7.4 #217, hors scope).
+ *
+ * **Colonnes son (story 8.3, DETAILS §3, migration 0015)** : `sound_enabled`, `music_enabled`,
+ * `volume` — **contrat DÉCLARÉ + VALIDÉ + PERSISTÉ seulement** (#155 : pas de sur-revendication).
+ * Le **moteur sonore** (bruitages/musique réellement joués/mutés selon ces valeurs) est consommé en
+ * **story 8.4** — aucun câblage de lecture audio n'existe encore ici. Ajoutées `NOT NULL DEFAULT` sur
+ * table **déjà peuplée** (foyer réglé depuis 7.3) : booléens/entier avec défaut = filet SQLite sûr
+ * (CLAUDE.md §Migrations — jamais `ADD col NOT NULL` sans default ; mirror migration 0014 §7.6, PAS
+ * le patron nullable+backfill de `name_key`).
  */
 export const householdSettings = sqliteTable("household_settings", {
   /** PK singleton (`HOUSEHOLD_SETTINGS_ID`) — une seule ligne de réglages du foyer. */
@@ -892,6 +900,27 @@ export const householdSettings = sqliteTable("household_settings", {
    * enforced en 7.3** (consommé en 7.8 #229). Défaut 45.
    */
   screenTimeHardLockMinutes: integer("screen_time_hard_lock_minutes").notNull().default(45),
+  /**
+   * **Bruitages** activés ? (DETAILS §3 « son on/off » ; **ADR 0017** : parent = source de vérité,
+   * édité ici — l'enfant a un quick-mute son/musique no-PIN in-game en story 8.6 #282). **STOCKÉ + validé
+   * seulement (story 8.3)** — la lecture/coupure réelle des bruitages est consommée en **story 8.4**.
+   * Défaut `true` (audio v1 = bruitages + musique, PRODUCT §2/§137 — activé par défaut, opt-out).
+   * Bool SQLite (0/1).
+   */
+  soundEnabled: integer("sound_enabled", { mode: "boolean" }).notNull().default(true),
+  /**
+   * **Musique** activée ? (DETAILS §3 « musique on/off »). **STOCKÉ + validé seulement (story
+   * 8.3)** — consommé en **story 8.4**. Défaut `true` (même registre que `soundEnabled`, opt-out).
+   * Bool SQLite (0/1).
+   */
+  musicEnabled: integer("music_enabled", { mode: "boolean" }).notNull().default(true),
+  /**
+   * **Volume** (DETAILS §3 (volume — côté parent, ADR 0017)) — entier `[0, 100]` (pourcentage), cohérent avec les
+   * autres colonnes numériques de cette table (entiers, jamais de `real`/flottant SQLite). **STOCKÉ
+   * + validé seulement (story 8.3)** — consommé en **story 8.4**. Défaut ⚙️ `sound.volumeDefault`
+   * (`server-config.ts`), valeur de repli **70** si l'env ne le précise pas.
+   */
+  volume: integer("volume").notNull().default(70),
   /** Instant serveur de la dernière modification des réglages. */
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()

@@ -6,12 +6,17 @@ import { readHouseholdSettings, type HouseholdSettings } from "@/lib/parent/sett
 import type { SettingsFormProps } from "./SettingsForm";
 import ParentSettingsPage from "./page";
 
-// Page serveur = pont mince : lit les réglages (DB) + calcule les options de minutes (bornes ⚙️ +
-// valeur courante) et passe le tout au composant client (testé isolément). On stubbe getDb + la
-// config + la lecture ; `minuteOptions` (pure) reste RÉELLE pour prouver le CÂBLAGE des options.
+// Page serveur = pont mince : lit les réglages (DB) + calcule les options (bornes ⚙️ pour les
+// minutes, bornes FIXES `SOUND_VOLUME_MIN`/`MAX` pour le volume, story 8.3 — + valeur courante) et
+// passe le tout au composant client (testé isolément). On stubbe getDb + `getParentControlsConfig`
+// UNIQUEMENT (les constantes `SOUND_VOLUME_MIN`/`MAX` restent le module RÉEL, importées) ;
+// `presetOptionsInRange` (pure) reste RÉELLE pour prouver le CÂBLAGE des options.
 const FAKE_DB = { __fakeDb: true };
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => FAKE_DB) }));
-vi.mock("@/config/server-config", () => ({ getParentControlsConfig: vi.fn() }));
+vi.mock("@/config/server-config", async (importActual) => {
+  const actual = await importActual<typeof import("@/config/server-config")>();
+  return { ...actual, getParentControlsConfig: vi.fn() };
+});
 vi.mock("@/lib/parent/settings", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/parent/settings")>();
   return { ...actual, readHouseholdSettings: vi.fn() };
@@ -23,6 +28,7 @@ vi.mock("./SettingsForm", () => ({
       data-theme={props.settings.theme}
       data-nudge={props.nudgeOptions.join(",")}
       data-hardlock={props.hardLockOptions.join(",")}
+      data-volume={props.volumeOptions.join(",")}
     />
   ),
 }));
@@ -39,14 +45,17 @@ const CONTROLS: ParentControlsConfig = {
   screenTimeHardLockMaxMinutes: 240,
 };
 
-describe("ParentSettingsPage (story 7.3)", () => {
-  it("lit les réglages (getDb) + calcule les options aux bornes ⚙️ et les transmet au formulaire", () => {
+describe("ParentSettingsPage (story 7.3 ; volume story 8.3)", () => {
+  it("lit les réglages (getDb) + calcule les options aux bornes et les transmet au formulaire", () => {
     const settings: HouseholdSettings = {
       theme: "dark",
       parentWorldValidation: true,
       screenTimeNudgeMinutes: 30,
       screenTimeHardLockEnabled: true,
       screenTimeHardLockMinutes: 75, // hors préset → doit rester sélectionnable (inséré + trié)
+      soundEnabled: true,
+      musicEnabled: false,
+      volume: 90, // hors préset → doit rester sélectionnable (inséré + trié)
     };
     readMock.mockReturnValue(settings);
     controlsMock.mockReturnValue(CONTROLS);
@@ -61,5 +70,7 @@ describe("ParentSettingsPage (story 7.3)", () => {
     expect(form).toHaveAttribute("data-nudge", "15,20,30,45,60");
     // Options verrou dur = présets dans 10..240 + la valeur courante 75 insérée et triée.
     expect(form).toHaveAttribute("data-hardlock", "30,45,60,75,90,120");
+    // Options volume = présets dans les bornes fixes [0,100] + la valeur courante 90 insérée et triée.
+    expect(form).toHaveAttribute("data-volume", "0,25,50,75,90,100");
   });
 });

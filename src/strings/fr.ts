@@ -846,6 +846,30 @@ export const fr = {
         hardLockLabel: "Limite par jour",
       },
       /**
+       * **Son & musique** (DETAILS §3 « son on/off, musique on/off, volume », story 8.3). Contrat
+       * **DÉCLARÉ + VALIDÉ + STOCKÉ seulement** — le moteur audio réel (lecture/coupure effective)
+       * est câblé en **story 8.4** (#155, même registre « Bientôt » que `screenTime.nudgeHint`
+       * avant son propre câblage 7.8 — ne PAS affirmer un effet actif tant que 8.4 n'existe pas).
+       */
+      sound: {
+        /** Légende du groupe. */
+        legend: "Son & musique",
+        /** Libellé du toggle des bruitages. */
+        soundToggle: "Bruitages",
+        /** Consigne des bruitages — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
+        soundHint: "Bientôt : activez ou coupez les petits bruitages du jeu.",
+        /** Libellé du toggle de la musique. */
+        musicToggle: "Musique",
+        /** Consigne de la musique — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
+        musicHint: "Bientôt : activez ou coupez la musique de fond.",
+        /** Libellé du réglage de volume. */
+        volumeLabel: "Volume",
+        /** Libellé accessible d'une valeur de volume (gabarit, pourcentage). */
+        volumeOption: "{volume} %",
+        /** Consigne du volume — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
+        volumeHint: "Bientôt : réglez le volume du son et de la musique.",
+      },
+      /**
        * **Recalibrer** (DETAILS §29 « relancer un mini-diagnostic », PRODUCT §3.6, ADR 0016).
        * Action **à confirmer** (registre calme, jamais alarmant). Insiste sur « la progression
        * n'est jamais perdue » : la fusion est **MONOTONE** (ne relève jamais vers le bas, ADR 0016).
@@ -881,6 +905,7 @@ export const fr = {
         THEME_INVALID: "Ce thème n'est pas valide.",
         NUDGE_OUT_OF_RANGE: "Cette durée de pause n'est pas valide.",
         HARD_LOCK_OUT_OF_RANGE: "Cette limite quotidienne n'est pas valide.",
+        VOLUME_OUT_OF_RANGE: "Ce volume n'est pas valide.",
         UNAUTHORIZED: "Votre session parent a expiré. Reconnectez-vous.",
         GENERIC: "Une erreur est survenue. Réessayez.",
       },

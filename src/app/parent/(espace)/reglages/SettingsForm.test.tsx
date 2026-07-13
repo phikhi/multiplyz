@@ -27,9 +27,13 @@ const SETTINGS: HouseholdSettings = {
   screenTimeNudgeMinutes: 20,
   screenTimeHardLockEnabled: false,
   screenTimeHardLockMinutes: 45,
+  soundEnabled: true,
+  musicEnabled: true,
+  volume: 70,
 };
 const NUDGE_OPTIONS = [15, 20, 30, 45, 60];
 const HARD_LOCK_OPTIONS = [30, 45, 60, 90, 120];
+const VOLUME_OPTIONS = [0, 25, 50, 70, 75, 100];
 
 function renderForm(settings: HouseholdSettings = SETTINGS) {
   return render(
@@ -37,6 +41,7 @@ function renderForm(settings: HouseholdSettings = SETTINGS) {
       settings={settings}
       nudgeOptions={NUDGE_OPTIONS}
       hardLockOptions={HARD_LOCK_OPTIONS}
+      volumeOptions={VOLUME_OPTIONS}
     />,
   );
 }
@@ -51,13 +56,14 @@ beforeEach(() => {
 // ───────────────────────────── rendu ─────────────────────────────
 
 describe("SettingsForm — rendu (liste VERROUILLÉE DETAILS §3, registre neutre)", () => {
-  it("rend le titre + les groupes thème / validation / temps d'écran / langue", () => {
+  it("rend le titre + les groupes thème / validation / temps d'écran / son / langue", () => {
     renderForm();
     expect(screen.getByRole("heading", { level: 1, name: s.title })).toBeInTheDocument();
     // Groupes (légendes).
     expect(screen.getByText(s.theme.legend)).toBeInTheDocument();
     expect(screen.getByText(s.worlds.legend)).toBeInTheDocument();
     expect(screen.getByText(s.screenTime.legend)).toBeInTheDocument();
+    expect(screen.getByText(s.sound.legend)).toBeInTheDocument();
     // Langue FR grisée (valeur + consigne future i18n) — pas un contrôle éditable.
     expect(screen.getByText(s.language.value)).toBeInTheDocument();
     expect(screen.getByText(s.language.hint)).toBeInTheDocument();
@@ -178,6 +184,63 @@ describe("SettingsForm — temps d'écran (STOCKÉ seulement, enforcement 7.8 #2
       target: { value: "120" },
     });
     expect(saveMock).toHaveBeenCalledWith({ screenTimeHardLockMinutes: 120 });
+  });
+});
+
+// ───────────────────────────── son/musique/volume (STOCKÉ, consommé 8.4 — DETAILS §3) ─────────────────────────────
+
+describe("SettingsForm — son/musique/volume (STOCKÉ seulement, contrat 8.3, moteur audio 8.4)", () => {
+  it("reflète les réglages persistés : bruitages/musique ON, volume affiché", () => {
+    renderForm();
+    expect(screen.getByRole("switch", { name: s.sound.soundToggle })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("switch", { name: s.sound.musicToggle })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("combobox", { name: s.sound.volumeLabel })).toHaveValue("70");
+  });
+
+  it("désactiver les bruitages ⇒ saveSettingsAction({soundEnabled:false})", () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("switch", { name: s.sound.soundToggle }));
+    expect(saveMock).toHaveBeenCalledWith({ soundEnabled: false });
+    expect(screen.getByRole("switch", { name: s.sound.soundToggle })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+  });
+
+  it("réactiver les bruitages (persistés OFF) ⇒ saveSettingsAction({soundEnabled:true})", () => {
+    renderForm({ ...SETTINGS, soundEnabled: false });
+    fireEvent.click(screen.getByRole("switch", { name: s.sound.soundToggle }));
+    expect(saveMock).toHaveBeenCalledWith({ soundEnabled: true });
+  });
+
+  it("désactiver la musique ⇒ saveSettingsAction({musicEnabled:false}) — indépendant des bruitages", () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("switch", { name: s.sound.musicToggle }));
+    expect(saveMock).toHaveBeenCalledWith({ musicEnabled: false });
+    // Les bruitages restent inchangés (pas d'appel couplé).
+    expect(saveMock).not.toHaveBeenCalledWith({ soundEnabled: false });
+  });
+
+  it("changer le volume ⇒ saveSettingsAction({volume})", () => {
+    renderForm();
+    fireEvent.change(screen.getByRole("combobox", { name: s.sound.volumeLabel }), {
+      target: { value: "25" },
+    });
+    expect(saveMock).toHaveBeenCalledWith({ volume: 25 });
+  });
+
+  it("aucun effet audio immédiat (contrairement au thème) : pas d'appel avant la confirmation serveur", async () => {
+    renderForm();
+    fireEvent.click(screen.getByRole("switch", { name: s.sound.soundToggle }));
+    // Le seul effet synchrone est l'état visuel du switch — aucune API audio/DOM n'est touchée
+    // (contrat 8.3 : STOCKÉ seulement, le moteur audio est 8.4). La confirmation vient du serveur.
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(s.saved));
   });
 });
 
@@ -329,11 +392,12 @@ describe("SettingsForm — contraste WCAG résolu (tous glyphes rendus, aucune o
 
   it("aucun bouton (segment/switch/retour) ne dilue son texte par une `opacity` (rétro #226)", () => {
     renderForm({ ...SETTINGS, screenTimeHardLockEnabled: true });
-    // Tous les boutons stylés de l'écran : segments (thème×3 + mondes×2), switch, retour.
+    // Tous les boutons stylés de l'écran : segments (thème×3 + mondes×2), switches (verrou dur +
+    // son + musique, story 8.3), retour.
     const buttons = screen.getAllByRole("button");
-    const switchEl = screen.getByRole("switch", { name: s.screenTime.hardLockToggle });
+    const switches = screen.getAllByRole("switch");
     const back = screen.getByRole("link", { name: s.back });
-    for (const el of [...buttons, switchEl, back]) {
+    for (const el of [...buttons, ...switches, back]) {
       const opacity = el.style.opacity === "" ? 1 : Number(el.style.opacity);
       expect(opacity).toBe(1); // texte plein-alpha → le contraste résolu ci-dessus est le pixel réel
     }

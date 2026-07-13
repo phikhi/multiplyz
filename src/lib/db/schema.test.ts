@@ -11,6 +11,8 @@ import {
   characters,
   collection,
   collectionKey,
+  HOUSEHOLD_SETTINGS_ID,
+  householdSettings,
   jobs,
   ledger,
   mastery,
@@ -1299,5 +1301,69 @@ describe("schéma socle_worlds (socle de secours — WORLDGEN §7, story 6.6)", 
     for (const name of ["id", "slot", "theme", "palette", "asset_refs", "prompt", "seed"]) {
       expect(info.find((c) => c.name === name)?.notnull).toBe(1);
     }
+  });
+});
+
+// ============================================================================
+// Réglages du foyer (story 7.3, DETAILS §3 ; son/musique/volume story 8.3, DETAILS §3)
+// ============================================================================
+
+describe("schéma household_settings (réglages foyer — story 7.3/8.3)", () => {
+  it("insère et relit une ligne (défauts theme=system / son+musique=true / volume=70 / updated_at)", () => {
+    const db = freshDb();
+    // Sans aucun champ optionnel (tous ont un default DB) → exerce tous les défauts, y compris
+    // les 3 colonnes son ajoutées par la migration 0015 (story 8.3).
+    db.insert(householdSettings).values({ id: HOUSEHOLD_SETTINGS_ID }).run();
+    const row = db.select().from(householdSettings).get();
+    expect(row).toMatchObject({
+      id: HOUSEHOLD_SETTINGS_ID,
+      theme: "system",
+      parentWorldValidation: false,
+      screenTimeNudgeMinutes: 20,
+      screenTimeHardLockEnabled: false,
+      screenTimeHardLockMinutes: 45,
+      soundEnabled: true,
+      musicEnabled: true,
+      volume: 70,
+    });
+    expect(row?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste son/musique désactivés et volume personnalisé (round-trip, story 8.3)", () => {
+    const db = freshDb();
+    db.insert(householdSettings)
+      .values({ id: HOUSEHOLD_SETTINGS_ID, soundEnabled: false, musicEnabled: false, volume: 30 })
+      .run();
+    const row = db.select().from(householdSettings).get();
+    expect(row).toMatchObject({ soundEnabled: false, musicEnabled: false, volume: 30 });
+  });
+
+  it("PK singleton : une seconde ligne avec le même id est rejetée", () => {
+    const db = freshDb();
+    db.insert(householdSettings).values({ id: HOUSEHOLD_SETTINGS_ID }).run();
+    expect(() =>
+      db.insert(householdSettings).values({ id: HOUSEHOLD_SETTINGS_ID, theme: "dark" }).run(),
+    ).toThrow();
+  });
+
+  // GARDE PRAGMA (doctrine anti-drift #91/#105, même patron que `recalibration_requested` 0014) :
+  // `sound_enabled`/`music_enabled`/`volume` sont des colonnes ADDITIVES (migration 0015, story 8.3)
+  // sur une table `household_settings` DÉJÀ peuplée (réglée depuis 7.3) — un default SQL rend
+  // l'ADD COLUMN sûr (jamais `ADD col NOT NULL` sans default). Effet observable : casser le default
+  // du SQL 0015 (ou passer une colonne NULLABLE en schema.ts + rebuild table) → rouge.
+  it("`sound_enabled`/`music_enabled`/`volume` sont NOT NULL DEFAULT (colonnes additives migration 0015, story 8.3)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number; dflt_value: string | null }>(
+      sql`PRAGMA table_info(household_settings)`,
+    );
+    const soundEnabled = info.find((c) => c.name === "sound_enabled");
+    const musicEnabled = info.find((c) => c.name === "music_enabled");
+    const volume = info.find((c) => c.name === "volume");
+    expect(soundEnabled?.notnull).toBe(1);
+    expect(soundEnabled?.dflt_value).toBe("true");
+    expect(musicEnabled?.notnull).toBe(1);
+    expect(musicEnabled?.dflt_value).toBe("true");
+    expect(volume?.notnull).toBe(1);
+    expect(volume?.dflt_value).toBe("70");
   });
 });

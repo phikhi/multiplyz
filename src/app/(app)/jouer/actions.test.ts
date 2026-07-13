@@ -58,13 +58,16 @@ const FAKE_REGULARITY_CONFIG = {
   respectWindowMinMinutes: 15,
   respectWindowMaxMinutes: 20,
 };
-/** Réglages foyer de test (story 7.3) — verrou dur DÉSACTIVÉ par défaut (opt-in). */
+/** Réglages foyer de test (story 7.3 ; son/musique/volume story 8.3) — verrou dur DÉSACTIVÉ par défaut (opt-in). */
 const FAKE_HOUSEHOLD_SETTINGS = {
   theme: "system" as const,
   parentWorldValidation: false,
   screenTimeNudgeMinutes: 20,
   screenTimeHardLockEnabled: false,
   screenTimeHardLockMinutes: 45,
+  soundEnabled: true,
+  musicEnabled: true,
+  volume: 70,
 };
 
 vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn() }));
