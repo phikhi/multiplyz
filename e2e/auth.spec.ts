@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
 import { BRAND_NAME } from "../src/config/brand";
@@ -775,9 +775,16 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     // ---------- DESKTOP (1280×800) : disposition ACTUELLE préservée, pas de régression ----------
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.waitForFunction(
-      () => document.querySelectorAll('[role="group"] button').length === 4,
-    );
+    // Scopé au groupe QCM PRÉCIS (aria-label) — jamais `[role="group"] button` document-wide
+    // (fragile dès qu'un AUTRE `role="group"` porte des boutons ailleurs sur l'écran, ex. le
+    // quick-mute enfant `role="group"` son/musique, story 8.6 #282 : ce sweep-fix garde le compte
+    // QCM correct sans dépendre du nombre total de groupes présents sur la page).
+    await page.waitForFunction((label) => {
+      const group = [...document.querySelectorAll('[role="group"]')].find(
+        (g) => g.getAttribute("aria-label") === label,
+      );
+      return group !== undefined && group.querySelectorAll("button").length === 4;
+    }, strings.play.question.choicesLabel);
     const desktopQcm = await readQcmGeometry();
     expect(desktopQcm).not.toBeNull();
     expect(new Set(desktopQcm!.map((r) => r.top)).size).toBe(2); // 2 lignes
@@ -793,9 +800,16 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     // ---------- TABLETTE (834×1194, iPad Air portrait) : disposition ACTUELLE préservée ----------
     await page.setViewportSize({ width: 834, height: 1194 });
-    await page.waitForFunction(
-      () => document.querySelectorAll('[role="group"] button').length === 4,
-    );
+    // Scopé au groupe QCM PRÉCIS (aria-label) — jamais `[role="group"] button` document-wide
+    // (fragile dès qu'un AUTRE `role="group"` porte des boutons ailleurs sur l'écran, ex. le
+    // quick-mute enfant `role="group"` son/musique, story 8.6 #282 : ce sweep-fix garde le compte
+    // QCM correct sans dépendre du nombre total de groupes présents sur la page).
+    await page.waitForFunction((label) => {
+      const group = [...document.querySelectorAll('[role="group"]')].find(
+        (g) => g.getAttribute("aria-label") === label,
+      );
+      return group !== undefined && group.querySelectorAll("button").length === 4;
+    }, strings.play.question.choicesLabel);
     const tabletQcm = await readQcmGeometry();
     expect(tabletQcm).not.toBeNull();
     expect(new Set(tabletQcm!.map((r) => r.top)).size).toBe(2);
@@ -905,6 +919,82 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(logoutBottomFeedback!).toBeLessThanOrEqual(feedbackBar!.barTop);
 
     await page.screenshot({ path: "docs/captures/254-jeu-mobile-feedback.png", fullPage: true });
+  });
+
+  test("quick-mute enfant NO-PIN in-game (story 8.6, #282, DETAILS §3, ADR 0017) : visible, bascule IMMÉDIATE en session sans reload (capture)", async ({
+    page,
+  }) => {
+    // N'envoie AUCUNE réponse (jamais `submitAttemptAction`) → zéro impact sur la progression
+    // laissée pour le test « carte du monde » suivant (même prudence que le test « reflow
+    // responsive » ci-dessus).
+    const sq = strings.play.soundQuickMute;
+    await page.goto("/");
+    await page.getByRole("button", { name: profileLabel }).click();
+    await enterPin(page, "1234");
+    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page.getByRole("progressbar")).toBeVisible();
+
+    const group = page.getByRole("group", { name: sq.legend });
+    await expect(group).toBeVisible();
+    const switches = group.getByRole("switch");
+    await expect(switches).toHaveCount(2);
+    const soundSwitch = switches.first();
+
+    // Non-occlusion EMPIRIQUE (jamais seulement raisonnée, #190) : `SoundQuickMute` est rendu EN
+    // FLUX (aucun `position`), premier des 2 derniers frères de `<main>` (`LogoutButton` suit
+    // juste après, cf. `PlayScreen.tsx`) — non-occlusion STRUCTURELLE (CLAUDE.md, extension
+    // #170/#190/#278), vérifiée ici par une VRAIE géométrie de navigateur : les 2 contrôles ne se
+    // chevauchent PAS verticalement et sont tous deux dans le viewport.
+    const quickMuteBox = await group.boundingBox();
+    const logoutBox = await page.getByRole("button", { name: strings.play.logout }).boundingBox();
+    expect(quickMuteBox).not.toBeNull();
+    expect(logoutBox).not.toBeNull();
+    expect(quickMuteBox!.y + quickMuteBox!.height).toBeLessThanOrEqual(logoutBox!.y + 1);
+    const viewport = page.viewportSize();
+    expect(viewport).not.toBeNull();
+    expect(quickMuteBox!.y).toBeGreaterThanOrEqual(0);
+    expect(quickMuteBox!.y + quickMuteBox!.height).toBeLessThanOrEqual(viewport!.height);
+
+    await page.screenshot({ path: "docs/captures/282-quickmute.png", fullPage: true });
+
+    // MUTATION-PROOF (in-session live-sync, AC #282) : la question affichée reste IDENTIQUE (aucun
+    // reload/re-fetch de niveau) alors que l'état bascule IMMÉDIATEMENT — preuve runtime, en VRAI
+    // navigateur, que le quick-mute ne requiert PAS de rechargement de `/jouer` (contrairement au
+    // contrat 8.4 initial « prochain chargement de page », désormais réservé au réglage parent).
+    //
+    // `clickAndAwaitPersist` (pas un simple `.click()`) : la persistance serveur est
+    // fire-and-forget côté client (`void setChildSoundEnabledAction(...)`, no-fail — l'AFFICHAGE
+    // ne dépend JAMAIS de cette promesse). Ce test ENCHAÎNE 2 bascules sur le MÊME foyer
+    // single-tenant partagé par TOUTE la suite E2E (#31/#42) — sans attendre le round-trip réseau
+    // entre les 2 clics, les 2 écritures peuvent arriver au serveur dans un ordre différent de
+    // celui des clics (mêmes conditions localhost, connexions concurrentes possibles), laissant le
+    // foyer dans l'état INVERSE de celui attendu par les tests SUIVANTS (ex. « réglages parent »,
+    // qui présume `soundEnabled: true`). On attend donc explicitement la réponse serveur avant le
+    // clic suivant — élimine la course SANS changer le contrat produit (l'affichage reste immédiat,
+    // seul CE test attend, pour laisser le foyer partagé propre pour la suite).
+    async function clickAndAwaitPersist(locator: Locator) {
+      const responsePromise = page.waitForResponse(
+        (resp) => resp.request().method() === "POST" && resp.status() === 200,
+      );
+      await locator.click();
+      await responsePromise;
+    }
+
+    const equationBefore = await readEquation(page);
+    const before = await soundSwitch.getAttribute("aria-checked");
+    await clickAndAwaitPersist(soundSwitch);
+    const after = await soundSwitch.getAttribute("aria-checked");
+    expect(after).not.toBe(before);
+    await expect(page).toHaveURL(/\/jouer$/);
+    // Capture de l'état BASCULÉ (glyphe/couleur distincts, pixel-look des 2 états — pas
+    // seulement celui par défaut, CLAUDE.md « auditer TOUS les glyphes rendus »).
+    await page.screenshot({ path: "docs/captures/282-quickmute-toggled.png", fullPage: true });
+    expect(await readEquation(page)).toBe(equationBefore);
+
+    // Bascule à nouveau (bidirectionnel — pas un aller simple) — restaure le foyer partagé pour
+    // les tests suivants (cf. commentaire `clickAndAwaitPersist` ci-dessus).
+    await clickAndAwaitPersist(soundSwitch);
+    expect(await soundSwitch.getAttribute("aria-checked")).toBe(before);
   });
 
   test("carte du monde → nœud 0 COMPLÉTÉ (boucle jouer→résultats→carte, #136), suivant courant (capture)", async ({

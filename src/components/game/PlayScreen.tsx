@@ -1,15 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { strings } from "@/strings";
 import { LogoutButton } from "@/components/LogoutButton";
 import { QuestionCard } from "@/components/game/QuestionCard";
 import { FeedbackPanel } from "@/components/game/FeedbackPanel";
 import { ResultsScreen } from "@/components/game/ResultsScreen";
+import { SoundQuickMute } from "@/components/game/SoundQuickMute";
 import {
   diagnosticPlanAction,
   finishLevelAction,
   seedDiagnosticAction,
+  setChildMusicEnabledAction,
+  setChildSoundEnabledAction,
   startLevelAction,
   submitAttemptAction,
 } from "@/app/(app)/jouer/actions";
@@ -31,6 +34,10 @@ import {
 import { useIsPhone } from "@/lib/responsive/use-is-phone";
 import { SoundProvider, useSound } from "@/lib/sound/SoundProvider";
 import { DEFAULT_SOUND_SETTINGS, type SoundSettings } from "@/lib/sound/settings";
+import {
+  SoundSettingsControlProvider,
+  type SoundSettingsControl,
+} from "@/lib/sound/sound-settings-control";
 import { resolveAnswerSfx } from "@/lib/sound/juice";
 import { SOUND_COMBO_THRESHOLD } from "@/lib/sound/config";
 
@@ -121,15 +128,54 @@ const FALLBACK_STAR_THRESHOLDS: EngineConfig["starThresholds"] = [0.6, 0.85, 1];
  * ⇄ results`) pour que la musique de fond survive naturellement aux changements d'écran sans
  * redémarrage parasite — le moteur son vit dans `engineRef` de `SoundProvider`, indépendant du
  * `screen.kind` géré par `PlayScreenInner`. `sound` optionnel (défaut `DEFAULT_SOUND_SETTINGS`) :
- * en production `PlayPage` (serveur) fournit TOUJOURS la valeur réelle du foyer
+ * en production `PlayPage` (serveur) fournit la valeur **initiale** réelle du foyer
  * (`pickSoundSettings(readHouseholdSettings(...))`) ; le défaut ne sert qu'aux tests existants
  * qui montent `<PlayScreen />` sans se soucier du son (LEARNINGS « wiring minimal »).
+ *
+ * **État EN SESSION (story 8.6, #282)** : `sound` n'est plus qu'une valeur d'AMORÇAGE — `settings`
+ * est un `useState` CLIENT (initialisé depuis `sound`) que le quick-mute enfant
+ * (`SoundQuickMute`, `SoundSettingsControlProvider` ci-dessous) met à jour OPTIMISTEMENT au clic,
+ * SANS reload de `/jouer` (contrairement au contrat 8.4 initial « pas de live-sync, prochain
+ * chargement de page », désormais réservé au réglage **parent** via l'écran Réglages — le
+ * quick-mute enfant, lui, doit honorer DETAILS §3 « muter VITE »). `settings` redescend à la fois
+ * vers `SoundProvider` (moteur — coupe/relance EN SESSION, cf. JSDoc `SoundProvider.tsx`) et vers
+ * `SoundSettingsControlProvider` (UI de contrôle, `SoundQuickMute`) — UN SEUL état, deux
+ * consommateurs, jamais de doublon. La persistance serveur (`setChildSoundEnabledAction`/
+ * `setChildMusicEnabledAction`, narrow, no-PIN) est fire-and-forget (no-fail : une erreur réseau
+ * ne bloque jamais l'enfant, l'état optimiste local reste la source d'affichage immédiate).
  */
 export function PlayScreen({ sound = DEFAULT_SOUND_SETTINGS }: { readonly sound?: SoundSettings }) {
+  const [settings, setSettings] = useState<SoundSettings>(sound);
+
+  const setSoundEnabled = useCallback((enabled: boolean) => {
+    setSettings((prev) => ({ ...prev, soundEnabled: enabled }));
+    // Fire-and-forget (no-fail, même patron que `submitAttemptAction`) : l'affichage/l'effet
+    // audio EN SESSION ne dépendent QUE de l'état client optimiste ci-dessus, jamais de cette
+    // promesse. Persistance narrow — cf. JSDoc `setChildSoundEnabledAction`.
+    void setChildSoundEnabledAction(enabled);
+  }, []);
+
+  const setMusicEnabled = useCallback((enabled: boolean) => {
+    setSettings((prev) => ({ ...prev, musicEnabled: enabled }));
+    void setChildMusicEnabledAction(enabled);
+  }, []);
+
+  const soundControl = useMemo<SoundSettingsControl>(
+    () => ({
+      soundEnabled: settings.soundEnabled,
+      musicEnabled: settings.musicEnabled,
+      setSoundEnabled,
+      setMusicEnabled,
+    }),
+    [settings.soundEnabled, settings.musicEnabled, setSoundEnabled, setMusicEnabled],
+  );
+
   return (
-    <SoundProvider settings={sound}>
-      <PlayScreenInner />
-    </SoundProvider>
+    <SoundSettingsControlProvider value={soundControl}>
+      <SoundProvider settings={settings}>
+        <PlayScreenInner />
+      </SoundProvider>
+    </SoundSettingsControlProvider>
   );
 }
 
@@ -492,6 +538,13 @@ function PlayingGame({
           onRetry={handleRetry}
         />
       )}
+      {/* Quick-mute enfant NO-PIN (story 8.6, #282, DETAILS §3) — placement « in-game » : SEUL
+          écran où `SoundQuickMute` est monté (musique de fond EN BOUCLE + SFX joués ICI, cf.
+          `useEffect(playMusic("play"))` ci-dessous ; `ResultsScreen` ne joue qu'un SFX ponctuel au
+          montage — déjà terminé avant qu'un clic n'ait pu l'atteindre, donc scope volontairement
+          resserré à cet écran). Rendu EN FLUX à côté de `LogoutButton` (même patron, non-occlusion
+          structurelle). */}
+      <SoundQuickMute />
       <LogoutButton />
     </main>
   );

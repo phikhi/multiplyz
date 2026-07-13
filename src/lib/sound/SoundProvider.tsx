@@ -42,9 +42,20 @@ export function useSound(): SoundApi {
  * `reducedMotionRef`) plutôt qu'inclus dans les deps de `useCallback` : `playSfx`/`playMusic`/
  * `stopMusic` restent des références STABLES (deps vides) — sûres à mettre dans un tableau de
  * deps d'effet consommateur (`PlayingGame`) sans provoquer de ré-exécutions parasites, tout en
- * lisant toujours l'état COURANT (jamais une closure périmée). `settings` ne change pas en
- * pratique pendant la vie de la page (pas de live-sync parent→enfant, contrat identique au
- * thème, `app/layout.tsx`) mais ce patron reste correct si ça change un jour.
+ * lisant toujours l'état COURANT (jamais une closure périmée).
+ *
+ * **Live-sync EN SESSION (story 8.6, #282, DETAILS §3 « muter vite »)** : contrairement au
+ * contrat initial 8.4 (`settings` figé pour la vie de la page, même fraîcheur que le thème), le
+ * QUICK-MUTE enfant (`SoundQuickMute`, câblé par `PlayScreen`) fait désormais VARIER `settings`
+ * en session (state React, pas juste une prop serveur figée) — CE composant doit donc réagir
+ * activement à une TRANSITION de `musicEnabled`, pas seulement rafraîchir sa ref pour le PROCHAIN
+ * appel explicite : OFF coupe IMMÉDIATEMENT une piste déjà lancée (`engine.stopMusic()`, sans
+ * attendre un nouveau `playMusic`) ; ON relance la DERNIÈRE piste **demandée** par un consommateur
+ * (`desiredMusicKeyRef`, jamais une piste arbitraire — `null` si aucun `playMusic` n'a encore été
+ * appelé cette session, auquel cas on ne relance rien). `soundEnabled` n'a **pas** besoin d'un
+ * traitement symétrique : les SFX sont des tirs ponctuels (jamais de boucle DÉJÀ en cours à
+ * interrompre) — la garde `settingsRef` existante au CALL SITE de `playSfx` suffit à silencer
+ * tout futur SFX dès le prochain appel, sans mécanisme actif supplémentaire.
  */
 export function SoundProvider({
   settings,
@@ -62,8 +73,27 @@ export function SoundProvider({
   // échappe. L'effet s'exécute juste après le commit, avant tout événement/`useEffect` enfant
   // qui pourrait appeler `playSfx`/`playMusic` — aucune closure périmée observable en pratique.
   const settingsRef = useRef(settings);
+  // Dernière piste musicale DEMANDÉE par un consommateur (`playMusic`), survit à un mute/unmute —
+  // permet à la transition `musicEnabled` OFF→ON (story 8.6) de reprendre EXACTEMENT le morceau en
+  // cours plutôt qu'une piste arbitraire. `null` = aucun `playMusic` appelé cette session (mount
+  // initial, ou après `stopMusic` explicite) → la transition ON ne relance rien.
+  const desiredMusicKeyRef = useRef<MusicKey | null>(null);
   useEffect(() => {
+    // TRANSITION (valeur précédente vs nouvelle), pas juste la valeur courante — évite de piloter
+    // le moteur à chaque changement de `settings` non pertinent (ex. un `volume` qui bougerait un
+    // jour) ; seul un franchissement RÉEL de `musicEnabled` déclenche un appel moteur actif.
+    const previousMusicEnabled = settingsRef.current.musicEnabled;
     settingsRef.current = settings;
+    if (previousMusicEnabled !== settings.musicEnabled) {
+      if (!settings.musicEnabled) {
+        engineRef.current?.stopMusic();
+      } else if (desiredMusicKeyRef.current !== null) {
+        engineRef.current?.playMusic(desiredMusicKeyRef.current, {
+          musicEnabled: true,
+          volume: settings.volume,
+        });
+      }
+    }
   }, [settings]);
 
   const reducedMotion = usePrefersReducedMotion();
@@ -81,6 +111,7 @@ export function SoundProvider({
   }, []);
 
   const playMusic = useCallback((key: MusicKey) => {
+    desiredMusicKeyRef.current = key;
     engineRef.current?.playMusic(key, {
       musicEnabled: settingsRef.current.musicEnabled,
       volume: settingsRef.current.volume,
@@ -88,6 +119,7 @@ export function SoundProvider({
   }, []);
 
   const stopMusic = useCallback(() => {
+    desiredMusicKeyRef.current = null;
     engineRef.current?.stopMusic();
   }, []);
 

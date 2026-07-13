@@ -27,7 +27,7 @@ import { baseNodeTypeAt } from "@/lib/game/map";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
 import { evaluateScreenTimeLock } from "@/lib/parent/screen-time-lock";
-import { readHouseholdSettings } from "@/lib/parent/settings";
+import { readHouseholdSettings, writeHouseholdSettings } from "@/lib/parent/settings";
 
 /**
  * Server actions du jeu (ENGINE §3/§4/§10, SYNC §1/§2). Adaptateurs **minces** au-dessus
@@ -346,4 +346,60 @@ export async function unlockedWorldCountAction(): Promise<UnlockedWorldCountActi
   }
   const count = getUnlockedWorldCount(getDb(), profileId, getMapConfig().levelsPerWorld);
   return { count };
+}
+
+// ============================================================================
+// Quick-mute enfant NO-PIN (story 8.6, #282, DETAILS §3, ADR 0017)
+// ============================================================================
+
+/** Résultat neutre : succès, ou refus (session enfant absente — jamais de 500/fuite). */
+export interface ChildQuickMuteActionResult {
+  readonly ok: boolean;
+}
+
+/**
+ * **Quick-mute enfant NO-PIN** (story 8.6, #282, DETAILS §3 « accès enfant, rapide, sans PIN :
+ * son on/off » ; ADR 0017 « une seule valeur `household_settings`, parent = source de vérité,
+ * surfacée à 2 endroits »). Ces DEUX actions (`setChildSoundEnabledAction`/
+ * `setChildMusicEnabledAction`) sont la surface **NARROW** dédiée au contrôle enfant — **jamais**
+ * `saveSettingsAction` (parent, PIN, `(espace)/reglages/actions.ts`), qui accepte un patch
+ * ARBITRAIRE (`HouseholdSettingsPatch`) et reste réservée à une session **parent**.
+ *
+ * **SÉCURITÉ (SCOPING NARROW, AC #282)** : chaque action construit elle-même un patch **littéral
+ * à 1 CHAMP** (`{ soundEnabled: … }` / `{ musicEnabled: … }`) — jamais un patch reçu du client.
+ * Le paramètre `enabled` est un booléen isolé (pas un objet), donc **aucune escalade de
+ * privilège n'est possible** même avec un payload hostile côté transport : il n'existe
+ * structurellement AUCUN moyen d'atteindre `volume`/`theme`/`screenTime*`/profils/PIN via ces
+ * deux fonctions, contrairement à `saveSettingsAction` (patch large côté PARENT, jamais exposé
+ * ici). `writeHouseholdSettings` (même moteur d'upsert/validation que l'écran parent, source de
+ * vérité UNIQUE, ADR 0017) reste réutilisé — pas de doublon d'état — mais **jamais** avec un
+ * patch fourni par l'appelant.
+ *
+ * **NO-PIN, gardé par session ENFANT** (`getCurrentChildProfileId`, même garde que le reste de ce
+ * fichier) — **c'est le point** : DETAILS §3 exige un accès enfant SANS PIN pour muter vite dans
+ * une pièce calme. Non authentifié (aucune session enfant valide) → `{ ok: false }` neutre,
+ * **aucune écriture** (même contrat que `submitAttemptAction`/`finishLevelAction` ci-dessus).
+ * Idempotent (upsert `onConflictDoUpdate` sur la ligne singleton, `writeHouseholdSettings`).
+ */
+export async function setChildSoundEnabledAction(
+  enabled: boolean,
+): Promise<ChildQuickMuteActionResult> {
+  const profileId = await getCurrentChildProfileId();
+  if (profileId === null) {
+    return { ok: false };
+  }
+  writeHouseholdSettings(getDb(), { soundEnabled: enabled === true });
+  return { ok: true };
+}
+
+/** Voir `setChildSoundEnabledAction` — même contrat SÉCU/no-PIN, champ `musicEnabled` seul. */
+export async function setChildMusicEnabledAction(
+  enabled: boolean,
+): Promise<ChildQuickMuteActionResult> {
+  const profileId = await getCurrentChildProfileId();
+  if (profileId === null) {
+    return { ok: false };
+  }
+  writeHouseholdSettings(getDb(), { musicEnabled: enabled === true });
+  return { ok: true };
 }
