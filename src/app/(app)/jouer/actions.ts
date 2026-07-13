@@ -59,7 +59,7 @@ export interface StartLevelActionResult {
   readonly level: Level | null;
   readonly starThresholds: EngineConfig["starThresholds"];
   /**
-   * **Verrou dur temps d'écran** (DETAILS §27, story 7.8 #229) : `true` si l'entrée dans ce
+   * **Verrou dur temps d'écran** (DETAILS §3 (Temps d'écran), story 7.8 #229) : `true` si l'entrée dans ce
    * NOUVEAU niveau est bloquée (parent l'a activé ET le temps joué aujourd'hui a atteint le
    * seuil ⚙️, `lib/parent/screen-time-lock.ts`). `level` est alors `null` sans qu'il s'agisse
    * d'une erreur d'authentification/réseau — le client (`PlayScreen`) distingue ce cas de
@@ -76,7 +76,7 @@ export interface StartLevelActionResult {
  * démarrage). `level: null` si pas de session enfant valide (`starThresholds` renvoyé
  * quand même — valeur ⚙️ publique, pas liée à l'auth — pour un contrat de retour stable).
  *
- * **Verrou dur temps d'écran (DETAILS §27, story 7.8 #229)** : AVANT toute résolution de
+ * **Verrou dur temps d'écran (DETAILS §3 (Temps d'écran), story 7.8 #229)** : AVANT toute résolution de
  * cible/niveau, la garde `evaluateScreenTimeLock` (foyer + temps joué aujourd'hui dérivé de
  * `lib/parent/regularity.ts`, 7.4) tranche si l'entrée dans un NOUVEAU niveau doit être
  * bloquée. Court-circuite au cas commun (verrou désactivé, défaut) sans lecture DB
@@ -102,7 +102,7 @@ export async function startLevelAction(): Promise<StartLevelActionResult> {
   const db = getDb();
   const mapConfig = getMapConfig();
 
-  // Verrou dur temps d'écran (DETAILS §27, story 7.8 #229) : bloque l'ENTRÉE dans ce nouveau
+  // Verrou dur temps d'écran (DETAILS §3 (Temps d'écran), story 7.8 #229) : bloque l'ENTRÉE dans ce nouveau
   // niveau si le parent l'a activé ET le temps joué aujourd'hui a atteint le seuil ⚙️. Posé
   // AVANT toute résolution de cible — la partie en cours n'est jamais concernée (no-fail).
   const householdSettings = readHouseholdSettings(db);

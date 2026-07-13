@@ -874,7 +874,7 @@ export const householdSettings = sqliteTable("household_settings", {
   /** Préférence de thème (`system` | `light` | `dark`) — AGIT app-wide (DETAILS §3). Défaut `system`. */
   theme: text("theme").$type<ThemePreference>().notNull().default("system"),
   /**
-   * **Validation des mondes** (DETAILS §30, WORLDGEN §6) : `true` = approbation parent avant
+   * **Validation des mondes** (DETAILS §3 (Validation des mondes), WORLDGEN §6) : `true` = approbation parent avant
    * affichage (monde QA-validé reste `buffered`), `false` = auto (`active`). **AGIT** : lu par le
    * worker (câblage du ⚙️ `qa.parentValidationEnabled` 6.5). Défaut `false` (auto, ADR 0008 « aucune
    * sur-censure »). Bool SQLite (0/1).
@@ -884,11 +884,11 @@ export const householdSettings = sqliteTable("household_settings", {
     .default(false),
   /**
    * **Temps d'écran — nudge doux** (min) : durée de session avant le nudge « fais une pause »
-   * (DETAILS §27 « 15-20 min », PRODUCT §1.4). **STOCKÉ seulement** (consommé en 7.8 #229). Défaut 20.
+   * (DETAILS §3 (Temps d'écran) « 15-20 min », PRODUCT §1.4). **STOCKÉ seulement** (consommé en 7.8 #229). Défaut 20.
    */
   screenTimeNudgeMinutes: integer("screen_time_nudge_minutes").notNull().default(20),
   /**
-   * **Verrou dur optionnel** activé ? (DETAILS §27 « + verrou dur optionnel »). **STOCKÉ seulement**
+   * **Verrou dur optionnel** activé ? (DETAILS §3 (Temps d'écran) « + verrou dur optionnel »). **STOCKÉ seulement**
    * (l'enforcement = 7.8 #229). Défaut `false` (opt-in parent). Bool SQLite (0/1).
    */
   screenTimeHardLockEnabled: integer("screen_time_hard_lock_enabled", { mode: "boolean" })
@@ -896,7 +896,7 @@ export const householdSettings = sqliteTable("household_settings", {
     .default(false),
   /**
    * **Seuil du verrou dur** ⚙️ (min/jour) : au-delà, l'app se verrouille en douceur jusqu'au
-   * lendemain (DETAILS §27). **STOCKÉ + validé seulement** (borne ⚙️ `parentControls`) — **jamais
+   * lendemain (DETAILS §3 (Temps d'écran)). **STOCKÉ + validé seulement** (borne ⚙️ `parentControls`) — **jamais
    * enforced en 7.3** (consommé en 7.8 #229). Défaut 45.
    */
   screenTimeHardLockMinutes: integer("screen_time_hard_lock_minutes").notNull().default(45),

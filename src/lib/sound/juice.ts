@@ -45,6 +45,15 @@ export function resolveAnswerSfx(
   if (phase === "retry") {
     return { comboCount: 0, sfx: null };
   }
+  // Garde `isRetrying` : DÉFENSIVE dans le câblage composite actuel (dans `PlayScreen.tsx`, la
+  // branche `phase === "retry"` ci-dessus a déjà remis `comboRef` à 0 AVANT le re-essai, donc
+  // `comboCountBefore` vaut toujours 0 quand `isRetrying === true` → le repli sortirait déjà
+  // "correct"). MAIS elle reste NÉCESSAIRE et MUTATION-PROUVÉE au niveau de la fonction pure : son
+  // contrat isolé est « un re-essai n'ouvre jamais un combo, quel que soit `comboCountBefore` » —
+  // `juice.test.ts` (« MUTATION-PROOF (garde isRetrying) », `comboCountBefore > seuil`) rougit si
+  // on la retire. Ne pas supprimer (elle change la sortie de la fonction pure). Honnêteté #164/#206
+  // (story hardening #289) : la mutation-preuve vit ICI au niveau unitaire, PAS dans le test
+  // composite `PlayScreen.test.tsx` (que le SCOPE `phase="retry"` épingle indépendamment).
   if (isRetrying) {
     return { comboCount: 0, sfx: "correct" };
   }

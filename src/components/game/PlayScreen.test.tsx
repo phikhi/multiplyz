@@ -185,7 +185,7 @@ describe("PlayScreen — chargement", () => {
   });
 });
 
-describe("PlayScreen — verrou dur temps d'écran (story 7.8 #229, DETAILS §27)", () => {
+describe("PlayScreen — verrou dur temps d'écran (story 7.8 #229, DETAILS §3 (Temps d'écran))", () => {
   // `level: null` est renvoyé à la fois par le refus d'auth ET par le verrou — la garde
   // discrimine sur `locked`, jamais sur `level === null` seul (les deux tests ci-dessus/dessous
   // prouvent les DEUX branches restent distinctes : rouge si `locked` était ignoré).
@@ -872,7 +872,7 @@ describe("PlayScreen — son : SFX bonne réponse/combo + musique de fond (story
     expect(sfxCalls).toEqual(["correct", "correct", "combo"]);
   });
 
-  it("MUTATION-PROOF (garde isRetrying) : une série cassée par un re-essai NE rejoue PAS 'combo' — retombe à 'correct' même après une série antérieure", async () => {
+  it("comportement bout-en-bout : une série cassée par un re-essai NE rejoue PAS 'combo' — retombe à 'correct'. Épinglé par le SCOPE phase='retry' (remet comboRef à 0 AVANT le re-essai) + la garde isRetrying ENSEMBLE, PAS la garde en isolation — celle-ci est mutation-prouvée au niveau unitaire (juice.test.ts, #206/#164)", async () => {
     startLevelMock.mockResolvedValue({
       level: {
         questions: [
@@ -925,7 +925,12 @@ describe("PlayScreen — son : SFX bonne réponse/combo + musique de fond (story
     fireEvent.click(screen.getByRole("button", { name: strings.play.question.submit }));
     await waitFor(() => expect(soundMocks.playSfx).toHaveBeenCalled());
 
-    // Sans la garde `isRetrying`, la série (comboCountBefore > seuil) rejouerait "combo" ici.
+    // Comportement bout-en-bout : la série ne rejoue PAS "combo" après un re-essai. NB (honnêteté
+    // #164/#206) : ce qui épingle ici le résultat, c'est le SCOPE `phase="retry"` — il a DÉJÀ remis
+    // `comboRef` à 0 (`PlayScreen.tsx`) AVANT ce re-essai, donc `comboCountBefore=0` et la branche de
+    // repli sort "correct" que la garde `isRetrying` soit présente OU mutée (QA #289 : muter
+    // `juice.ts:48-50` laisse ce test VERT). La garde `isRetrying` en ISOLATION est mutation-prouvée
+    // au niveau unitaire (`juice.test.ts` — « MUTATION-PROOF (garde isRetrying) »), jamais ici.
     expect(soundMocks.playSfx).toHaveBeenCalledWith("correct");
     expect(soundMocks.playSfx).not.toHaveBeenCalledWith("combo");
   });

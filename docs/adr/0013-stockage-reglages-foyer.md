@@ -40,7 +40,7 @@ Migration `0013` = `CREATE TABLE household_settings` (**table neuve** → `NOT N
 ## Alternatives
 
 - **Cookie de thème** (mirroir client) pour éviter un layout dynamique : écarté — introduit une 2ᵉ source (DB↔cookie) à synchroniser (drift, faux-dérivé #182), alors que la lecture SQLite locale par requête est sub-ms (single-tenant).
-- **Garder `qa.parentValidationEnabled` (env) comme seule source** : écarté — le réglage doit être modifiable par le parent depuis l'UI (DETAILS §30), donc persisté et autoritaire côté DB.
+- **Garder `qa.parentValidationEnabled` (env) comme seule source** : écarté — le réglage doit être modifiable par le parent depuis l'UI (DETAILS §3 (Validation des mondes)), donc persisté et autoritaire côté DB.
 - **Retirer complètement `qa.parentValidationEnabled`** : écarté — le garder en défaut d'amorçage évite un ⚙️ mort et préserve le comportement d'un déploiement qui l'a positionné.
 
 ## Conséquences

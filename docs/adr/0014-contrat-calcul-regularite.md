@@ -57,7 +57,7 @@ les valeurs calibrables sont dans `RegularityConfig` (`src/config/server-config.
    consécutif de tout l'historique.
 
 6. **Respect des 15-20 min** = classement du temps/jour vis-à-vis d'une **fenêtre saine ⚙️**
-   (`respectWindowMinMinutes`/`respectWindowMaxMinutes`, défaut `15`/`20`, DETAILS §27) : `< min` →
+   (`respectWindowMinMinutes`/`respectWindowMaxMinutes`, défaut `15`/`20`, DETAILS §3 (Temps d'écran)) : `< min` →
    **en-dessous** ; `> max` → **au-dessus** ; **bornes incluses** entre les deux → **dans la fenêtre**.
 
 **Ces définitions sont DÉRIVÉES et ne changent AUCUNE décision ENGINE/PLAN/SYNC verrouillée.** Elles
@@ -65,7 +65,7 @@ ne pilotent **que** l'affichage parent (0 écriture, 0 impact runtime enfant). E
 **respect des 15-20 min et le temps/jour sont un repère de REPORTING** — la story 7.4 **n'enforce
 rien**. Le nudge de session et le verrou dur de temps d'écran (`ParentControlsConfig`, stockés par
 foyer en 7.3) et leur **enforcement** (story 7.8 #229) sont un **axe distinct** : la fenêtre saine de
-reporting (15-20, fixe DETAILS §27) reste **indépendante** du réglage de temps d'écran du foyer.
+reporting (15-20, fixe DETAILS §3 (Temps d'écran)) reste **indépendante** du réglage de temps d'écran du foyer.
 
 ## Alternatives
 
@@ -80,7 +80,7 @@ reporting (15-20, fixe DETAILS §27) reste **indépendante** du réglage de temp
   (le contrat isole le calcul dans une fonction pure → substituable sans toucher les consommateurs).
 - **Respect indexé sur le réglage de temps d'écran du foyer (7.3)** plutôt que sur une fenêtre fixe →
   rejeté ici : le nudge foyer est un **plafond d'enforcement** (7.8), pas la **fourchette saine**
-  (15-20, DETAILS §27) que le wireframe affiche ; les coupler mélangerait reporting et enforcement.
+  (15-20, DETAILS §3 (Temps d'écran)) que le wireframe affiche ; les coupler mélangerait reporting et enforcement.
 
 ## Conséquences
 

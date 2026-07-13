@@ -2299,10 +2299,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       page.getByRole("switch", { name: settings.screenTime.hardLockToggle }),
     ).toHaveAttribute("aria-checked", "true");
 
-    // ── Son/musique/volume (story 8.3, #256) : contrat DÉCLARÉ+VALIDÉ+PERSISTÉ (STOCKÉ, moteur
-    // audio réel = story 8.4) ── Prouve : (a) les deux switches + le sélecteur de volume sont
-    // RÉELLEMENT VISIBLES (pixels + géométrie non recouverte, garde #170) ; (b) les trois valeurs
-    // persistent au reload (source de vérité serveur), comme le reste de l'écran.
+    // ── Son/musique/volume (story 8.3, #256) : contrat DÉCLARÉ+VALIDÉ+PERSISTÉ. Le moteur audio
+    // réel AGIT depuis la story 8.4 (#257) — sa lecture/coupure est testée ailleurs ; CE e2e ne
+    // vérifie que persistance + visibilité. ── Prouve : (a) les deux switches + le sélecteur de
+    // volume sont RÉELLEMENT VISIBLES (pixels + géométrie non recouverte, garde #170) ; (b) les
+    // trois valeurs persistent au reload (source de vérité serveur), comme le reste de l'écran.
     const snd = settings.sound;
     const soundSwitch = page.getByRole("switch", { name: snd.soundToggle });
     const musicSwitch = page.getByRole("switch", { name: snd.musicToggle });

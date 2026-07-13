@@ -455,9 +455,10 @@ export function SettingsForm({
     void runSave({ screenTimeHardLockMinutes: minutes });
   };
 
-  // Son/musique/volume (story 8.3) : STOCKÉ + validé seulement — même auto-save par contrôle que
-  // le reste de l'écran, mais AUCUN effet audio immédiat (contrairement au thème) tant que le
-  // moteur sonore (8.4) n'existe pas.
+  // Son/musique/volume (story 8.3) : persisté + validé par le même auto-save par contrôle que le
+  // reste de l'écran. Le moteur audio réel existe depuis la story 8.4 (#257) : ces réglages AGISSENT
+  // (gate SFX/musique + gain) et sont enforcés au **prochain chargement** de `/jouer` — même contrat
+  // de fraîcheur que le thème (pas de live-sync vers un onglet de jeu déjà ouvert). #164/#292.
   const onSoundToggle = () => {
     const next = !soundEnabled;
     setSoundEnabled(next);

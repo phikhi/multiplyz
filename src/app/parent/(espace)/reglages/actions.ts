@@ -59,7 +59,7 @@ export async function saveSettingsAction(
 }
 
 /**
- * **Arme le recalibrage** (story 7.6, DETAILS §29 « Recalibrer : relancer un mini-diagnostic »,
+ * **Arme le recalibrage** (story 7.6, DETAILS §3 (Recalibrer) « Recalibrer : relancer un mini-diagnostic »,
  * PRODUCT §3.6, ADR 0016). Pose `profiles.recalibration_requested = true` sur **le profil enfant du
  * foyer** — résolu comme `session.profileId` (le profil de la session parent EST le profil enfant/
  * propriétaire, v1 mono-profil ; même résolution que le tableau de bord `page.tsx` et

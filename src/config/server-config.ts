@@ -477,7 +477,7 @@ export interface RegularityConfig {
   streakBreakGapDays: number;
   /**
    * **Borne basse** (min) de la fenêtre saine de temps de jeu quotidien (« respect des 15-20 min »,
-   * PLAN §Espace parent :83, DETAILS §27). Un jour dont le temps mesuré est `< ce seuil` est classé
+   * PLAN §Espace parent :83, DETAILS §3 (Temps d'écran)). Un jour dont le temps mesuré est `< ce seuil` est classé
    * **en-dessous**. Défaut `15`. ≥ 1 (`parsePositiveInt`).
    */
   respectWindowMinMinutes: number;
@@ -491,7 +491,7 @@ export interface RegularityConfig {
 }
 
 /**
- * ⚙️ **Contrôles parentaux — temps d'écran** (DETAILS §27, PRODUCT §1.4, story 7.3). Source unique
+ * ⚙️ **Contrôles parentaux — temps d'écran** (DETAILS §3 (Temps d'écran), PRODUCT §1.4, story 7.3). Source unique
  * des **défauts + bornes** ⚙️ des réglages de temps d'écran que le parent calibre depuis l'espace
  * parent (persistés par foyer dans `household_settings`, `lib/parent/settings.ts`).
  *
@@ -504,13 +504,13 @@ export interface RegularityConfig {
  * `parsePositiveInt` partout (≥ 1) : une durée `0`/négative n'a pas de sens (min de session, min/jour).
  */
 export interface ParentControlsConfig {
-  /** Nudge doux — durée de session par **défaut** avant « fais une pause » (min, DETAILS §27 « 15-20 »). */
+  /** Nudge doux — durée de session par **défaut** avant « fais une pause » (min, DETAILS §3 (Temps d'écran) « 15-20 »). */
   screenTimeNudgeDefaultMinutes: number;
   /** Nudge doux — borne **min** admissible (min) — validation de `writeHouseholdSettings`. */
   screenTimeNudgeMinMinutes: number;
   /** Nudge doux — borne **max** admissible (min) — validation de `writeHouseholdSettings`. */
   screenTimeNudgeMaxMinutes: number;
-  /** Verrou dur — seuil quotidien par **défaut** (min/jour, DETAILS §27) — opt-in parent. */
+  /** Verrou dur — seuil quotidien par **défaut** (min/jour, DETAILS §3 (Temps d'écran)) — opt-in parent. */
   screenTimeHardLockDefaultMinutes: number;
   /** Verrou dur — borne **min** admissible (min/jour) — validation de `writeHouseholdSettings`. */
   screenTimeHardLockMinMinutes: number;
@@ -729,12 +729,12 @@ export const CONFIG_DEFAULTS = {
     maxDayAmplitudeMinutes: 240,
     // Série rompue dès un écart de 2 jours calendaires (jours consécutifs stricts).
     streakBreakGapDays: 2,
-    // Fenêtre saine de temps de jeu quotidien : 15-20 min (PLAN §Espace parent, DETAILS §27).
+    // Fenêtre saine de temps de jeu quotidien : 15-20 min (PLAN §Espace parent, DETAILS §3 (Temps d'écran)).
     respectWindowMinMinutes: 15,
     respectWindowMaxMinutes: 20,
   },
   parentControls: {
-    // Temps d'écran (DETAILS §27) — défauts + bornes ⚙️. STOCKÉS/validés en 7.3, ENFORCÉS en 7.8 #229.
+    // Temps d'écran (DETAILS §3 (Temps d'écran)) — défauts + bornes ⚙️. STOCKÉS/validés en 7.3, ENFORCÉS en 7.8 #229.
     // Nudge doux : défaut 20 min (fourchette 15-20), plage admissible 5..60.
     screenTimeNudgeDefaultMinutes: 20,
     screenTimeNudgeMinMinutes: 5,
@@ -1075,7 +1075,7 @@ export function loadRegularityConfig(env: Env): RegularityConfig {
 }
 
 /**
- * Bloc **contrôles parentaux** de la config (DETAILS §27, story 7.3), isolé en fonction pure (mêmes
+ * Bloc **contrôles parentaux** de la config (DETAILS §3 (Temps d'écran), story 7.3), isolé en fonction pure (mêmes
  * conventions que `loadEngineConfig`). Source unique des ⚙️ **défauts + bornes** de temps d'écran —
  * **consommés** par `lib/parent/settings.ts` (défauts d'un foyer neuf + validation de borne). Aucun
  * secret : réglages purs. `parsePositiveInt` (≥ 1) : une durée `0`/négative est invalide → défaut.
