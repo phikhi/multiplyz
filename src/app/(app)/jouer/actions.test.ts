@@ -207,7 +207,7 @@ describe("startLevelAction", () => {
     expect(options).toEqual({ size: FAKE_MAP_CONFIG.bossQuestionCount }); // 13, PAS 10
   });
 
-  // ── Verrou dur temps d'écran (story 7.8 #229, DETAILS §27) — wiring du call-site ──
+  // ── Verrou dur temps d'écran (story 7.8 #229, DETAILS §3 (Temps d'écran)) — wiring du call-site ──
   // La borne exacte (seuil atteint bloque, juste sous passe) est mutation-prouvée sur base
   // réelle dans `lib/parent/screen-time-lock.test.ts` ; ici on prouve le CÂBLAGE au call-site :
   // le résultat de `evaluateScreenTimeLock` détermine si `startLevelAction` résout/compose un

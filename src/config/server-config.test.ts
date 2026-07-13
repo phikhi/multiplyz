@@ -888,7 +888,7 @@ describe("getRegularityConfig — accès mémoïsé", () => {
   });
 });
 
-describe("loadParentControlsConfig — défauts ⚙️ temps d'écran (DETAILS §27, story 7.3)", () => {
+describe("loadParentControlsConfig — défauts ⚙️ temps d'écran (DETAILS §3 (Temps d'écran), story 7.3)", () => {
   it("applique les défauts quand l'environnement est vide", () => {
     expect(loadParentControlsConfig({})).toEqual(CONFIG_DEFAULTS.parentControls);
   });

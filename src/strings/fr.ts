@@ -196,7 +196,7 @@ export const fr = {
     /** Cas défensif « niveau vide » (structurellement improbable, ENGINE §4). */
     emptyLevel: "Pas de calcul à te proposer pour l'instant — reviens un peu plus tard !",
     /**
-     * **Verrou dur temps d'écran** (DETAILS §27, story 7.8 #229 — garde-fou bien-être **opt-in
+     * **Verrou dur temps d'écran** (DETAILS §3 (Temps d'écran), story 7.8 #229 — garde-fou bien-être **opt-in
      * parent**, jamais punitif). Affiché quand `startLevelAction` refuse l'entrée dans un
      * NOUVEAU niveau (seuil quotidien ⚙️ atteint) — la partie qui vient de se terminer n'est
      * jamais remise en cause (no-fail, ENGINE §9). Voix de Teddy, tutoiement, posture croissance
@@ -795,7 +795,7 @@ export const fr = {
       },
     },
     /**
-     * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, PRODUCT §1.4,
+     * Écran **« Réglages »** (story 7.3, DETAILS §3 (Espace parent) liste VERROUILLÉE, PRODUCT §1.4,
      * WIREFRAMES §7). Registre **neutre/vouvoiement** (COPY §5, pas la voix de Teddy). Le gabarit
      * `{min}` (minutes) est interpolé côté composant. Aucun texte en dur ailleurs.
      */
@@ -821,7 +821,7 @@ export const fr = {
         /** Option « sombre » (force le thème sombre). */
         dark: "Sombre",
       },
-      /** **Validation des mondes** (DETAILS §30, WORLDGEN §6). */
+      /** **Validation des mondes** (DETAILS §3 (Validation des mondes), WORLDGEN §6). */
       worlds: {
         /** Légende du groupe. */
         legend: "Validation des mondes",
@@ -832,7 +832,7 @@ export const fr = {
         /** Option « approbation parent » (le monde attend votre validation). */
         parent: "Votre approbation",
       },
-      /** **Temps d'écran** (DETAILS §27) — nudge doux + verrou dur optionnel. */
+      /** **Temps d'écran** (DETAILS §3 (Temps d'écran)) — nudge doux + verrou dur optionnel. */
       screenTime: {
         /** Légende du groupe. */
         legend: "Temps d'écran",
@@ -853,7 +853,7 @@ export const fr = {
         /**
          * Consigne du verrou dur. **Texte final** (story 7.8 #229 : enforcement câblé côté jeu
          * enfant — `evaluateScreenTimeLock`, `app/(app)/jouer/actions.ts`) — écho **fidèle**
-         * DETAILS §27 (« l'app se verrouille en douceur jusqu'au lendemain »). Remplace le
+         * DETAILS §3 (Temps d'écran) (« l'app se verrouille en douceur jusqu'au lendemain »). Remplace le
          * précédent « Bientôt » (7.3, réglage alors seulement stocké, jamais enforcé) : ce
          * réglage AGIT désormais réellement sur le jeu de l'enfant, la copie doit le refléter au
          * présent — un « Bientôt » resté ici après 7.8 mentirait au parent (CLAUDE.md, tell
@@ -865,31 +865,33 @@ export const fr = {
         hardLockLabel: "Limite par jour",
       },
       /**
-       * **Son & musique** (DETAILS §3 « son on/off, musique on/off, volume », story 8.3). Contrat
-       * **DÉCLARÉ + VALIDÉ + STOCKÉ seulement** — le moteur audio réel (lecture/coupure effective)
-       * est câblé en **story 8.4** (#155, même registre « Bientôt » que `screenTime.nudgeHint`
-       * avant son propre câblage 7.8 — ne PAS affirmer un effet actif tant que 8.4 n'existe pas).
+       * **Son & musique** (DETAILS §3 « son on/off, musique on/off, volume », story 8.3). Le moteur
+       * audio réel (lecture/coupure effective des bruitages + musique + volume) est câblé depuis la
+       * **story 8.4** (#257) : ces 3 réglages **AGISSENT** sur le jeu de l'enfant. La copie est donc
+       * au **présent** — même bascule « Bientôt »→présent que `screenTime.hardLockHint` après son
+       * câblage 7.8 (#229). Un « Bientôt » resté ici mentirait au parent maintenant que le réglage
+       * AGIT (CLAUDE.md, tell commentaire↔code #164 ; story hardening #292).
        */
       sound: {
         /** Légende du groupe. */
         legend: "Son & musique",
         /** Libellé du toggle des bruitages. */
         soundToggle: "Bruitages",
-        /** Consigne des bruitages — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
-        soundHint: "Bientôt : activez ou coupez les petits bruitages du jeu.",
+        /** Consigne des bruitages — présent (moteur audio câblé 8.4, #257 : le réglage AGIT). */
+        soundHint: "Activez ou coupez les petits bruitages du jeu.",
         /** Libellé du toggle de la musique. */
         musicToggle: "Musique",
-        /** Consigne de la musique — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
-        musicHint: "Bientôt : activez ou coupez la musique de fond.",
+        /** Consigne de la musique — présent (moteur audio câblé 8.4, #257 : le réglage AGIT). */
+        musicHint: "Activez ou coupez la musique de fond.",
         /** Libellé du réglage de volume. */
         volumeLabel: "Volume",
         /** Libellé accessible d'une valeur de volume (gabarit, pourcentage). */
         volumeOption: "{volume} %",
-        /** Consigne du volume — « Bientôt » (STOCKÉ seulement, consommé 8.4). */
-        volumeHint: "Bientôt : réglez le volume du son et de la musique.",
+        /** Consigne du volume — présent (moteur audio câblé 8.4, #257 : le réglage AGIT). */
+        volumeHint: "Réglez le volume du son et de la musique.",
       },
       /**
-       * **Recalibrer** (DETAILS §29 « relancer un mini-diagnostic », PRODUCT §3.6, ADR 0016).
+       * **Recalibrer** (DETAILS §3 (Recalibrer) « relancer un mini-diagnostic », PRODUCT §3.6, ADR 0016).
        * Action **à confirmer** (registre calme, jamais alarmant). Insiste sur « la progression
        * n'est jamais perdue » : la fusion est **MONOTONE** (ne relève jamais vers le bas, ADR 0016).
        */

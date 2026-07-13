@@ -3,7 +3,7 @@
 - **Statut** : accepté
 - **Type** : pedago (contrat du modèle de maîtrise) — **précise** le contrat, ne modifie **aucune** décision verrouillée
 - **Portée** : majeure (drift pédagogie arbitré par le propriétaire — issue #237 → **Option A**)
-- **Liens** : issue #237 (drift ENGINE) · issue #219 (story 7.6) · PR (cette story) · spec [ENGINE.md](../../ENGINE.md) §2 (rétrograde) /§3 (diagnostic) · [PRODUCT.md](../../PRODUCT.md) §3.6 :30/:38 · [DETAILS.md](../../DETAILS.md) §3 :29
+- **Liens** : issue #237 (drift ENGINE) · issue #219 (story 7.6) · PR (cette story) · spec [ENGINE.md](../../ENGINE.md) §2 (rétrograde) /§3 (diagnostic) · [PRODUCT.md](../../PRODUCT.md) §3.6 :30/:38 · [DETAILS.md §3 (Recalibrer)](../../DETAILS.md)
 
 ## Contexte
 

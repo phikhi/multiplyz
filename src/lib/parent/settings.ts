@@ -11,7 +11,7 @@ import {
 } from "@/config/server-config";
 
 /**
- * **Réglages du foyer** de l'espace parent (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE,
+ * **Réglages du foyer** de l'espace parent (story 7.3, DETAILS §3 (Espace parent) liste VERROUILLÉE,
  * PRODUCT §1.4). SERVER-ONLY (importe la DB + la config). Source de vérité serveur : lecture /
  * validation / écriture de l'unique ligne `household_settings` (single-tenant, AUTH.md §1). Les
  * server actions (`(espace)/reglages/actions.ts`) sont des adaptateurs **minces** au-dessus, chacun

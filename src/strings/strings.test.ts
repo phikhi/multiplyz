@@ -158,7 +158,7 @@ describe("strings (i18n FR)", () => {
     const lockedText = `${locked.title} ${locked.hint}`.toLowerCase();
     expect(lockedText).not.toContain("faux");
     expect(lockedText).not.toContain("erreur");
-    // Écho explicite « on reprend demain » (issue #229 AC 1, DETAILS §27).
+    // Écho explicite « on reprend demain » (issue #229 AC 1, DETAILS §3 (Temps d'écran)).
     expect(lockedText).toContain("demain");
     // Écran ENFANT (tutoiement, voix Teddy) — distinct du registre neutre parent.
     expect(lockedText).toMatch(/\btu\b|\bte\b|\bton\b|\bta\b/u);
@@ -302,32 +302,36 @@ describe("strings (i18n FR)", () => {
     expect(set.theme.dark.length).toBeGreaterThan(0);
     // Langue FR grisée (future i18n, DETAILS §5).
     expect(set.language.value).toBe("Français");
-    // Verrou dur (story 7.8 #229) : enforcement câblé → copie au PRÉSENT, écho DETAILS §27
+    // Verrou dur (story 7.8 #229) : enforcement câblé → copie au PRÉSENT, écho DETAILS §3 (Temps d'écran)
     // (« verrouille en douceur jusqu'au lendemain ») — plus de « Bientôt » (mentirait au parent
     // maintenant que le réglage AGIT réellement). Le nudge reste hors scope 7.8 → « Bientôt » inchangé.
     expect(set.screenTime.hardLockHint.toLowerCase()).not.toContain("bientôt");
     expect(set.screenTime.hardLockHint).toContain("douceur");
     expect(set.screenTime.hardLockHint).toContain("lendemain");
     expect(set.screenTime.nudgeHint.toLowerCase()).toContain("bientôt");
-    // Son/musique/volume (story 8.3, DETAILS §3) : contrat DÉCLARÉ+STOCKÉ seulement (consommé
-    // 8.4) → copie « Bientôt » (#155, même registre que le nudge avant son propre câblage 7.8).
+    // Son/musique/volume (story 8.3, DETAILS §3) : le moteur audio réel a mergé en 8.4 (#257) → les
+    // 3 réglages AGISSENT → copie au PRÉSENT, plus de « Bientôt » (mentirait au parent maintenant que
+    // le réglage AGIT — même bascule que hardLockHint en 7.8, story hardening #292).
     expect(set.sound.legend.length).toBeGreaterThan(0);
     expect(set.sound.soundToggle.length).toBeGreaterThan(0);
     expect(set.sound.musicToggle.length).toBeGreaterThan(0);
     expect(set.sound.volumeLabel.length).toBeGreaterThan(0);
-    expect(set.sound.soundHint.toLowerCase()).toContain("bientôt");
-    expect(set.sound.musicHint.toLowerCase()).toContain("bientôt");
-    expect(set.sound.volumeHint.toLowerCase()).toContain("bientôt");
+    expect(set.sound.soundHint.toLowerCase()).not.toContain("bientôt");
+    expect(set.sound.musicHint.toLowerCase()).not.toContain("bientôt");
+    expect(set.sound.volumeHint.toLowerCase()).not.toContain("bientôt");
     // Rétro #126/#239 : la négation par pronoms (\btu\b/\bte\b/\bton\b/\bta\b, lignes ci-dessous)
-    // NE CAPTE PAS l'impératif tutoiement sans pronom explicite (« active ou coupe » — le bug
-    // corrigé par cette PR). Garde POSITIVE mutation-prouvée couvrant la FAMILLE COMPLÈTE des 3
-    // consignes son, chacune sur son/ses verbe(s) de vouvoiement : rougit si UNE consigne (y
-    // compris volumeHint, ou un revert PARTIEL « activez ou coupe ») retombe en impératif tutoiement.
-    expect(set.sound.soundHint).toMatch(/\bactivez\b/);
-    expect(set.sound.soundHint).toMatch(/\bcoupez\b/);
-    expect(set.sound.musicHint).toMatch(/\bactivez\b/);
-    expect(set.sound.musicHint).toMatch(/\bcoupez\b/);
-    expect(set.sound.volumeHint).toMatch(/\bréglez\b/);
+    // NE CAPTE PAS l'impératif tutoiement sans pronom explicite (« active ou coupe »). Garde
+    // POSITIVE mutation-prouvée couvrant la FAMILLE COMPLÈTE des 3 consignes son, chacune sur son/ses
+    // verbe(s) de vouvoiement : rougit si UNE consigne (y compris volumeHint, ou un revert PARTIEL
+    // « activez ou coupe ») retombe en impératif tutoiement. Case-insensitive (`iu`) car depuis
+    // story #292 la consigne est au présent → le verbe OUVRE la phrase (« Activez »/« Réglez »,
+    // capitalisé) au lieu de suivre « Bientôt : » ; la casse ne change pas le discriminant
+    // vouvoiement↔tutoiement (activez≠active par le SUFFIXE, jamais la casse).
+    expect(set.sound.soundHint).toMatch(/\bactivez\b/iu);
+    expect(set.sound.soundHint).toMatch(/\bcoupez\b/iu);
+    expect(set.sound.musicHint).toMatch(/\bactivez\b/iu);
+    expect(set.sound.musicHint).toMatch(/\bcoupez\b/iu);
+    expect(set.sound.volumeHint).toMatch(/\bréglez\b/iu);
     // Gabarit volume interpolable (voix neutre, jamais Teddy).
     expect(set.sound.volumeOption).toContain("{volume}");
     // Recalibrer (story 7.6, ADR 0016) : section présente, action à confirmer, rassurance monotone.

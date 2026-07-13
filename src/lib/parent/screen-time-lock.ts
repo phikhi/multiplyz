@@ -6,7 +6,7 @@ import { computeRegularityStats } from "./regularity";
 import type { HouseholdSettings } from "./settings";
 
 /**
- * **Enforcement — verrou dur du temps d'écran** (DETAILS §25-32, story 7.8 #229). Câble
+ * **Enforcement — verrou dur du temps d'écran** (DETAILS §3 (Espace parent), story 7.8 #229). Câble
  * l'ENFORCEMENT runtime du réglage **stocké** par 7.3 (`ParentControlsConfig`/`HouseholdSettings`,
  * `lib/parent/settings.ts`, jamais enforcé par ce module-là) sur le **temps joué du jour** dérivé
  * par 7.4 (`regularity.today.activeMinutes`, `lib/parent/regularity.ts`) — rend le réglage parent
@@ -75,7 +75,7 @@ export function loadTodayActiveMinutes(
 /**
  * **Garde pure** (mutation-testable, bornée) : le verrou dur bloque ssi (a) le parent l'a **activé**
  * ET (b) le temps joué aujourd'hui a **atteint ou dépassé** le seuil ⚙️ — borne **inclusive** `>=`
- * (DETAILS §27 « X min/jour » : le seuil ATTEINT verrouille, pas seulement dépassé). Désactivé
+ * (DETAILS §3 (Temps d'écran) « X min/jour » : le seuil ATTEINT verrouille, pas seulement dépassé). Désactivé
  * (défaut) → jamais bloquant, quel que soit le temps joué (opt-in strict).
  */
 export function isScreenTimeHardLocked(
@@ -91,7 +91,7 @@ export function isScreenTimeHardLocked(
  * **Évalue le verrou** pour une entrée de niveau (pont DB + garde pure) — point d'entrée unique
  * consommé par `startLevelAction`. Court-circuite AVANT toute lecture DB si le verrou est
  * **désactivé** (chemin chaud majoritaire : la plupart des foyers n'activent jamais cet opt-in,
- * DETAILS §27/§7 — défaut `false`) : la lecture des horodatages ne coûte rien au cas commun.
+ * DETAILS §3 (Temps d'écran)/§7 — défaut `false`) : la lecture des horodatages ne coûte rien au cas commun.
  */
 export function evaluateScreenTimeLock(
   db: ReadonlyLockDb,

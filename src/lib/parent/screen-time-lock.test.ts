@@ -12,7 +12,7 @@ import {
 } from "./screen-time-lock";
 
 /**
- * **Enforcement — verrou dur du temps d'écran** (story 7.8 #229, DETAILS §25-32). La garde pure
+ * **Enforcement — verrou dur du temps d'écran** (story 7.8 #229, DETAILS §3 (Espace parent)). La garde pure
  * (`isScreenTimeHardLocked`) est mutation-prouvée à la **borne exacte** (seuil atteint bloque, juste
  * sous passe, `>=` pas `>`). Le pont DB (`loadTodayActiveMinutes`) tourne sur **base réelle**
  * (SQLite en mémoire + migrations, mêmes conventions que `stats-source.test.ts`) et réutilise

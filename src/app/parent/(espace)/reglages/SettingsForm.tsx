@@ -12,7 +12,7 @@ import type {
 import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 
 /**
- * Écran **« Réglages »** (story 7.3, DETAILS §3/§25-32 liste VERROUILLÉE, WIREFRAMES §7 ; son/
+ * Écran **« Réglages »** (story 7.3, DETAILS §3 (Espace parent) liste VERROUILLÉE, WIREFRAMES §7 ; son/
  * musique/volume ajoutés story 8.3, DETAILS §3 « son on/off, musique on/off, volume »). Le parent
  * **possède** cet écran (source de vérité complète, PIN) ; l'enfant a un quick-mute son/musique no-PIN
  * in-game en story 8.6 #282 (**ADR 0017**, réconcilie DETAILS §7 / PRODUCT §30). Rendu sous garde de session parent
@@ -455,9 +455,10 @@ export function SettingsForm({
     void runSave({ screenTimeHardLockMinutes: minutes });
   };
 
-  // Son/musique/volume (story 8.3) : STOCKÉ + validé seulement — même auto-save par contrôle que
-  // le reste de l'écran, mais AUCUN effet audio immédiat (contrairement au thème) tant que le
-  // moteur sonore (8.4) n'existe pas.
+  // Son/musique/volume (story 8.3) : persisté + validé par le même auto-save par contrôle que le
+  // reste de l'écran. Le moteur audio réel existe depuis la story 8.4 (#257) : ces réglages AGISSENT
+  // (gate SFX/musique + gain) et sont enforcés au **prochain chargement** de `/jouer` — même contrat
+  // de fraîcheur que le thème (pas de live-sync vers un onglet de jeu déjà ouvert). #164/#292.
   const onSoundToggle = () => {
     const next = !soundEnabled;
     setSoundEnabled(next);

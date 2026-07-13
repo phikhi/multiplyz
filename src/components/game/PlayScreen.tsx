@@ -71,7 +71,7 @@ type ScreenState =
   /** Niveau structurellement vide (défensif, ENGINE §4 — cf. brief #64). */
   | { readonly kind: "empty" }
   /**
-   * **Verrou dur temps d'écran** (DETAILS §27, story 7.8 #229) : `startLevelAction` a refusé
+   * **Verrou dur temps d'écran** (DETAILS §3 (Temps d'écran), story 7.8 #229) : `startLevelAction` a refusé
    * l'entrée dans un NOUVEAU niveau (parent l'a activé ET le temps joué aujourd'hui a atteint
    * le seuil ⚙️). Distinct de `"error"` (pas un souci d'auth/réseau) — voix Teddy douce, jamais
    * punitive (COPY §1/§3). La partie qui vient de se terminer n'est jamais remise en cause : on
@@ -302,7 +302,7 @@ function PlayScreenInner() {
   }
 
   if (screen.kind === "locked") {
-    // Verrou dur temps d'écran (DETAILS §27, story 7.8) : écran plein, PAS un overlay
+    // Verrou dur temps d'écran (DETAILS §3 (Temps d'écran), story 7.8) : écran plein, PAS un overlay
     // superposé (même patron que "error"/"empty"/"loading" — StatusMessage remplace tout
     // l'écran, aucun élément positionné/empilé à garder contre l'occlusion, #170/#190).
     // Aucun bouton « Réessayer » (rejouer ne changerait rien avant demain) — seule sortie :
