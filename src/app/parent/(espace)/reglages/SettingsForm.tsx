@@ -22,11 +22,12 @@ import { requestRecalibrationAction, saveSettingsAction } from "./actions";
  * (daltonisme), strings centralisées.
  *
  * **Ce qui AGIT** : le thème s'applique **immédiatement** (`data-theme` sur `<html>`, cohérent avec
- * `app/layout.tsx` côté serveur) ; la validation des mondes persiste et pilote le worker (6.5).
+ * `app/layout.tsx` côté serveur) ; la validation des mondes persiste et pilote le worker (6.5) ;
+ * son/musique/volume (story 8.4 #257) — enregistrés ici, **enforcés** par le moteur audio
+ * (`@/lib/sound/**`) au **prochain chargement** de `/jouer` (même contrat de fraîcheur que le
+ * thème/`app/layout.tsx` : pas de live-sync vers un onglet de jeu déjà ouvert).
  * **Ce qui est STOCKÉ seulement (7.8 #229)** : le temps d'écran (nudge + verrou dur) — persisté ici,
- * **jamais enforcé** en 7.3. **Ce qui est STOCKÉ seulement (8.4, #155)** : son/musique/volume —
- * **contrat déclaré + validé + persisté ici**, le moteur audio réel (lecture/coupure effective) est
- * consommé en **story 8.4**, jamais « agit » avant ce câblage.
+ * **jamais enforcé** en 7.3.
  */
 export interface SettingsFormProps {
   /** Réglages effectifs du foyer (servis par la page serveur). */

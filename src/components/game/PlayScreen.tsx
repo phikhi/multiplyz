@@ -29,6 +29,10 @@ import {
   type GameState,
 } from "@/lib/game/session";
 import { useIsPhone } from "@/lib/responsive/use-is-phone";
+import { SoundProvider, useSound } from "@/lib/sound/SoundProvider";
+import { DEFAULT_SOUND_SETTINGS, type SoundSettings } from "@/lib/sound/settings";
+import { resolveAnswerSfx } from "@/lib/sound/juice";
+import { SOUND_COMBO_THRESHOLD } from "@/lib/sound/config";
 
 /**
  * Orchestrateur client de l'écran de jeu (story #64, gains #126) — PRODUCT §2.2/§1.4,
@@ -111,7 +115,25 @@ function useDiagnosticResponses() {
  */
 const FALLBACK_STAR_THRESHOLDS: EngineConfig["starThresholds"] = [0.6, 0.85, 1];
 
-export function PlayScreen() {
+/**
+ * Point d'entrée public — enveloppe TOUT l'écran de jeu dans `SoundProvider` (story 8.4, #257),
+ * monté UNE SEULE fois (mount unique, jamais recréé aux transitions internes `loading ⇄ playing
+ * ⇄ results`) pour que la musique de fond survive naturellement aux changements d'écran sans
+ * redémarrage parasite — le moteur son vit dans `engineRef` de `SoundProvider`, indépendant du
+ * `screen.kind` géré par `PlayScreenInner`. `sound` optionnel (défaut `DEFAULT_SOUND_SETTINGS`) :
+ * en production `PlayPage` (serveur) fournit TOUJOURS la valeur réelle du foyer
+ * (`pickSoundSettings(readHouseholdSettings(...))`) ; le défaut ne sert qu'aux tests existants
+ * qui montent `<PlayScreen />` sans se soucier du son (LEARNINGS « wiring minimal »).
+ */
+export function PlayScreen({ sound = DEFAULT_SOUND_SETTINGS }: { readonly sound?: SoundSettings }) {
+  return (
+    <SoundProvider settings={sound}>
+      <PlayScreenInner />
+    </SoundProvider>
+  );
+}
+
+function PlayScreenInner() {
   const [screen, setScreen] = useState<ScreenState>({ kind: "loading" });
   const [starThresholds, setStarThresholds] = useState(FALLBACK_STAR_THRESHOLDS);
   const diagnosticResponses = useDiagnosticResponses();
@@ -314,6 +336,45 @@ function PlayingGame({
   // évite que le contenu jouable se retrouve occlus derrière la barre fixe (#170/#190), prouvé
   // par la garde E2E boundingClientRect (jamais une marge seulement raisonnée, #190).
   const isPhone = useIsPhone();
+  const { playSfx, playMusic, stopMusic } = useSound();
+  // Série de bonnes réponses consécutives EN 1ʳᵉ TENTATIVE (story 8.4, #257, AC #1 — "combo si
+  // série", PRODUCT.md:60). `useRef` (pas `useState`) : ne pilote AUCUN rendu, seulement l'effet
+  // sonore ci-dessous — remis à 0 naturellement à chaque remontage de `PlayingGame` (nouveau
+  // niveau, `PlayScreen` retraverse toujours "loading" entre 2 niveaux).
+  const comboRef = useRef(0);
+
+  // Musique de fond pendant une partie active (AC #1) — démarre au montage, s'arrête au
+  // démontage RÉEL (changement d'écran `playing → results`/`loading`, patron « subscribe to an
+  // external system », même famille que `useIsPhone`). `playMusic`/`stopMusic` sont des
+  // références STABLES (`SoundProvider`, deps vides) — sûres en deps sans reruns parasites.
+  useEffect(() => {
+    playMusic("play");
+    return () => stopMusic();
+  }, [playMusic, stopMusic]);
+
+  // SFX de réponse (bonne réponse / combo) — réagit à la TRANSITION de `phase`/`isRetrying`,
+  // jamais un effet mount-only (STACK-TRAP #244) : `game` (tout l'objet, deps exhaustives —
+  // `react-hooks/exhaustive-deps` n'accepte pas un chemin `game.current.X` profond comme deps
+  // partielles) change de référence à CHAQUE transition (nouvel objet immuable,
+  // `applyAnswer`/`advance`/`beginRetry`), donc l'effet se ré-exécute fidèlement à chaque
+  // passage — y compris `"asking"` (nouvelle question OU montage initial), volontairement
+  // ignoré (aucun son au moment où la question s'affiche, seulement à sa résolution) : l'early
+  // return rend les ré-exécutions sur un `game` qui ne change QUE de question (jamais sans
+  // passer par `"asking"`) inoffensives.
+  useEffect(() => {
+    const phase = game.current.phase;
+    if (phase === "asking") return;
+    const resolution = resolveAnswerSfx(
+      comboRef.current,
+      phase,
+      game.current.isRetrying,
+      SOUND_COMBO_THRESHOLD,
+    );
+    comboRef.current = resolution.comboCount;
+    if (resolution.sfx !== null) {
+      playSfx(resolution.sfx);
+    }
+  }, [game, playSfx]);
 
   const judge = useCallback(
     (factKey: string, value: number): boolean => value === resolveAnswer(factKey),

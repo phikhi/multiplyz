@@ -558,6 +558,15 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   }) => {
     // Rejoue jusqu'à ~10 questions (ENGINE §4) → plus long qu'une navigation simple.
     test.setTimeout(60_000);
+    // Preuve RUNTIME de câblage sonore (story 8.4, #257 — additif, ne change aucune interaction
+    // existante) : ce test répond à plusieurs questions jusqu'aux résultats — un VRAI navigateur
+    // doit donc requêter au moins un asset `/sounds/**` (SFX bonne réponse/résultats + musique de
+    // fond) pendant le flux. jsdom (tests composants) ne peut pas prouver la requête réseau réelle
+    // — seul un navigateur réel le peut (asserté en fin de test, après l'écran de résultats).
+    const soundRequestUrls: string[] = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/sounds/")) soundRequestUrls.push(req.url());
+    });
     // Reconnexion : profil désormais amorcé (diagnostic joué au test précédent) →
     // enchaîne directement sur un niveau normal (pas de re-diagnostic, ENGINE §3).
     await page.goto("/");
@@ -660,6 +669,13 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(page.getByRole("img", { name: /pièce/u })).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
     await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
+
+    // Preuve RUNTIME de câblage sonore (story 8.4, #257 AC #1) : au moins un asset audio a été
+    // réellement requêté par le navigateur pendant ce flux (musique de fond à l'entrée en jeu +
+    // SFX bonne réponse/résultats) — rouge si le moteur son n'était jamais déclenché en conditions
+    // réelles (next-dev-loop indisponible < Next 16.3, #24 → supplée par E2E, même patron que le
+    // reste de ce fichier).
+    expect(soundRequestUrls.length).toBeGreaterThan(0);
   });
 
   test("écran de jeu → reflow responsive 3 tailles (QCM 2×2, barre d'action bas de pouce, story 8.1 #254, captures)", async ({

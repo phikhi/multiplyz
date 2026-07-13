@@ -527,10 +527,13 @@ export interface ParentControlsConfig {
  * bornes non-⚙️ — seul le point de repli est calibrable).
  *
  * ⚠️ **État de consommation (honnête, #127/#155)** : ces ⚙️ sont **POSÉS + VALIDÉS + STOCKÉS** en
- * 8.3 (défauts d'un foyer neuf + bornes de validation `writeHouseholdSettings`). Ils ne sont **PAS
- * ENFORCÉS** ici : aucun moteur audio n'existe encore — la lecture/coupure réelle du son/musique au
- * volume réglé dépend du **moteur sonore** (story 8.4, inexistant). Décrire « déclaré + validé +
- * stocké, consommé en 8.4 », **jamais** « agit / joue / coupe ».
+ * 8.3 (défauts d'un foyer neuf + bornes de validation `writeHouseholdSettings`) et **ENFORCÉS**
+ * depuis la story 8.4 #257 : `app/(app)/jouer/page.tsx` lit `HouseholdSettings` effectifs et les
+ * projette (`pickSoundSettings`) vers le moteur audio client (`@/lib/sound/engine`,
+ * `createSoundEngine`) qui gate/atténue réellement le SFX et la musique de fond au `volume` réglé
+ * (mutation-prouvé, `@/lib/sound/engine.test.ts`). Seuls `soundEnabledDefault`/
+ * `musicEnabledDefault`/`volumeDefault` (défauts d'un foyer NEUF) restent décrits ici — le
+ * comportement runtime effectif vit dans `@/lib/sound/**`.
  */
 export interface SoundConfig {
   /** Bruitages activés par **défaut** pour un foyer neuf (DETAILS §3). */

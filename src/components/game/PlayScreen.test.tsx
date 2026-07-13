@@ -28,6 +28,22 @@ vi.mock("@/app/(app)/jouer/actions", () => ({
   submitAttemptAction: vi.fn(),
 }));
 
+// Moteur son (story 8.4, #257) mocké à la frontière `SoundProvider`/`useSound` : les tests
+// PRÉ-EXISTANTS ci-dessous (des dizaines) montent `<PlayScreen />` sans se soucier du son —
+// `SoundProvider` devient un simple passthrough (`children`), `useSound` renvoie des espions
+// contrôlables. Les NOUVEAUX tests de câblage sonore (fin de fichier) assertent sur ces espions ;
+// la logique RÉELLE de résolution (`resolveAnswerSfx`, seuil combo) n'est PAS mockée — seule la
+// frontière audio I/O l'est (patron déjà suivi pour `@/lib/db`/actions ailleurs dans ce dépôt).
+const soundMocks = vi.hoisted(() => ({
+  playSfx: vi.fn(),
+  playMusic: vi.fn(),
+  stopMusic: vi.fn(),
+}));
+vi.mock("@/lib/sound/SoundProvider", () => ({
+  SoundProvider: ({ children }: { readonly children: React.ReactNode }) => children,
+  useSound: () => soundMocks,
+}));
+
 const diagnosticPlanMock = vi.mocked(diagnosticPlanAction);
 const finishLevelActionMock = vi.mocked(finishLevelAction);
 const seedDiagnosticMock = vi.mocked(seedDiagnosticAction);
@@ -713,5 +729,179 @@ describe("PlayScreen — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
     } finally {
       restore();
     }
+  });
+});
+
+describe("PlayScreen — son : SFX bonne réponse/combo + musique de fond (story 8.4, #257 AC #1)", () => {
+  it("démarre la musique de fond à l'entrée en jeu, l'arrête en sortant vers les résultats", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    const fact68 = makeFact("mult", 6, 8);
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    expect(soundMocks.playMusic).toHaveBeenCalledWith("play");
+    expect(soundMocks.stopMusic).not.toHaveBeenCalled();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+
+    // Quitte "playing" (démontage de `PlayingGame`) → la musique s'arrête (cleanup d'effet).
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { level: 1, name: strings.play.results.title }),
+      ).toBeInTheDocument(),
+    );
+    expect(soundMocks.stopMusic).toHaveBeenCalledTimes(1);
+  });
+
+  it("MUTATION-PROOF (AC #1) : 1ʳᵉ bonne réponse (sous le seuil combo) → SFX 'correct', jamais 'combo'", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8"), question("add_3+8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    const fact68 = makeFact("mult", 6, 8);
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(fact68.answer)),
+      }),
+    );
+    await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+
+    expect(soundMocks.playSfx).toHaveBeenCalledWith("correct");
+    expect(soundMocks.playSfx).not.toHaveBeenCalledWith("combo");
+  });
+
+  it("MUTATION-PROOF (garde no-fail) : 1ʳᵉ tentative FAUSSE → AUCUN SFX (re-essai proposé, jamais de son négatif/sanction)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: { questions: [question("mult_6x8")] },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 0 });
+    const fact68 = makeFact("mult", 6, 8);
+    const wrongChoice = [fact68.answer + 1, fact68.answer - 1, fact68.answer + 2].find(
+      (v) => v !== fact68.answer,
+    )!;
+
+    render(<PlayScreen />);
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    // Musique de fond mise à part (appelée au montage), aucun SFX ne doit avoir joué avant
+    // la réponse — on isole donc le mock playSfx spécifiquement.
+    soundMocks.playSfx.mockClear();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.play.question.choiceOption.replace("{n}", String(wrongChoice)),
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText(strings.play.retry.answerReveal.replace("{n}", String(fact68.answer))),
+      ).toBeInTheDocument(),
+    );
+    expect(soundMocks.playSfx).not.toHaveBeenCalled();
+  });
+
+  it("MUTATION-PROOF (seuil combo #1) : 3 bonnes réponses consécutives EN 1ʳᵉ TENTATIVE → SFX 'combo' à la 3ᵉ (⚙️ SOUND_COMBO_THRESHOLD)", async () => {
+    startLevelMock.mockResolvedValue({
+      level: {
+        questions: [question("mult_6x8"), question("add_3+8"), question("sub_15-6")],
+      },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    const facts = [makeFact("mult", 6, 8), makeFact("add", 3, 8), makeFact("sub", 15, 6)];
+    const questionTexts = ["6 × 8 = ?", "3 + 8 = ?", "15 − 6 = ?"];
+
+    render(<PlayScreen />);
+    for (let i = 0; i < facts.length; i++) {
+      await waitFor(() => expect(screen.getByText(questionTexts[i])).toBeInTheDocument());
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: strings.play.question.choiceOption.replace("{n}", String(facts[i].answer)),
+        }),
+      );
+      await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+      if (i < facts.length - 1) {
+        fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+      }
+    }
+
+    const sfxCalls = soundMocks.playSfx.mock.calls.map((call) => call[0]);
+    // 2 premières bonnes réponses sous le seuil (⚙️=3) → "correct" ; la 3ᵉ franchit le seuil → "combo".
+    expect(sfxCalls).toEqual(["correct", "correct", "combo"]);
+  });
+
+  it("MUTATION-PROOF (garde isRetrying) : une série cassée par un re-essai NE rejoue PAS 'combo' — retombe à 'correct' même après une série antérieure", async () => {
+    startLevelMock.mockResolvedValue({
+      level: {
+        questions: [
+          question("mult_6x8"),
+          question("add_3+8"),
+          question("sub_15-6"),
+          question("mult_6x8", "pave"),
+        ],
+      },
+      starThresholds: STAR_THRESHOLDS,
+      locked: false,
+    });
+    submitAttemptMock.mockResolvedValue({ ok: true, box: 1 });
+    const facts = [makeFact("mult", 6, 8), makeFact("add", 3, 8), makeFact("sub", 15, 6)];
+    const questionTexts = ["6 × 8 = ?", "3 + 8 = ?", "15 − 6 = ?"];
+
+    render(<PlayScreen />);
+    // 3 bonnes réponses consécutives → série au seuil (dernier SFX = "combo").
+    for (let i = 0; i < facts.length; i++) {
+      await waitFor(() => expect(screen.getByText(questionTexts[i])).toBeInTheDocument());
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: strings.play.question.choiceOption.replace("{n}", String(facts[i].answer)),
+        }),
+      );
+      await waitFor(() => expect(screen.getByRole("status")).toBeInTheDocument());
+      fireEvent.click(screen.getByRole("button", { name: strings.play.correct.next }));
+    }
+    soundMocks.playSfx.mockClear();
+
+    // 4e question (pavé, même fait 6×8) : réponse FAUSSE puis re-essai JUSTE.
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    const fact68 = makeFact("mult", 6, 8);
+    for (const d of String(fact68.answer + 1)) {
+      fireEvent.click(screen.getByRole("button", { name: strings.pinPad.digit.replace("{d}", d) }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: strings.play.question.submit }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(strings.play.retry.answerReveal.replace("{n}", String(fact68.answer))),
+      ).toBeInTheDocument(),
+    );
+    expect(soundMocks.playSfx).not.toHaveBeenCalled(); // 1re tentative fausse → aucun son (déjà couvert ci-dessus, re-vérifié en contexte série).
+    fireEvent.click(screen.getByRole("button", { name: strings.play.retry.tryAgain }));
+
+    await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+    for (const d of String(fact68.answer)) {
+      fireEvent.click(screen.getByRole("button", { name: strings.pinPad.digit.replace("{d}", d) }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: strings.play.question.submit }));
+    await waitFor(() => expect(soundMocks.playSfx).toHaveBeenCalled());
+
+    // Sans la garde `isRetrying`, la série (comboCountBefore > seuil) rejouerait "combo" ici.
+    expect(soundMocks.playSfx).toHaveBeenCalledWith("correct");
+    expect(soundMocks.playSfx).not.toHaveBeenCalledWith("combo");
   });
 });
