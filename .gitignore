@@ -44,6 +44,9 @@ multiplyz-ds-*.png
 # Claude Code (local)
 .claude/settings.local.json
 
+# Verrou de session pleine-durée (#298) — état runtime d'UN run, jamais partagé
+.claude/skills/orchestrate/.session-lock.json
+
 # OS / éditeur
 .DS_Store
 *.log
