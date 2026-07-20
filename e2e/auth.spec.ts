@@ -5,6 +5,7 @@ import { BRAND_NAME } from "../src/config/brand";
 import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
 import { PENDING_WORLD_A, PENDING_WORLD_B } from "./seed-pending-worlds";
 import { COLLECTION_SESSION_TOKEN, COLLECTION_CREATURES } from "./seed-collection";
+import { MAP_PROGRESS_SESSION_TOKEN, MAP_PROGRESS_COMPLETED_LEVELS } from "./seed-map-progress";
 import {
   ACCURACY_HISTORY_SESSION_TOKEN,
   ACCURACY_HISTORY_DAILY_RATIOS,
@@ -1022,6 +1023,15 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // ET bande de décor + avatar Teddy per-monde (#190) exercés ci-dessous.
     await page.goto("/carte");
     await page.waitForLoadState("networkidle");
+    // Auto-scroll vers le nœud courant au montage (story #268) : `/carte` ancre désormais la
+    // page sur le nœud COURANT au chargement (comportement VOULU, testé dédié plus bas via le
+    // profil `Milo`). Les mesures de géométrie ABSOLUE ci-dessous (bandeau d'accent, scrim de
+    // titre, bande de décor/Teddy) datent d'AVANT #268 et supposent un chargement `scrollY=0` —
+    // sujet ORTHOGONAL à l'ancrage (thématisation/richesse per-monde, pas le scroll). On
+    // neutralise l'ancrage pour CE test en resynchronisant le scroll au sommet, sans quoi ses
+    // assertions `top >= 0` deviendraient négatives par construction (le nœud 1 sur 11 vit loin
+    // du haut du chemin) — pas une régression du produit, un artefact de mesure pré-#268.
+    await page.evaluate(() => window.scrollTo(0, 0));
 
     // Titre THÉMATISÉ (câblage carte↔monde, story 6.7, WIREFRAMES §2 « Monde 3 · La Forêt ») :
     // en base E2E fraîche aucun monde généré `active` → le résolveur retombe sur le SOCLE de
@@ -1491,6 +1501,69 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(phone.teddyGeom!.upstreamMedBottom).not.toBeNull();
     expect(phone.teddyGeom!.top).toBeGreaterThanOrEqual(phone.teddyGeom!.upstreamMedBottom!);
     await page.screenshot({ path: "docs/captures/255-carte-phone.png", fullPage: true });
+  });
+
+  // ==========================================================================
+  // Auto-scroll vers le nœud courant au montage (story #268, discovered playtest-⚙️). Profil
+  // dédié `Milo` (`seed-map-progress.ts`, 6 niveaux complétés) : le nœud COURANT résultant est le
+  // 7ᵉ sur 11 — ni le 1ᵉʳ (fond du chemin `column-reverse`, WIREFRAMES §2/§8) ni le boss (sommet),
+  // une position MÉDIANE qui exige réellement l'ancrage pour être garantie visible au chargement
+  // (le navigateur ouvre toujours une page à `scrollY=0`). Surface DISJOINTE (cookie de session
+  // injecté directement, même patron que `Nino`/collection) : aucune dépendance à l'état laissé
+  // par les tests précédents sur le profil `Léa`.
+  // ==========================================================================
+  test("carte du monde → auto-scroll vers le nœud courant au montage, progression avancée (story #268, capture)", async ({
+    page,
+  }) => {
+    const cookie = {
+      name: "mz_session",
+      value: MAP_PROGRESS_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+    // Téléphone (375×812, WIREFRAMES §8 « carte : scroll vertical du chemin ») : c'est le
+    // viewport où le nœud courant peut sortir du 1ᵉʳ écran (AC de #268 vise explicitement ce cas).
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/carte");
+    await page.waitForLoadState("networkidle");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+
+    // Géométrie RENDUE en vrai navigateur (jamais raisonnée, rétro #190 : jsdom ne fait AUCUN
+    // layout, cf. `MapScreen.test.tsx` qui prouve le MÉCANISME — ici on prouve le RÉSULTAT
+    // visuel). Lue APRÈS le montage : l'effet d'ancrage a eu le temps de scroller la page.
+    const geometry = await page.evaluate(() => {
+      const link = document.querySelector('a[data-map-node-status="current"]');
+      if (link === null) return null;
+      const rect = link.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        innerHeight: window.innerHeight,
+        scrollY: window.scrollY,
+        nodeIndex: link.getAttribute("data-map-node"),
+      };
+    });
+    expect(geometry).not.toBeNull();
+    // Preuve que c'est bien le nœud MÉDIAN attendu du seed (`level_index` = niveaux complétés),
+    // pas un autre nœud par coïncidence.
+    expect(geometry!.nodeIndex).toBe(String(MAP_PROGRESS_COMPLETED_LEVELS));
+    // (a) AC1 littérale de #268 : le nœud courant est RÉELLEMENT dans le viewport SANS action de
+    // l'enfant — son rect est entièrement compris entre le haut (0) et le bas (innerHeight) de
+    // l'écran, jamais seulement raisonné sur la géométrie du chemin.
+    expect(geometry!.top).toBeGreaterThanOrEqual(0);
+    expect(geometry!.bottom).toBeLessThanOrEqual(geometry!.innerHeight);
+    // (b) preuve qu'un VRAI scroll a eu lieu (pas juste « le nœud était déjà visible par
+    // hasard ») : la page a quitté le sommet (`scrollY=0` par défaut à l'ouverture). Rougit si
+    // l'ancrage est retiré — le document resterait scrollé à 0 alors que le nœud médian vit plus
+    // bas dans un chemin significativement plus long que le viewport (11 nœuds + en-tête/pied).
+    expect(geometry!.scrollY).toBeGreaterThan(0);
+
+    // VÉRIF VISUELLE (garde-fou dur #170) — capture du VIEWPORT réel (`fullPage:false`, ce que
+    // l'enfant voit sans scroller), ouverte et regardée en review : le nœud courant (Teddy + ▶)
+    // doit être visible à l'écran au chargement, pas seulement « dans le DOM ».
+    await page.screenshot({ path: "docs/captures/268-carte-autoscroll-phone.png" });
   });
 
   // ==========================================================================
