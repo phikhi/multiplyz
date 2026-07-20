@@ -43,7 +43,15 @@ export default defineConfig({
     // ...puis amorce un profil dédié (`Timéo`) + 6 jours d'`attempts` backdatés (issue #241) — la
     // sparkline de justesse quotidienne n'affiche une FORME qu'à ≥2 jours DISTINCTS, hors
     // d'atteinte d'un parcours de jeu E2E réel en un seul run (même patron que `seed-collection`).
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && pnpm dev --port ${PORT}`,
+    // Démarre le serveur via `next dev` DIRECTEMENT (jamais `pnpm dev`, story R0.1 #323) : le script
+    // `dev` de `package.json` lance AUSSI `tsx scripts/seed-dev-world-assets.ts` (fixture dev, même
+    // patron que `seed-world-assets.ts` ci-dessus mais namespace `world/dev`) — l'appeler ici
+    // ré-écrirait le slot 0 APRÈS `seed-world-assets.ts` (même ligne `socle_worlds`, la base E2E
+    // partage le même mécanisme) et ferait servir le fixture `world/dev/…` à la place du fixture
+    // E2E `world/e2e/…` (les deux fixtures pointent la même image committée, mais des URLs
+    // publiques différentes — les assertions `toContain("world/e2e/…")` attendent précisément
+    // celle-ci). `next dev` seul saute ce double-amorçage, la migration ayant déjà tourné ci-dessus.
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && next dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

@@ -7,7 +7,7 @@
     "node": ">=22.12"
   },
   "scripts": {
-    "dev": "pnpm db:migrate && next dev",
+    "dev": "pnpm db:migrate && tsx scripts/seed-dev-world-assets.ts && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

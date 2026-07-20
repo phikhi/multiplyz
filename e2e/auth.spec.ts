@@ -1176,7 +1176,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     });
     expect(scrim).not.toBeNull();
     // (a) le fond-image réel du monde est bien peint sur <main> (chemin `background !== null` actif).
-    expect(scrim!.bgImage).toContain("world/e2e/background.png");
+    expect(scrim!.bgImage).toContain("world/e2e/background.jpg");
     // (b) scrim rendu + visible.
     expect(scrim!.s.w).toBeGreaterThan(0);
     expect(scrim!.s.h).toBeGreaterThan(0);
@@ -1250,12 +1250,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     });
     expect(richness).not.toBeNull();
     // (a) BANDE DE DÉCOR : émet l'URL de l'image de tuiles du monde (câblage), visible, dans le cadre.
-    expect(richness!.tilesBg).toContain("world/e2e/tiles.png");
+    expect(richness!.tilesBg).toContain("world/e2e/tiles.jpg");
     expect(richness!.tilesW).toBeGreaterThan(0);
     expect(richness!.tilesH).toBeGreaterThan(0);
     expect(richness!.tilesTop).toBeGreaterThanOrEqual(0);
     // (b) AVATAR TEDDY per-monde : émet l'URL de l'image Teddy du monde (câblage), un SEUL marqueur.
-    expect(richness!.teddyBg).toContain("world/e2e/teddy.png");
+    expect(richness!.teddyBg).toContain("world/e2e/teddy.jpg");
     expect(richness!.teddyCount).toBe(1);
     // (c) VISIBLE + DANS LE CADRE : dimensions non nulles, sommet ≥ 0 (jamais clippé hors du haut).
     expect(richness!.teddyW).toBeGreaterThan(0);
