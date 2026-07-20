@@ -18,6 +18,12 @@
 //   - un run qui **n'appelle pas** le guard (tir manuel hors skill) n'est pas contraint.
 //   - la liveness repose sur un **pid d'ancêtre** (cf. `resolveOwnerPid`) : si l'ancêtre n'est pas
 //     résoluble, le verrou se dégrade en CLEAR (voir fail-open ci-dessous).
+//   - **réutilisation de pid** : l'OS recycle les pids. Un lock abandonné dont le pid a été réattribué
+//     à un process sans rapport rend `pidAlive()` vrai à tort → **faux BLOCKED**, borné par le TTL
+//     puis par le plafond `MAX_AGE`. Non détectable ici (aucun jeton d'identité de process stocké).
+//   - le pid propriétaire est le process `claude` du run, qui **SURVIT à la fin d'un run** (l'app
+//     reste ouverte) : la liveness du pid ne détecte donc PAS un run terminé — ce sont le TTL et
+//     `MAX_AGE` qui libèrent un lock abandonné, d'où leur calibration ci-dessous.
 //
 // ── FAIL-OPEN strict (principe non négociable, #290) ─────────────────────────────────────────
 // Tout état INCERTAIN → **CLEAR** (le run démarre) : pas de lock, fichier illisible/corrompu, JSON
@@ -27,12 +33,27 @@
 // Pire cas d'un bug ici = « le verrou n'a pas empêché une collision » = comportement d'AUJOURD'HUI
 // (zéro régression), jamais un deadlock où tous les runs cèdent à jamais.
 
-/** ⚙️ Paramètres à calibrer — surchargeables par env (cf. `readSessionLockConfig`). */
+/**
+ * ⚙️ Paramètres à CALIBRER — surchargeables par env (cf. `readSessionLockConfig`).
+ *
+ * Calibrés sur la cadence RÉELLE de l'orchestrateur, pas sur des valeurs de principe :
+ *
+ * - `ttlMin` : le plus long intervalle SANS TOUR de l'orchestrateur est un **build délégué à un
+ *   subagent** — pendant ce temps le thread principal ne joue aucun tour et ne peut donc pas
+ *   battre (observé : 20–60 min). 90 min = marge ~1,5× au-dessus du maximum observé, pour ne
+ *   jamais faire expirer le lock d'un run LÉGITIMEMENT en cours.
+ * - `maxAgeMin` : un run réel enchaîne plusieurs stories sur une fenêtre de quota de 5 h.
+ *   360 min (6 h) = au-dessus d'une fenêtre pleine, pour ne pas déposséder un run vivant.
+ *
+ * Ces deux valeurs bornent la durée d'un lock FANTÔME (run terminé sans `release`, dont le
+ * process propriétaire reste vivant). Résidu assumé, documenté en `SKILL.md` §1.0 : ces
+ * plafonds achètent la sûreté du run légitime au prix d'une fenêtre de faux BLOCKED plus longue.
+ */
 export const SESSION_LOCK_DEFAULTS = Object.freeze({
   /** ⚙️ `SESSION_LOCK_TTL_MIN` — au-delà, le heartbeat est périmé → CLEAR (cœur de l'anti-deadlock). */
-  ttlMin: 15,
+  ttlMin: 90,
   /** ⚙️ `SESSION_LOCK_MAX_AGE_MIN` — plafond DUR sur `startedAt`, même heartbeat frais → CLEAR. */
-  maxAgeMin: 90,
+  maxAgeMin: 360,
   /** ⚙️ `SESSION_LOCK_MAX_ANCESTOR_DEPTH` — profondeur max de remontée d'ancêtres (`ps`). */
   maxAncestorDepth: 8,
 });
@@ -259,7 +280,12 @@ export function planSessionLockAction({
   host,
   note,
 }) {
-  const owned = lock !== null && lock.pid === ownerPid;
+  // `ownerPid !== null` est INDISPENSABLE : sans lui, un run dont l'ancêtrie est indéterminable
+  // (`ownerPid === null`) s'approprierait le lock d'un ÉTRANGER portant `pid: null` (`null === null`)
+  // → il l'écraserait et perdrait son `note`. Deux identités INDÉTERMINÉES ne sont pas la même
+  // identité. Sans impact fail-open (un lock à pid null rend CLEAR de toute façon), mais bug
+  // d'attribution.
+  const owned = lock !== null && ownerPid !== null && lock.pid === ownerPid;
 
   if (action === "release") {
     if (lock === null) return { op: "none", outcome: "absent" };

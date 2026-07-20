@@ -18,6 +18,10 @@ import {
 const NOW_MS = Date.parse("2026-07-20T12:00:00.000Z");
 const minutesAgo = (n) => new Date(NOW_MS - n * 60_000).toISOString();
 
+// Les fixtures dérivent des ⚙️ (jamais de minutes en dur) : recalibrer TTL/MAX_AGE ne doit pas
+// rendre ces tests vacuous en glissant les entrées du mauvais côté de la borne.
+const { ttlMin: TTL, maxAgeMin: MAX_AGE } = SESSION_LOCK_DEFAULTS;
+
 /** Lock étranger PARFAITEMENT vivant : c'est le SEUL cas qui doit rendre BLOCKED. */
 const liveForeignLock = (overrides = {}) => ({
   pid: 4242,
@@ -197,7 +201,10 @@ describe("evaluateSessionLock — BLOCKED exige la conjonction COMPLÈTE (AC3)",
   it("garde HEARTBEAT : heartbeat périmé avec pid VIVANT → CLEAR (cœur de l'anti-deadlock)", () => {
     // pid VIVANT + âge sous plafond → la garde pid et le plafond MAX_AGE laissent passer ;
     // seule la garde TTL peut rendre CLEAR ici (#206).
-    const lock = liveForeignLock({ startedAt: minutesAgo(20), heartbeatAt: minutesAgo(16) });
+    const lock = liveForeignLock({
+      startedAt: minutesAgo(TTL + 5),
+      heartbeatAt: minutesAgo(TTL + 1),
+    });
 
     expect(evaluate({ lock })).toEqual({
       verdict: "CLEAR",
@@ -206,8 +213,14 @@ describe("evaluateSessionLock — BLOCKED exige la conjonction COMPLÈTE (AC3)",
   });
 
   it("garde TTL — borne exacte : heartbeat pile à TTL reste BLOCKED, TTL+1 min passe CLEAR", () => {
-    const atTtl = liveForeignLock({ startedAt: minutesAgo(20), heartbeatAt: minutesAgo(15) });
-    const pastTtl = liveForeignLock({ startedAt: minutesAgo(20), heartbeatAt: minutesAgo(16) });
+    const atTtl = liveForeignLock({
+      startedAt: minutesAgo(TTL + 5),
+      heartbeatAt: minutesAgo(TTL),
+    });
+    const pastTtl = liveForeignLock({
+      startedAt: minutesAgo(TTL + 5),
+      heartbeatAt: minutesAgo(TTL + 1),
+    });
 
     expect(evaluate({ lock: atTtl }).verdict).toBe("BLOCKED");
     expect(evaluate({ lock: pastTtl }).verdict).toBe("CLEAR");
@@ -216,7 +229,10 @@ describe("evaluateSessionLock — BLOCKED exige la conjonction COMPLÈTE (AC3)",
   it("garde MAX_AGE : âge > plafond avec pid VIVANT ET heartbeat FRAIS → CLEAR (plafond dur)", () => {
     // pid VIVANT + heartbeat d'il y a 1 min (bien sous TTL=15) → ni la garde pid ni la garde TTL
     // ne couvrent cette entrée ; seule la garde MAX_AGE peut l'épingler (#206).
-    const lock = liveForeignLock({ startedAt: minutesAgo(91), heartbeatAt: minutesAgo(1) });
+    const lock = liveForeignLock({
+      startedAt: minutesAgo(MAX_AGE + 1),
+      heartbeatAt: minutesAgo(1),
+    });
 
     expect(evaluate({ lock })).toEqual({
       verdict: "CLEAR",
@@ -225,7 +241,7 @@ describe("evaluateSessionLock — BLOCKED exige la conjonction COMPLÈTE (AC3)",
   });
 
   it("garde MAX_AGE — borne exacte : âge pile au plafond reste BLOCKED", () => {
-    const atMax = liveForeignLock({ startedAt: minutesAgo(90), heartbeatAt: minutesAgo(1) });
+    const atMax = liveForeignLock({ startedAt: minutesAgo(MAX_AGE), heartbeatAt: minutesAgo(1) });
     expect(evaluate({ lock: atMax }).verdict).toBe("BLOCKED");
   });
 
@@ -282,8 +298,8 @@ describe("evaluateSessionLock — BLOCKED exige la conjonction COMPLÈTE (AC3)",
       nowMs: NOW_MS,
       ownerPid: 4242,
       pidAlive,
-      ttlMin: 15,
-      maxAgeMin: 90,
+      ttlMin: TTL,
+      maxAgeMin: MAX_AGE,
     });
     expect(pidAlive).not.toHaveBeenCalled();
   });
@@ -471,6 +487,22 @@ describe("planSessionLockAction — écritures (AC1)", () => {
     });
   });
 
+  it("garde IDENTITÉ INDÉTERMINÉE : un ownerPid null ne s'approprie PAS le lock étranger à pid null", () => {
+    // Deux identités INDÉTERMINÉES ne sont pas la même identité : sans `ownerPid !== null`,
+    // `null === null` rendrait `owned` vrai → ce run écraserait le lock d'un autre run (perte
+    // de son `note`) sur `acquire`, et le SUPPRIMERAIT sur `release`.
+    const foreignUnknown = { pid: null, pidSource: "unresolved", note: "run étranger" };
+
+    const acquired = plan({ ownerPid: null, pidSource: "unresolved", lock: foreignUnknown });
+    expect(acquired.outcome).toBe("acquired"); // remplacement assumé, PAS un « renewed »
+    expect(acquired.record.note).toBeNull(); // pas de reprise du `note` étranger
+
+    expect(plan({ action: "release", ownerPid: null, lock: foreignUnknown })).toEqual({
+      op: "none",
+      outcome: "foreign",
+    });
+  });
+
   it("release sans lock est un no-op silencieux", () => {
     expect(plan({ action: "release" })).toEqual({ op: "none", outcome: "absent" });
   });
@@ -483,8 +515,8 @@ describe("planSessionLockAction — écritures (AC1)", () => {
       nowMs: Date.parse(NOW_ISO),
       ownerPid: 42, // AUTRE run : sans release il verrait un lock vivant
       pidAlive: alwaysAlive,
-      ttlMin: 15,
-      maxAgeMin: 90,
+      ttlMin: TTL,
+      maxAgeMin: MAX_AGE,
     });
     expect(evaluationAfterAcquire.verdict).toBe("BLOCKED");
 
@@ -508,8 +540,8 @@ describe("planSessionLockAction — écritures (AC1)", () => {
         nowMs: Date.parse(NOW_ISO),
         ownerPid: 42,
         pidAlive: alwaysAlive,
-        ttlMin: 15,
-        maxAgeMin: 90,
+        ttlMin: TTL,
+        maxAgeMin: MAX_AGE,
       }).verdict,
     ).toBe("CLEAR");
   });
