@@ -216,11 +216,17 @@ Le DoD **ticket-level** (§5) prouve qu'une story est verte **unitairement** ; i
 
 a. **Tranches verticales only** : aucune story ne merge si son effet n'est pas **observable dans l'app qui tourne** (traverse data→logique→écran, pas juste testé unitairement). Un mécanisme livré sans écran/flux qui le rend vécu par l'enfant n'est pas mergeable tel quel.
 
-b. **Captures = vrai art obligatoire** : toute capture Playwright de la PR (§5/§14) doit montrer les **vrais assets** de production, jamais un fixture de test (rétro R0 : des reviews « pixels validés » avaient regardé un fond fixture rayé, pas l'art réel — AUDIT §4.2).
+b. **Captures = vrai art obligatoire** : toute capture Playwright de la PR (§5/§14) doit montrer les **vrais assets** de production, jamais un fixture de test (rétro R0 : des reviews « pixels validés » avaient regardé un fond fixture rayé, pas l'art réel — AUDIT §4.2). **`blocked-by #323`** (R0.1 « servir le vrai art socle en dev/CI, fin du fixture ») : cette règle devient **pleinement contraignante au merge une fois #323 livré** (l'infra qui rend le vrai art disponible en dev/CI) ; R0.1 est priorisé juste après R0.2.
 
-c. **Gate « Parcours d'acceptation bout-en-bout » (NOUVEAU, par feature/épic)** : à la clôture d'une feature/épic, un agent (ou le proprio) **pilote le vrai parcours utilisateur dans un vrai navigateur sur les vrais assets**, suit le flow de la spec comme l'enfant, et produit un **playthrough narré** (captures analysées + verdict) confirmant que la feature est **conforme bout-en-bout et atteint l'enfant**. **game-design + PO signent le PLAYTHROUGH**, distinct de la review story-level — cf. skill `orchestrate` §5 (drain de clôture d'épic).
+c. **Gate « Parcours d'acceptation bout-en-bout » (NOUVEAU, par feature/épic)** : à la clôture d'une feature/épic, un agent (ou le proprio) **pilote le vrai parcours utilisateur dans un vrai navigateur sur les vrais assets**, suit le flow de la spec comme l'enfant, et produit un **playthrough narré** (captures analysées + verdict) confirmant que la feature est **conforme bout-en-bout et atteint l'enfant**. « **Conforme bout-en-bout** » est ancré aux défauts réels de l'AUDIT §2 — points **nommés** à vérifier *vécus* (pas seulement testés) :
+   - **carte réellement atteinte par le flux normal** (login → carte hub), pas seulement `/carte` en accès direct ;
+   - **Teddy visible dans la boucle de jeu** (accueil / feedback / résultats), pas juste une voix ;
+   - **art créature RÉEL affiché** en collection (pas `CreaturePlaceholder` inconditionnel) ;
+   - **boucle économique pièces→dépense bouclée** (les pièces gagnées ont un but réel).
 
-d. **Canari « état jouable »** : un **E2E full-loop** (login→carte→niveau→récompense→créature→collection) sur le vrai art, maintenu **vert en continu** — la sonde que le jeu *assemblé* marche, pas seulement chaque écran isolé.
+   Le playthrough est un **artefact PERSISTÉ** (jamais jetable en contexte de conversation, sinon reçu invérifiable #164) : **committé dans `docs/playthroughs/<epic>.md` ET posté en commentaire sur l'issue épic** — condition **matérielle** de la signature. **game-design + PO signent le PLAYTHROUGH**, distinct de la review story-level — cf. skill `orchestrate` §5 (drain de clôture d'épic).
+
+d. **Canari « état jouable »** : un **E2E full-loop** (login→carte→niveau→récompense→créature→collection) sur le vrai art, maintenu **vert en continu** — la sonde que le jeu *assemblé* marche, pas seulement chaque écran isolé. **À construire sous R1 (#317) — issue #326** ; une fois livré, sa verdeur devient une **2ᵉ condition de clôture d'épic** (cf. skill `orchestrate` §5), indépendante du playthrough.
 
 e. **Gate #180 rendu EXÉCUTABLE** : la question CLAUDE.md #180 (« la valeur produit centrale atteint-elle l'enfant bout-en-bout ? ») devient un **artefact obligatoire** — le playthrough du point (c) — à **chaque** clôture d'épic, plus jamais une simple règle non-gardée.
 
