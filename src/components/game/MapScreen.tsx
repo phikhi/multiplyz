@@ -1,6 +1,14 @@
 "use client";
 
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { strings } from "@/strings";
 import { LogoutButton } from "@/components/LogoutButton";
@@ -8,6 +16,7 @@ import { currentMapAction } from "@/app/(app)/carte/actions";
 import type { MapNode, MapStars, NodeType, WorldMap } from "@/lib/game/map";
 import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
 import { useIsPhone } from "@/lib/responsive/use-is-phone";
+import { usePrefersReducedMotion } from "@/lib/sound/use-prefers-reduced-motion";
 
 /**
  * **Écran carte** — chemin de nœuds du monde courant (story #125/6.7, WIREFRAMES §2,
@@ -89,6 +98,21 @@ import { useIsPhone } from "@/lib/responsive/use-is-phone";
  * valide à toute largeur, **revérifiée explicitement aux 3 tailles par garde E2E** (jamais une
  * géométrie seulement raisonnée, rétro #190 : ce même écran EST la surface littérale de ce piège).
  * Collection (grille)/Boutique (cartes empilées) = story 8.2b, **hors scope ici**.
+ *
+ * **Auto-scroll vers le nœud courant au montage (story #268, discovered playtest-⚙️)** : sur
+ * téléphone la carte scrolle verticalement (WIREFRAMES §8, `<main>` sans `overflow`, scroll de
+ * PAGE natif) et le nœud courant (Teddy + ▶) n'est PAS toujours dans le premier écran — sa
+ * position dans le chemin `column-reverse` dépend de la progression (nœud 0 = fond du chemin,
+ * boss = sommet), donc l'enfant peut devoir scroller manuellement pour retrouver son point de
+ * reprise. WIREFRAMES §8 n'exige pas cet ancrage (calibration UX in-contract) : `NodePath` ancre
+ * le lien du nœud **courant** (`currentNodeRef`) et l'amène dans le viewport via
+ * `scrollIntoView` dans un `useEffect([])` **MONT-ONLY volontaire** (CLAUDE.md piège #244) —
+ * sûr ici car `NodePath` n'est rendu QUE depuis la branche `screen.kind === "ready"` de
+ * `MapScreen` (jamais `loading`/`error`/`unavailable`), donc chaque apparition de `NodePath`
+ * est un vrai montage React (nouvelle instance), jamais une UPDATE d'un composant réconcilié à
+ * la même position. `prefers-reduced-motion` (a11y, CLAUDE.md) → `behavior:"auto"` (scroll
+ * instantané, jamais l'animation `"smooth"`). Ne touche QUE le scroll : la géométrie de
+ * `WorldMap.nodes` (compte/positions, invariance #123) est totalement inchangée.
  */
 
 /** Glyphe décoratif (doublé du texte) par état de nœud — jamais la seule info portée. */
@@ -302,11 +326,19 @@ function NodeBadge({
   node,
   total,
   teddyUrl,
+  anchorRef,
 }: {
   readonly node: MapNode;
   readonly total: number;
   /** URL validée de la variante Teddy per-monde, ou `null` (aucun avatar). Rendu sur le nœud courant. */
   readonly teddyUrl: string | null;
+  /**
+   * Ref posée sur le lien du nœud (ancrage auto-scroll #268) — fournie par `NodePath`
+   * uniquement pour le nœud **courant** (`undefined` pour tous les autres). Sans effet sur un
+   * nœud verrouillé (jamais un lien, cf. `isNavigable`) : le nœud courant est TOUJOURS navigable
+   * (`status === "current"` ⊂ `isNavigable`), donc toujours attaché à un vrai `<a>`.
+   */
+  readonly anchorRef?: Ref<HTMLAnchorElement>;
 }) {
   const accessibleName = nodeAccessibleName(node, total);
   const badge = (
@@ -346,6 +378,7 @@ function NodeBadge({
   if (isNavigable(node.status)) {
     return (
       <Link
+        ref={anchorRef}
         href="/jouer"
         className="mz-focusable"
         aria-label={accessibleName}
@@ -520,6 +553,23 @@ function NodePath({
   readonly hasBackground: boolean;
 }) {
   const total = map.nodes.length;
+  // Ancrage auto-scroll vers le nœud COURANT au montage (story #268) — cf. commentaire de tête
+  // (MONT-ONLY volontaire, sûr car `NodePath` n'est rendu que depuis la branche `ready`).
+  const currentNodeRef = useRef<HTMLAnchorElement | null>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  useEffect(() => {
+    // `[]` : ancrage MONT-ONLY volontaire (CLAUDE.md piège #244) — ne doit PAS se ré-exécuter à
+    // chaque re-render de `MapScreen` pendant que la carte reste `ready` (ex. `isPhone` qui
+    // change au redimensionnement) : un effet dépendant de `prefersReducedMotion` scroll-jackerait
+    // l'enfant en pleine lecture de la carte. `NodePath` n'apparaît QUE dans l'état `ready` → chaque
+    // fois qu'il apparaît est un vrai montage React (nouvelle instance), jamais une UPDATE d'un
+    // composant réconcilié à la même position (le piège #244 ne s'applique pas ici).
+    currentNodeRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+      block: "center",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mont-only volontaire, cf. commentaire ci-dessus (#268/#244)
+  }, []);
   return (
     <ol
       style={{
@@ -557,7 +607,12 @@ function NodePath({
                 hasBackground={hasBackground}
               />
             )}
-            <NodeBadge node={node} total={total} teddyUrl={teddyUrl} />
+            <NodeBadge
+              node={node}
+              total={total}
+              teddyUrl={teddyUrl}
+              anchorRef={node.status === "current" ? currentNodeRef : undefined}
+            />
           </li>
         );
       })}

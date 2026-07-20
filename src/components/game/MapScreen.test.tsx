@@ -912,3 +912,77 @@ describe("MapScreen — reflow responsive (--bp-phone, story 8.2 #255, WIREFRAME
     }
   });
 });
+
+describe("MapScreen — auto-scroll vers le nœud courant au montage (story #268, discovered playtest-⚙️)", () => {
+  it("au montage, scrollIntoView est appelé UNE FOIS sur le lien du nœud COURANT (pas un autre), block:center + smooth par défaut", async () => {
+    // Effet observable (#60) : rougit si l'ancrage est retiré (jamais appelé) OU s'il cible le
+    // MAUVAIS nœud (le fixture place le courant en position 2 sur 3, jamais le 1ᵉʳ lien du DOM,
+    // pour exclure un faux-positif « toujours le premier lien trouvé »).
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    await renderReady(
+      map([
+        node({ index: 0, status: "completed", stars: 2 }),
+        node({ index: 1, status: "current" }),
+        node({ index: 2, status: "locked" }),
+      ]),
+    );
+    const currentLink = document.querySelector('a[data-map-node-status="current"]');
+    expect(currentLink).not.toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    // Le CONTEXTE d'appel (`this`) est bien le lien du nœud courant — pas le nœud terminé voisin
+    // (`data-map-node` 0) ni un autre élément (rougit si l'ancrage cible le mauvais nœud/ref).
+    expect(spy.mock.contexts[0]).toBe(currentLink);
+  });
+
+  it("prefers-reduced-motion: reduce → scrollIntoView appelé avec behavior:'auto' (scroll INSTANTANÉ, jamais l'animation 'smooth', a11y CLAUDE.md)", async () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      await renderReady(map([node({ status: "current" })]));
+      // Rougit si `prefers-reduced-motion` n'est pas consommé (l'animation 'smooth' resterait
+      // posée inconditionnellement, régression a11y — CLAUDE.md « prefers-reduced-motion »).
+      expect(spy).toHaveBeenCalledWith({ behavior: "auto", block: "center" });
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("aucun nœud COURANT (fixture sans statut 'current') → scrollIntoView N'EST PAS appelé (garde optionnelle sûre, pas de crash)", async () => {
+    // Effet observable : la ref n'est jamais attachée quand aucun nœud n'est 'current' —
+    // `currentNodeRef.current` reste `null`, l'appel `?.scrollIntoView` est donc un no-op sûr.
+    // Rougit si l'optional chaining est retiré (crash) OU si l'appel devient inconditionnel.
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    await renderReady(
+      map([
+        node({ index: 0, status: "completed", stars: 3 }),
+        node({ index: 1, status: "locked" }),
+      ]),
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("MONT-ONLY (piège #244) : un re-render de MapScreen qui reste 'ready' NE réinvoque PAS scrollIntoView (jamais un scroll-jack en pleine lecture)", async () => {
+    // Effet observable du garde-fou #244 : `NodePath` n'est rendu QUE depuis la branche `ready`
+    // (jamais échangé avec un composant du MÊME type depuis une autre branche à la même
+    // position), donc son `useEffect(() => …, [])` ne doit PAS se ré-exécuter à un simple
+    // re-render pendant que l'écran reste `ready`. Rougit si le tableau de dépendances `[]` est
+    // retiré/élargi (l'effet re-tournerait à CHAQUE rendu, scroll-jackant l'enfant en pleine
+    // lecture de la carte).
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    const { rerender } = await renderReady(map([node({ index: 0, status: "current" })]));
+    expect(spy).toHaveBeenCalledTimes(1);
+    rerender(<MapScreen />);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
