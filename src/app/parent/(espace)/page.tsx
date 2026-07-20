@@ -21,8 +21,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Charge + compose tout ce que `ParentDashboard` a besoin d'afficher pour un profil (7.2/7.4/7.7,
- * lecture seule). **Fonction régulière** (pas un composant) : c'est ICI, à la frontière
+ * Charge + compose tout ce que `ParentDashboard` a besoin d'afficher pour un profil
+ * (7.2/7.4/7.7/#241, lecture seule). **Fonction régulière** (pas un composant) : c'est ICI, à la frontière
  * serveur/données, que l'horloge (`Date.now()`) est légitimement lue UNE fois et **injectée**
  * dans les fonctions pures en aval — jamais un `Date.now()` interne à un composant (règle de
  * pureté React 19 des Server Components, en plus de la discipline horloge-injectée CLAUDE.md).
@@ -74,6 +74,10 @@ async function loadDashboardProps(profileId: number): Promise<ParentDashboardPro
     respectWindowMinMinutes: statsConfig.regularity.respectWindowMinMinutes,
     respectWindowMaxMinutes: statsConfig.regularity.respectWindowMaxMinutes,
     pendingWorldsCount: countPendingWorlds(db),
+    // Sparkline de justesse quotidienne (issue #241, ADR 0018) : réutilise l'⚙️ EXISTANT
+    // `trendWindowDays` (ADR 0012, même « semaine glissante » que le titre « Justesse (semaine) »
+    // ci-dessus) — jamais un second réglage de largeur inventé.
+    sparklineWindowDays: statsConfig.reporting.trendWindowDays,
   };
 }
 

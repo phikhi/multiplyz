@@ -433,10 +433,12 @@
   --parent-mastery-weak-glyph:  var(--color-text-primary);
   --parent-mastery-badge-size:  var(--space-6); /* 32px */
   /* Graphique de régularité (minutes/jour, derniers jours — réalise honnêtement la
-     métaphore « sparkline » du wireframe avec de VRAIES données journalières régularity.days,
-     jamais une justesse quotidienne fabriquée : `AccuracyStats` n'expose qu'un point courant +
-     un point précédent, pas une série par jour — cf. corps de PR). Barres verticales en flux
-     (`flex`, jamais `position:absolute`) → aucune garde d'occlusion requise par construction. */
+     métaphore « sparkline » du wireframe avec de VRAIES données journalières régularity.days).
+     Barres verticales en flux (`flex`, jamais `position:absolute`) → aucune garde d'occlusion
+     requise par construction. NB (issue #241, ADR 0018) : la justesse quotidienne QUE ce
+     commentaire annonçait absente est désormais réalisée par `--parent-accuracy-sparkline-*`
+     ci-dessous — `AccuracyStats` (ADR 0012, `stats.ts`) reste inchangée (current/previous
+     seulement), la série vit dans le module SŒUR `accuracy-daily.ts`. */
   --parent-chart-track-bg:   var(--color-bg-tertiary);
   /* `--color-accent-secondary` (turquoise) n'atteint QUE ~1.9:1 sur `--color-bg-tertiary` en light
      (trop clair/saturé pour un remplissage non-texte, piège #104/#125 générique aux accents vifs
@@ -446,6 +448,16 @@
   --parent-chart-fill-bg:    var(--color-accent-primary-active);
   --parent-chart-bar-width:  var(--space-3);
   --parent-chart-max-height: var(--space-8); /* 64px */
+  /* Sparkline de justesse QUOTIDIENNE (issue #241, ADR 0018, `AccuracySparkline` dans
+     `ParentDashboard.tsx`) — réutilise la GÉOMÉTRIE du graphique de régularité ci-dessus
+     (`--parent-chart-bar-width`/`--parent-chart-max-height`/`--parent-chart-track-bg`, même
+     échelle visuelle de « petit graphique en barres »), mais un remplissage DÉDIÉ pour rester
+     visuellement distinct du temps de jeu (régularité) : même token que la barre de justesse par
+     compétence (`--parent-bar-fill-bg` = `--color-accent-primary`), testé ≥3:1 EXPLICITEMENT sur
+     `--parent-chart-track-bg` (jamais supposé identique à un autre couple déjà testé — chaque
+     paire consommée a sa propre garde, `ParentDashboard.test.tsx`). Barres verticales en flux
+     (`flex`) → aucune garde d'occlusion requise par construction. */
+  --parent-accuracy-sparkline-fill-bg: var(--color-accent-primary);
   /* Puce « à revoir » (chip de calcul à réviser en priorité, WIREFRAMES §7). */
   --parent-review-chip-bg:     var(--color-bg-tertiary);
   --parent-review-chip-text:   var(--color-text-primary);

@@ -6,6 +6,10 @@ import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
 import { PENDING_WORLD_A, PENDING_WORLD_B } from "./seed-pending-worlds";
 import { COLLECTION_SESSION_TOKEN, COLLECTION_CREATURES } from "./seed-collection";
 import { MAP_PROGRESS_SESSION_TOKEN, MAP_PROGRESS_COMPLETED_LEVELS } from "./seed-map-progress";
+import {
+  ACCURACY_HISTORY_SESSION_TOKEN,
+  ACCURACY_HISTORY_DAILY_RATIOS,
+} from "./seed-accuracy-history";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -1989,6 +1993,85 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     );
     expect(fitsWidth).toBe(true); // aucun débordement horizontal (WIREFRAMES §8)
     await page.screenshot({ path: "docs/captures/220-dashboard-mobile.png", fullPage: true });
+  });
+
+  // ==========================================================================
+  // Sparkline de justesse QUOTIDIENNE (issue #241, ADR 0018) — réalise honnêtement la métaphore
+  // du wireframe (WIREFRAMES §7 `▁▃▅▆▇`) avec de VRAIES données journalières. Profil DÉDIÉ
+  // (`Timéo`, 6 jours d'`attempts` backdatés, `seed-accuracy-history.ts`) amorcé hors de la
+  // séquence de progression de Léa — un run E2E réel ne peut PAS produire ≥2 jours calendaires
+  // distincts de 1ʳᵉˢ réponses (Léa ne joue qu'AUJOURD'HUI dans cette séquence) ; même patron que
+  // `COLLECTION_SESSION_TOKEN` (8.2b #266) : cookie de session `kind='parent'` injecté
+  // DIRECTEMENT (bypass du PIN), surface DISJOINTE, aucune dépendance à l'état laissé par les
+  // tests précédents.
+  // ==========================================================================
+  test("sparkline de justesse quotidienne (#241) : rend de VRAIES données journalières, plancher 4 %, non-collapse (clair/sombre, capture)", async ({
+    page,
+  }) => {
+    const cookie = {
+      name: "mz_session",
+      value: ACCURACY_HISTORY_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+    await page.goto("/parent");
+    await page.waitForLoadState("networkidle");
+
+    const d = strings.parent.dashboard;
+    await expect(page.getByRole("heading", { level: 1, name: d.title })).toBeVisible();
+
+    // Fenêtre ⚙️ par défaut `trendWindowDays` = 7 (`loadReportingConfig({})`) — 6 jours amorcés,
+    // TOUS dans la fenêtre → gabarit PLURIEL, compte EXACT (rétro #127 : compte chiffré nommé par
+    // le wireframe, jamais moins que les jours réellement amorcés).
+    const chart = page.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
+    await expect(chart).toBeVisible();
+    const barCount = ACCURACY_HISTORY_DAILY_RATIOS.length;
+    await expect(chart.locator("> *")).toHaveCount(barCount);
+
+    // Hauteurs RENDUES (vrai navigateur, pas jsdom) = pourcentage EXACT par jour, dans l'ORDRE
+    // chronologique croissant de `seed-accuracy-history.ts` — le jour à 0 % (index 3) exerce le
+    // PLANCHER 4 % (#170 : jamais une barre invisible), le jour à 100 % (index 2) la hauteur
+    // pleine. Preuve bout-en-bout : données serveur RÉELLES → pixels réellement peints (#180).
+    const bars = chart.locator("> *");
+    for (let i = 0; i < barCount; i++) {
+      const expectedPct = Math.max(ACCURACY_HISTORY_DAILY_RATIOS[i] * 100, 4);
+      const style = await bars.nth(i).getAttribute("style");
+      // Sérialisation RÉELLE du navigateur (`height:20%`, sans espace) ≠ la sortie React inline
+      // vue par les tests jsdom (`height: 20%`) — regex tolérante à l'espace, EXACTE sur le nombre.
+      expect(style).toMatch(new RegExp(`height:\\s*${expectedPct}%`));
+    }
+
+    // NON-COLLAPSE en VRAI navigateur (jsdom ne fait aucun layout, #170) : la barre à 0 % de
+    // justesse (plancher 4 %, la plus à risque d'invisibilité) a une hauteur RENDUE non nulle ET
+    // reste NON RECOUVERTE (aucun élément superposé/positionné dans ce design, `boundingClientRect`
+    // revérifié en vrai navigateur plutôt que raisonné, rétro #190).
+    const floorBarIndex = ACCURACY_HISTORY_DAILY_RATIOS.findIndex((r) => r === 0);
+    expect(floorBarIndex).toBeGreaterThanOrEqual(0); // fixture attendue : au moins un jour à 0 %
+    const floorBox = await bars.nth(floorBarIndex).boundingBox();
+    expect(floorBox).not.toBeNull();
+    expect(floorBox!.width).toBeGreaterThan(0);
+    expect(floorBox!.height).toBeGreaterThan(0);
+    const fullBarIndex = ACCURACY_HISTORY_DAILY_RATIOS.findIndex((r) => r === 1);
+    const fullBox = await bars.nth(fullBarIndex).boundingBox();
+    expect(fullBox).not.toBeNull();
+    expect(fullBox!.height).toBeGreaterThan(floorBox!.height); // 100 % RÉELLEMENT plus haut que 4 %
+
+    // Masque l'indicateur dev Next.js (badge coin bas-gauche) pour une preuve pixel propre —
+    // capture OUVERTE et REGARDÉE (pas seulement générée, #170 : barres visibles/formes/hauteurs).
+    await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
+    await page.screenshot({
+      path: "docs/captures/241-sparkline-justesse-clair.png",
+      fullPage: true,
+    });
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).not.toHaveAttribute("data-theme", "light");
+    await page.screenshot({
+      path: "docs/captures/241-sparkline-justesse-sombre.png",
+      fullPage: true,
+    });
   });
 
   test("mondes à valider (story 7.9, #231) : liste + approuver + rejeter + état vide (clair/sombre/mobile, capture)", async ({

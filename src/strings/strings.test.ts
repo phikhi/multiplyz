@@ -217,6 +217,9 @@ describe("strings (i18n FR)", () => {
     expect(d.accuracy.trendWithDelta).toContain("{delta}");
     expect(d.accuracy.skillBarLabel).toContain("{skill}");
     expect(d.accuracy.skillBarLabel).toContain("{value}");
+    expect(d.accuracy.sparkline).toContain("{n}");
+    expect(d.accuracy.sparklinePlural).toContain("{n}");
+    expect(d.accuracy.sparklineEmpty.length).toBeGreaterThan(0);
     expect(d.speed.value).toContain("{s}");
     expect(d.regularity.respectHint).toContain("{min}");
     expect(d.regularity.respectHint).toContain("{max}");
@@ -236,6 +239,7 @@ describe("strings (i18n FR)", () => {
     // sinon le bug source "1 jours"/"1 niveaux" survivrait silencieusement, review PR #239).
     expect(d.today.summary).not.toBe(d.today.summaryPlural);
     expect(d.today.streak).not.toBe(d.today.streakPlural);
+    expect(d.accuracy.sparkline).not.toBe(d.accuracy.sparklinePlural);
     expect(d.regularity.daysPlayed).not.toBe(d.regularity.daysPlayedPlural);
     expect(d.regularity.recordStreak).not.toBe(d.regularity.recordStreakPlural);
     expect(d.progression.levels).not.toBe(d.progression.levelsPlural);
@@ -252,7 +256,7 @@ describe("strings (i18n FR)", () => {
     expect(d.review.empty.toLowerCase()).not.toContain("erreur");
     // Registre NEUTRE (vouvoiement) : jamais de tutoiement enfant.
     const dashboardText =
-      `${d.subtitle} ${d.today.notPlayed} ${d.today.noStreak} ${d.accuracy.empty} ${d.speed.empty} ${d.review.empty} ${d.regularity.respectHint} ${d.regularity.chartEmpty} ${d.progression.unavailable}`.toLowerCase();
+      `${d.subtitle} ${d.today.notPlayed} ${d.today.noStreak} ${d.accuracy.empty} ${d.accuracy.sparklineEmpty} ${d.speed.empty} ${d.review.empty} ${d.regularity.respectHint} ${d.regularity.chartEmpty} ${d.progression.unavailable}`.toLowerCase();
     expect(dashboardText).not.toMatch(/\btu\b/);
     expect(dashboardText).not.toMatch(/\bte\b/);
     expect(dashboardText).not.toMatch(/\bton\b/);
