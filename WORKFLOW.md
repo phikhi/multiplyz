@@ -210,6 +210,20 @@ Au démarrage d'une conversation (« continue multiplyz »), l'agent orchestrate
 
 Gates de qualité (CI/reviews/PO/branch-protection) **inchangés** : la délégation porte sur le **planning**, pas sur le relâchement des contrôles.
 
+## 21. Definition of Done au niveau FEATURE (correctif R0.2, #316)
+
+Le DoD **ticket-level** (§5) prouve qu'une story est verte **unitairement** ; il ne prouve pas que la **feature/épic** qu'elle compose est **vécue par l'enfant bout-en-bout** — cf. `docs/AUDIT-2026-07-20-reconstruction.md` §4 (3 défaillances de process) : des tickets verts individuellement, jamais assemblés/vérifiés en jeu jouable (nav cassée, art jamais vu, économie absente derrière 8 épics « clos »). Ce DoD **s'ajoute** au DoD ticket-level (§5), il ne le remplace pas.
+
+a. **Tranches verticales only** : aucune story ne merge si son effet n'est pas **observable dans l'app qui tourne** (traverse data→logique→écran, pas juste testé unitairement). Un mécanisme livré sans écran/flux qui le rend vécu par l'enfant n'est pas mergeable tel quel.
+
+b. **Captures = vrai art obligatoire** : toute capture Playwright de la PR (§5/§14) doit montrer les **vrais assets** de production, jamais un fixture de test (rétro R0 : des reviews « pixels validés » avaient regardé un fond fixture rayé, pas l'art réel — AUDIT §4.2).
+
+c. **Gate « Parcours d'acceptation bout-en-bout » (NOUVEAU, par feature/épic)** : à la clôture d'une feature/épic, un agent (ou le proprio) **pilote le vrai parcours utilisateur dans un vrai navigateur sur les vrais assets**, suit le flow de la spec comme l'enfant, et produit un **playthrough narré** (captures analysées + verdict) confirmant que la feature est **conforme bout-en-bout et atteint l'enfant**. **game-design + PO signent le PLAYTHROUGH**, distinct de la review story-level — cf. skill `orchestrate` §5 (drain de clôture d'épic).
+
+d. **Canari « état jouable »** : un **E2E full-loop** (login→carte→niveau→récompense→créature→collection) sur le vrai art, maintenu **vert en continu** — la sonde que le jeu *assemblé* marche, pas seulement chaque écran isolé.
+
+e. **Gate #180 rendu EXÉCUTABLE** : la question CLAUDE.md #180 (« la valeur produit centrale atteint-elle l'enfant bout-en-bout ? ») devient un **artefact obligatoire** — le playthrough du point (c) — à **chaque** clôture d'épic, plus jamais une simple règle non-gardée.
+
 ## Décisions verrouillées (ce tour)
 
 | Sujet | Choix |
@@ -237,3 +251,4 @@ Gates de qualité (CI/reviews/PO/branch-protection) **inchangés** : la déléga
 | Playbooks | Skills **Next** (`next-dev-loop`, `next-cache-components-*`) ; `expo:*`/`stripe:*` **exclus** |
 | Vérif runtime | **`next-dev-loop` obligatoire** avant PR |
 | Cache Components | **différé** à une story perf dédiée |
+| DoD feature (R0.2, #316) | Tranches verticales observables + captures **vrai art** + gate « parcours d'acceptation bout-en-bout » signé game-design+PO + canari E2E full-loop (§21) — rend #180 exécutable |
