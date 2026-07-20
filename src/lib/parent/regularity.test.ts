@@ -12,7 +12,7 @@ import type { AttemptRecord } from "./stats";
  * est vérifiée explicitement.
  */
 
-const CONFIG = loadRegularityConfig({}); // Europe/Paris, amplitude 240, gap 2, respect 15-20.
+const CONFIG = loadRegularityConfig({}); // Europe/Paris, amplitude 75 (#235), gap 2, respect 15-20.
 
 /** Config régularité avec des ⚙️ surchargés (prouve qu'ils AGISSENT sur l'agrégat). */
 function withConfig(overrides: Partial<RegularityConfig>): RegularityConfig {
@@ -89,7 +89,7 @@ describe("computeRegularityStats — temps/jour (amplitude bornée)", () => {
       attempt(Date.UTC(2026, 6, 20, 6, 0)), // 08:00 Paris (premier)
       attempt(Date.UTC(2026, 6, 20, 16, 0)), // 18:00 Paris (dernier)
     ];
-    // Amplitude brute 600 min > plafond 240 → bornée à 240 (voir test dédié). Ici on borne haut à 5 h
+    // Amplitude brute 600 min > plafond par défaut 75 (voir test dédié). Ici on borne haut à 5 h
     // pour lire l'amplitude BRUTE : min(600, 300) = 300 min.
     const day = computeRegularityStats(
       attempts,
@@ -107,13 +107,28 @@ describe("computeRegularityStats — temps/jour (amplitude bornée)", () => {
   it("le PLAFOND d'amplitude (⚙️ maxDayAmplitudeMinutes) BORNE le temps/jour et AGIT", () => {
     // Amplitude brute 10 h = 600 min.
     const attempts = [attempt(Date.UTC(2026, 6, 20, 6, 0)), attempt(Date.UTC(2026, 6, 20, 16, 0))];
-    // Défaut 240 → borné à 240 (rougit si le plafond est figé/ignoré → 600).
-    expect(computeRegularityStats(attempts, CONFIG, NOW).today?.activeMinutes).toBe(240);
-    // Plafond 60 → borné à 60 (le ⚙️ AGIT).
+    // Défaut #235 = 75 → borné à 75 (rougit si le défaut est remis à l'ancienne valeur 240).
+    expect(computeRegularityStats(attempts, CONFIG, NOW).today?.activeMinutes).toBe(75);
+    // Plafond 60 → borné à 60 (le ⚙️ reste calibrable indépendamment du défaut).
     expect(
       computeRegularityStats(attempts, withConfig({ maxDayAmplitudeMinutes: 60 }), NOW).today
         ?.activeMinutes,
     ).toBe(60);
+  });
+
+  it("CALIBRATION #235 : jour à deux COURTES sessions loin dans la journée (9h + 21h, artefact multi-session) — nombre affiché resserré de 240 à 75 — rougit si le défaut est remis à 240", () => {
+    const morning = Date.UTC(2026, 6, 20, 7, 0); // 09:00 Europe/Paris (été)
+    const evening = Date.UTC(2026, 6, 20, 19, 0); // 21:00 Europe/Paris (été)
+    const day = computeRegularityStats([attempt(morning), attempt(evening)], CONFIG, NOW).today;
+    // Nombre affiché borné au NOUVEAU défaut 75 (down from l'ancien 240) — rougit si on remet 240.
+    expect(day?.activeMinutes).toBe(75);
+    // Honnête (#164) : la CLASSIFICATION reste « over » (75 > respectWindowMaxMinutes = 20) — le
+    // resserrage du plafond ne peut PAS la faire passer à « within » tant qu'il reste généreux (>
+    // fenêtre saine, nécessaire pour ne pas plafonner une vraie session longue à 20 min). Corriger la
+    // classification pour ce cas exigerait le modèle alternatif de l'ADR 0014 (somme des intervalles
+    // inter-réponses plafonnés par session) — DRIFT hors scope de la calibration #235 (cf. reçu de
+    // build). Ce test asserte donc le comportement RÉEL, pas un effet que le code n'a pas.
+    expect(day?.respect).toBe("over");
   });
 });
 

@@ -818,10 +818,10 @@ describe("loadRegularityConfig — défauts ⚙️ (PLAN §Espace parent :83, AD
     expect(loadRegularityConfig({})).toEqual(CONFIG_DEFAULTS.regularity);
   });
 
-  it("fuseau Europe/Paris, amplitude 240 min, écart de rupture 2 j, fenêtre 15-20 min", () => {
+  it("fuseau Europe/Paris, amplitude 75 min (#235), écart de rupture 2 j, fenêtre 15-20 min", () => {
     const r = loadRegularityConfig({});
     expect(r.dayTimeZone).toBe("Europe/Paris");
-    expect(r.maxDayAmplitudeMinutes).toBe(240);
+    expect(r.maxDayAmplitudeMinutes).toBe(75);
     expect(r.streakBreakGapDays).toBe(2);
     expect(r.respectWindowMinMinutes).toBe(15);
     expect(r.respectWindowMaxMinutes).toBe(20);
