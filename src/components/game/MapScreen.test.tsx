@@ -955,7 +955,14 @@ describe("MapScreen — auto-scroll vers le nœud courant au montage (story #268
     );
     const currentLink = document.querySelector('a[data-map-node-status="current"]');
     expect(currentLink).not.toBeNull();
-    expect(spy).toHaveBeenCalledTimes(1);
+    // `waitFor` (pas une assertion immédiate) : l'effet `useEffect([])` de `NodePath` qui appelle
+    // `scrollIntoView` est un effet PASSIF, flushé par le scheduler après le commit — pas
+    // synchrone avec la disparition du rôle "status" que `renderReady` observe (mutation DOM du
+    // MÊME commit, mais la mutation-observer de jsdom peut résoudre AVANT le flush des effets
+    // passifs). Une assertion immédiate ici flake en CI (timing plus lent/différent) : `waitFor`
+    // reste rouge si l'ancrage est retiré (jamais appelé, timeout) et vert dès que l'effet flush,
+    // donc la garde reste équivalente — juste déterministe (cf. rétro CI #332, companion #230).
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     expect(spy).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
     // Le CONTEXTE d'appel (`this`) est bien le lien du nœud courant — pas le nœud terminé voisin
     // (`data-map-node` 0) ni un autre élément (rougit si l'ancrage cible le mauvais nœud/ref).
@@ -979,7 +986,9 @@ describe("MapScreen — auto-scroll vers le nœud courant au montage (story #268
       await renderReady(map([node({ status: "current" })]));
       // Rougit si `prefers-reduced-motion` n'est pas consommé (l'animation 'smooth' resterait
       // posée inconditionnellement, régression a11y — CLAUDE.md « prefers-reduced-motion »).
-      expect(spy).toHaveBeenCalledWith({ behavior: "auto", block: "center" });
+      // `waitFor` : même race effet-passif-non-flushé que ci-dessus (rétro CI #332) — l'assertion
+      // reste rouge si l'appel n'arrive jamais (timeout), déterministe si l'effet flush plus tard.
+      await waitFor(() => expect(spy).toHaveBeenCalledWith({ behavior: "auto", block: "center" }));
     } finally {
       window.matchMedia = originalMatchMedia;
     }
@@ -1008,7 +1017,21 @@ describe("MapScreen — auto-scroll vers le nœud courant au montage (story #268
     // lecture de la carte).
     const spy = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     const { rerender } = await renderReady(map([node({ index: 0, status: "current" })]));
-    expect(spy).toHaveBeenCalledTimes(1);
+    // `waitFor` (pas une assertion immédiate) : flake CI connu (#332) — l'effet passif `[]` de
+    // `NodePath` qui appelle `scrollIntoView` au montage n'est pas garanti flushé au moment où
+    // `renderReady` observe la disparition du rôle "status" (mutation-observer jsdom vs flush
+    // d'effets passifs du scheduler React, deux mécanismes asynchrones distincts sur le MÊME
+    // commit) — CI (timing plus lent/différent) peut évaluer l'assertion AVANT le flush, où le
+    // local ne le fait quasi jamais. Rougit TOUJOURS si l'ancrage est retiré (jamais appelé →
+    // timeout du waitFor) ; devient vert dès que l'effet flush, quel que soit le délai — la
+    // garantie (a) « appelé 1× au montage » reste donc intacte, juste rendue déterministe.
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    // Le `rerender` ci-dessous est un `act()` SYNCHRONE (aucun await/promesse interposé,
+    // contrairement au chargement initial) : React flush ses effets passifs à la fin de l'appel
+    // avant que ce `rerender` ne retourne — pas de race possible ici, l'assertion immédiate reste
+    // le bon outil. Garantie (b) « piège #244 mont-only » : un re-render qui reste 'ready' (même
+    // instance de `NodePath`, même Fiber) NE réinvoque PAS l'effet `[]` — rougit si le tableau de
+    // dépendances est retiré/élargi côté prod (scroll-jack à chaque re-render).
     rerender(<MapScreen />);
     expect(spy).toHaveBeenCalledTimes(1);
   });
