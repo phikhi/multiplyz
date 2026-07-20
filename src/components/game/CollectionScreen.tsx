@@ -19,6 +19,12 @@ import type { Rarity } from "@/lib/db/schema";
  * ≥4.5:1 sur le fond de carte réel), jamais `--color-star`/`--color-coin` (accents décoratifs
  * qui échouent le contraste sur fond neutre — rétro #104/#125/#126). Cibles ≥ 44 px.
  * `prefers-reduced-motion` respecté nativement (aucune animation ajoutée). **Tokens only**.
+ *
+ * **Lisibilité description en grille 3-col (issue #272, playtest-⚙️)** : la description
+ * (histoire) tronque proprement à `--collection-card-description-line-clamp` (2) lignes avec
+ * ellipsis, à `--collection-card-description-font-size` (`--font-size-base`, un cran au-dessus
+ * de `--font-size-sm`) — la grille **3 colonnes reste inchangée** (WIREFRAMES §8,
+ * `--collection-grid-columns`), seule la présentation de la description est ajustée.
  */
 
 /** Glyphe distinct par rareté (doublé du LABEL texte) — distingue par FORME, pas couleur. */
@@ -281,8 +287,18 @@ function CreatureCard({
           style={{
             margin: 0,
             fontFamily: "var(--font-family-body)",
-            fontSize: "var(--font-size-sm)",
+            // Police un cran au-dessus (16px, `--font-size-sm` 14px cassait en mur de 3+
+            // lignes fragmentées à 375px — issue #272, playtest-⚙️ confirmé propriétaire).
+            fontSize: "var(--collection-card-description-font-size)",
             color: "var(--collection-text-muted)",
+            // Troncature PROPRE 2 lignes (ellipsis) plutôt qu'un mur de texte fragmenté sur
+            // 3+ lignes irrégulières — token ⚙️ centralisé (jamais un nombre en dur), même
+            // patron que `--collection-grid-columns` consommé via `var()`.
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: "var(--collection-card-description-line-clamp)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
         >
           {entry.story}

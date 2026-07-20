@@ -444,6 +444,17 @@
   --collection-grid-columns:  3;
   --collection-grid-gap:      var(--space-2);
   --collection-card-padding:  var(--space-2);
+  /* Description (histoire) de carte — lisibilité à 375px, cartes ~105px (issue #272,
+     playtest-⚙️, découvert en review 8.2b #266/#271). Le proprio a confirmé au playtest :
+     texte carte collection trop petit. `--font-size-sm` (14px) enchaînait un mur de 3+ lignes
+     fragmentées (ex. « Douce comme une feuille. » cassant sur 3 lignes) → sensation de texte
+     minuscule pour une enfant de 8 ans, même sur des histoires courtes. Fix : police un cran
+     au-dessus (`--font-size-base`, 16px, hors zone « minuscule » xs/sm) + troncature PROPRE
+     2 lignes (ellipsis) au lieu d'un mur de texte fragmenté sur 3+ lignes irrégulières.
+     **3 colonnes PRÉSERVÉES** (WIREFRAMES §8, `--collection-grid-columns` inchangé) — seule la
+     description change, jamais la géométrie de grille. */
+  --collection-card-description-font-size: var(--font-size-base);
+  --collection-card-description-line-clamp: 2;
   /* Silhouette placeholder dimensionnée pour tenir dans une carte de grille 3-colonnes
      à 320px (art réel épic #6). --space-7 (48px) < largeur de contenu de carte au pire cas. */
   --collection-placeholder-size: var(--space-7);

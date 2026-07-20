@@ -174,6 +174,60 @@ describe("CollectionScreen — grille 3 colonnes sur téléphone (WIREFRAMES §8
   });
 });
 
+/**
+ * Lisibilité de la description en grille 3-col à 375px (issue #272, playtest-⚙️ confirmé
+ * propriétaire — cartes ~105px, `--font-size-sm` cassait « Douce comme une feuille. » sur 3
+ * lignes). Fix à DEUX leviers, chacun garanti par un token ⚙️ consommé (jamais une valeur en
+ * dur) — même patron que `--collection-grid-columns` ci-dessus :
+ * 1. `--collection-card-description-font-size` = `--font-size-base` (16px, un cran au-dessus
+ *    de `--font-size-sm`/14px, hors zone « texte minuscule ») ;
+ * 2. `--collection-card-description-line-clamp` = 2 (troncature propre ellipsis, jamais un mur
+ *    de 3+ lignes fragmentées).
+ * **3 colonnes PRÉSERVÉES** (WIREFRAMES §8, fidélité layout — cf. describe ci-dessus, token
+ * `--collection-grid-columns` intouché par cette story).
+ */
+describe("CollectionScreen — lisibilité de la description (issue #272, playtest-⚙️)", () => {
+  it("le token --collection-card-description-font-size vaut var(--font-size-base) (un cran au-dessus de --font-size-sm)", () => {
+    const value = rawTokenValue(themeBlock("light"), "--collection-card-description-font-size");
+    expect(value).toBe("var(--font-size-base)");
+  });
+
+  it("le token --collection-card-description-line-clamp vaut exactement 2 (troncature propre, pas un mur de 3+ lignes)", () => {
+    const value = rawTokenValue(themeBlock("light"), "--collection-card-description-line-clamp");
+    expect(value).toBe("2");
+  });
+
+  it("la description rendue consomme le token de taille de police (pas --font-size-sm en dur)", async () => {
+    await renderReady([entry({ story: "Une histoire suffisamment longue pour tester." })]);
+    const story = document.querySelector<HTMLElement>("[data-collection-story]");
+    expect(story).not.toBeNull();
+    expect(story?.style.fontSize).toBe("var(--collection-card-description-font-size)");
+    // Garde anti-régression explicite : ne DOIT PAS revenir à l'ancien token direct (qui
+    // contournerait le point de calibration ⚙️ playtest de cette story).
+    expect(story?.style.fontSize).not.toBe("var(--font-size-sm)");
+  });
+
+  it("la description rendue consomme le token de troncature (line-clamp 2 lignes, ellipsis, jamais un mur de texte)", async () => {
+    await renderReady([entry({ story: "Une histoire suffisamment longue pour tester." })]);
+    const story = document.querySelector<HTMLElement>("[data-collection-story]");
+    expect(story).not.toBeNull();
+    // Le nombre de lignes est piloté par le token (rougit si la troncature est retirée OU si
+    // un futur agent fige "2" en dur au lieu de consommer le token, #127-class).
+    expect(story?.style.webkitLineClamp).toBe("var(--collection-card-description-line-clamp)");
+    expect(story?.style.display).toBe("-webkit-box");
+    expect(story?.style.overflow).toBe("hidden");
+    expect(story?.style.textOverflow).toBe("ellipsis");
+    // `-webkit-box-orient` (requis par la technique line-clamp classique, un VRAI navigateur
+    // l'applique) n'est PAS assertable ici : le `cssstyle` de jsdom ne reconnaît pas cette
+    // propriété legacy (`el.style.webkitBoxOrient` reste `undefined`, `cssText` la rejette
+    // silencieusement — vérifié empiriquement, pas une supposition). L'effet RÉEL (clamp actif
+    // + `-webkit-box-orient` appliqué) est prouvé en vrai navigateur par la garde E2E dédiée
+    // (`e2e/auth.spec.ts`, section « Lisibilité de la description » : `getComputedStyle`
+    // résout `-webkit-line-clamp` à "2" ET `scrollHeight > clientHeight` sur une histoire
+    // longue — jsdom ne fait aucun layout, cf. CLAUDE.md #170).
+  });
+});
+
 describe("CollectionScreen — renommage (PRODUCT §2.3)", () => {
   it("ouvre le formulaire, renomme et persiste (affichage mis à jour)", async () => {
     await renderReady([entry({ displayName: "Braisille" })]);
