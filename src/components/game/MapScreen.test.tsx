@@ -364,6 +364,10 @@ describe("MapScreen — bande de décor thématisée (tuiles per-monde, story #1
     expect(band!.style.backgroundColor).toBe("var(--world-bg-tint)");
     // Dimension = token de bande (jamais une valeur en dur).
     expect(band!.style.height).toBe("var(--map-tiles-height)");
+    // Cadre « carte postale » (⚙️ playtest #203) : bordure + ombre tokenisées, jamais en dur —
+    // rougit si le cadre régresse à un bandeau nu (déclaré ≠ consommé, #125/#180).
+    expect(band!.style.border).toBe("1px solid var(--map-tiles-border)");
+    expect(band!.style.boxShadow).toBe("var(--map-tiles-shadow)");
   });
 
   it("pas de tuiles (tiles null) → AUCUNE bande de décor (repli propre, pas de fetch non validé)", async () => {
@@ -371,6 +375,26 @@ describe("MapScreen — bande de décor thématisée (tuiles per-monde, story #1
     // rendue inconditionnellement (elle émettrait un background-image vers une URL absente/`null`).
     await renderReady(map([node({ status: "current" })], 0, { tiles: null }));
     expect(document.querySelector("[data-world-tiles]")).toBeNull();
+  });
+
+  it("la bordure du cadre (--map-tiles-border) est VISIBLE : ≥ 3:1 RÉSOLU contre le tint per-monde, pour CHAQUE accent curaté × 2 thèmes (⚙️ #203, piège #226/#170)", () => {
+    // Effet observable (#226/#170, round 2 Frontend) : le cadre « carte postale » (⚙️ #203) ne fait
+    // lire la bande comme un élément posé QUE si sa bordure est réellement VISIBLE contre le fond
+    // tint per-monde qui l'entoure en tint-seul (#199). `--color-border-primary` (le 1er choix) est
+    // un neutre CLAIR à ~1.1–1.2:1 résolu contre `--world-bg-tint` = bordure invisible (la capture
+    // texturée le masquait par contraste fortuit avec le motif rayé, PAS avec la bordure). On résout
+    // le tint réel `color-mix(accent 10%, surface)` pour chaque accent curaté et on vérifie le
+    // plancher WCAG non-texte ≥3:1 (1.4.11). MÊME garantie que le jumeau `--map-node-path-color`
+    // ci-dessus (les deux = `--color-text-secondary`). ROUGIT si `--map-tiles-border` repasse à un
+    // neutre clair (ex. `--color-border-primary`) : vérifié par mutation (build #203).
+    for (const theme of ["light", "dark"] as const) {
+      const surface = resolveTokenColor(theme, "--color-bg-secondary");
+      const border = resolveTokenColor(theme, "--map-tiles-border");
+      for (const accent of CURATED_ACCENTS) {
+        const tint = mixSrgb(accent, surface, 0.1); // même formule que --world-bg-tint (tokens.css)
+        expect(contrastRatio(border, tint)).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 });
 
@@ -390,6 +414,9 @@ describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190,
     expect(teddy!.style.width).toBe("var(--map-node-teddy-size)");
     // Anti-occlusion (#170) : flotte AU-DESSUS de la pastille (bottom:100%) — jamais sur le glyphe.
     expect(teddy!.style.bottom).toBe("100%");
+    // Chevauchement décoratif du haut du médaillon (⚙️ playtest #203, couplé à la taille 40px pour
+    // garder la marge amont — cf. commentaire de tête) : rougit si le couple se désynchronise.
+    expect(teddy!.style.marginBottom).toBe("calc(var(--space-4) * -1)");
     // zIndex > connecteur (0) : l'avatar passe au-dessus du trait, jamais recouvert par lui.
     expect(Number(teddy!.style.zIndex)).toBeGreaterThan(0);
     // L'avatar est bien un enfant du médaillon du nœud COURANT (le marqueur « tu es ici »).

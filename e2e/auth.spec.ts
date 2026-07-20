@@ -1560,10 +1560,50 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // bas dans un chemin significativement plus long que le viewport (11 nœuds + en-tête/pied).
     expect(geometry!.scrollY).toBeGreaterThan(0);
 
+    // ── Calibration Teddy/tuiles (⚙️ playtest #203) — NON-OCCLUSION vrai layout, profil à
+    // progression AVANCÉE (nœuds 0..5 complétés, courant = 6ᵉ/11, nœud AMONT = 7ᵉ locked) et
+    // viewport TÉLÉPHONE 375px (nœuds resserrés, AC #203). Réutilise le patron `richness`/
+    // `teddyGeom` existant (rétro #268 : « la carte a déjà des gardes E2E boundingClientRect,
+    // réutilise-les ») plutôt que d'en réinventer un — jamais une géométrie raisonnée seule
+    // (rétro #190 : c'est EXACTEMENT le piège de cette story, un avatar agrandi SANS re-vérif
+    // empirique a déjà débordé une fois sur ce même écran).
+    const teddyOcclusion = await page.evaluate(() => {
+      const currentLink = document.querySelector('a[data-map-node-status="current"]');
+      const currentLi = currentLink?.closest("li");
+      const medallion = currentLink?.querySelector("[data-map-medallion]");
+      // column-reverse : le nœud AMONT (visuellement au-dessus) est le `<li>` SUIVANT en DOM.
+      const upstreamLi = currentLi?.nextElementSibling;
+      const upstreamMed = upstreamLi?.querySelector("[data-map-medallion]");
+      const teddy = document.querySelector("[data-world-teddy]");
+      if (teddy === null || medallion == null) return null;
+      const teddyRect = teddy.getBoundingClientRect();
+      const medRect = medallion.getBoundingClientRect();
+      return {
+        teddyTop: teddyRect.top,
+        teddyBottom: teddyRect.bottom,
+        medCenterY: medRect.top + medRect.height / 2,
+        upstreamMedBottom: upstreamMed == null ? null : upstreamMed.getBoundingClientRect().bottom,
+      };
+    });
+    expect(teddyOcclusion).not.toBeNull();
+    // (a) NON-OCCLUSION AVAL (#170) : le bas de l'avatar reste au-dessus du CENTRE du médaillon
+    // courant — ne recouvre jamais le glyphe de statut (▶) qu'il « coiffe ».
+    expect(teddyOcclusion!.teddyBottom).toBeLessThanOrEqual(teddyOcclusion!.medCenterY);
+    // (b) NON-OCCLUSION AMONT (#170/#190, DUR pour #203) : le nœud 7 (locked) EXISTE bien en amont
+    // du nœud 6 courant sur ce seed 11-nœuds — assertion FERME, jamais conditionnelle. Le sommet de
+    // l'avatar reste SOUS le bas du médaillon amont. ROUGIT si `--map-node-teddy-size` est agrandi
+    // au point de déborder (vérifié en mutant temporairement le token à 64px = `--space-8` pendant
+    // le build : ce test bascule rouge à cette ligne, `expected >= 342, received 328`, cf. reçu).
+    expect(teddyOcclusion!.upstreamMedBottom).not.toBeNull();
+    expect(teddyOcclusion!.teddyTop).toBeGreaterThanOrEqual(teddyOcclusion!.upstreamMedBottom!);
+
     // VÉRIF VISUELLE (garde-fou dur #170) — capture du VIEWPORT réel (`fullPage:false`, ce que
     // l'enfant voit sans scroller), ouverte et regardée en review : le nœud courant (Teddy + ▶)
     // doit être visible à l'écran au chargement, pas seulement « dans le DOM ».
     await page.screenshot({ path: "docs/captures/268-carte-autoscroll-phone.png" });
+    // Capture dédiée story #203 (calibration Teddy 40px + cadre tuiles) — OUVERTE + pixels
+    // analysés en review (garde-fou #170) : Teddy présent/agrandi, non-occlusif du nœud amont.
+    await page.screenshot({ path: "docs/captures/203-carte-calibration-phone.png" });
   });
 
   // ==========================================================================
