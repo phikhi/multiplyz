@@ -29,11 +29,25 @@ node .claude/skills/orchestrate/concurrency-guard.mjs   # check : verrous agent-
 ```bash
 node .claude/skills/orchestrate/concurrency-guard.mjs acquire --note="<épic/story en cours>"   # ICI, juste après un check CLEAR/STALE
 node .claude/skills/orchestrate/concurrency-guard.mjs heartbeat                                 # §5 étapes 1, 2 et 4 (cf. ancrages)
-node .claude/skills/orchestrate/concurrency-guard.mjs release                                   # §5 fin de scope · §6 stop-drift · §7 pause quota
+node .claude/skills/orchestrate/concurrency-guard.mjs release                                   # les 6 sorties propres — énumération FERMÉE ci-dessous
 ```
 - `acquire` sort en **3** si une session étrangère vivante détient déjà le lock → même conduite que BLOCKED (yield).
 - **Où bat le cœur** : §5.1 (au retour du reçu de build), §5.2 (au retour du fan-out de review), §5.4 (après merge + rétro + checkpoint). Ce sont les seuls moments où le thread principal reprend la main assez longtemps pour battre — un build délégué ne bat pas.
-- **Où le lock est rendu** : **toute** sortie propre — §5 fin de scope (épic clos, plus de story), §6 stop-drift/`needs-owner`, §7 pause quota. Un `release` oublié laisse un lock avec un pid **vivant** (le process `claude` survit au run) → un run ultérieur légitime voit `BLOCKED` **à tort** jusqu'au TTL.
+- **Où le lock est rendu — ÉNUMÉRATION FERMÉE des terminaisons du run.** Un `release` oublié laisse un lock à pid **vivant** (le process `claude` survit au run) **et heartbeat frais** → le run suivant voit `BLOCKED` **à tort** et cède. **Invariant : toute terminaison du thread principal avec le lock posé rend le verrou** — la liste ci-dessous est **exhaustive** ; y ajouter un chemin d'arrêt sans `release` est un défaut.
+
+| # | Terminaison du run | Où | Lock posé ? | Action |
+|---|---|---|---|---|
+| 1 | **Fin de scope** (épic clos, plus aucune story) | §5 clôture, étape 5 | oui | `release` |
+| 2 | **Stop-drift** → issue `needs-owner` ouverte par ce run | §6 | oui | `release` |
+| 3 | **Tout le scope dépend d'un `needs-owner` DÉJÀ ouvert** au démarrage | §6 (fin) | oui | `release` |
+| 4 | **Quota-wall** (message de limite d'usage reçu) | §7 « Quota bas », étape 4 | oui | `release` |
+| 5 | **Pause propre / mur de contexte / fin de session**, quota GO, scope restant | §7 auto-chaîne (note d'ancrage) | oui | `release` **avant** de programmer le successeur |
+| 6 | **`startGuard.verdict = HOLD`** — aucune story démarrable | §7 START | oui | `release` |
+| 7 | **Yield sur `BLOCKED`** au check de démarrage | §1.0 | **non** — `acquire` n'a pas encore été joué | rien à rendre |
+| 8 | **`acquire` refusé** (exit 3, session étrangère vivante) | §1.0 | **non** — le lock appartient à l'autre run | rien à rendre (ne jamais voler) |
+| 9 | **Crash / kill** (frontière propre jamais atteinte) | — | oui | **impossible par construction** → résidu borné par le TTL puis `MAX_AGE` (cf. tableau de résidu) |
+
+Les cas **5 et 6 sont les plus fréquents** en boucle autonome longue, et les plus dangereux : le successeur démarre à `now + ~2 min`, **très en-deçà du TTL de 90 min**.
 
 **Portée RÉELLE — ce que ce verrou ne fait PAS (#164, ne pas sur-revendiquer).** Ce n'est **pas** un « anti-collision garanti » : verrou **consultatif** (aucun verrou noyau, pas de `flock`, aucune sérialisation imposée), un run qui ne l'appelle pas n'est pas contraint, et deux `acquire` exactement simultanés peuvent se croiser. **Réutilisation de pid** : l'OS recycle les pids — un lock abandonné dont le pid a été réattribué à un process sans rapport rend la liveness vraie **à tort** (faux BLOCKED, borné par le TTL puis par `MAX_AGE`) ; aucun jeton d'identité de process n'est stocké, ce cas n'est pas détectable ici. Il est **FAIL-OPEN strict** : tout état incertain (pid indéterminable/mort, heartbeat périmé, âge > plafond dur, fichier corrompu) → **CLEAR**. Conséquence assumée : le pire cas d'un bug est « une collision non empêchée » = **le comportement d'aujourd'hui**, jamais un deadlock où tous les runs cèdent à jamais. Un verdict CLEAR **ne prouve donc pas** l'absence de run concurrent.
 
@@ -43,11 +57,12 @@ node .claude/skills/orchestrate/concurrency-guard.mjs release                   
 
 | Situation | Effet | Borne |
 |---|---|---|
-| Run **crashé** sans `release`, process `claude` toujours vivant | lock fantôme → un run légitime voit BLOCKED **à tort** et cède | ≤ **90 min** (TTL) |
+| Run **crashé / tué** sans `release` (cas 9), process `claude` toujours vivant | lock fantôme → un run légitime voit BLOCKED **à tort** et cède | ≤ **90 min** (TTL) |
 | Run légitime **> 6 h** | son propre lock cesse de le protéger → un concurrent peut démarrer | `MAX_AGE` |
 | Build délégué **> 90 min** sans aucun tour orchestrateur | idem : lock périmé pendant que le run est vivant | TTL |
+| Playbook **non suivi** (`release` sauté sur une sortie 1→6) | même symptôme qu'un crash | ≤ **90 min** (TTL) |
 
-Ces trois trous sont le **prix assumé** du fail-open : allonger le TTL les réduirait au prix d'une fenêtre de faux BLOCKED plus longue. **Ne pas rattraper un câblage insuffisant par un TTL démesuré** — si un heartbeat manque à un ancrage, c'est l'ancrage qu'il faut corriger.
+**Une sortie NORMALE et prévue ne produit plus ce symptôme** : les six terminaisons propres (1→6) rendent le verrou explicitement — c'est l'objet de l'énumération fermée ci-dessus. Le lock fantôme est donc désormais un **accident** (crash, kill, playbook non suivi), plus un **mode nominal**. Ces trous restent le **prix assumé** du fail-open : allonger le TTL les réduirait au prix d'une fenêtre de faux BLOCKED plus longue. **Ne pas rattraper un câblage insuffisant par un TTL démesuré** — si un `heartbeat`/`release` manque à un ancrage, c'est l'ancrage qu'il faut corriger.
 
 **Vérifier que le verrou n'est pas inerte** (un `CLEAR` ne prouve rien — il faut le voir dire BLOCKED sur un vivant connu) :
 ```bash
@@ -115,7 +130,9 @@ Router le hors-scope en issues `discovered`. **Re-trier** le backlog entre les m
 ## 6. Escalade — SEULEMENT le drift
 S'arrêter et demander le sign-off du propriétaire **uniquement** si une décision **modifierait une décision verrouillée** : modèle de données PLAN · pédagogie ENGINE · économie · sécurité · scope d'épic. **Sinon, jamais.** (ADR 0004.) Le subagent de build **escalade le drift** à l'orchestrateur (il ne tranche pas). Présenter le choix de drift clairement + option recommandée, attendre l'arbitrage.
 
-**En run headless/programmé** (le proprio n'est pas là pour arbitrer en direct) : sur drift → **stop**, ouvrir/étiqueter une issue GitHub **`needs-owner`** avec la question de drift + option recommandée, checkpoint statut, **rendre le verrou de session** (`node .claude/skills/orchestrate/concurrency-guard.mjs release` — un stop-drift est une **sortie propre** : sans release, le lock survit avec un pid vivant et bloque à tort le run d'après jusqu'au TTL), et **NE PAS re-programmer** de reprise (attendre l'arbitrage à la prochaine session interactive). Au **démarrage**, si un blocage `needs-owner` est déjà ouvert → ne pas avancer dessus (le contourner ou s'arrêter si tout le scope en dépend).
+**En run headless/programmé** (le proprio n'est pas là pour arbitrer en direct) : sur drift → **stop**, ouvrir/étiqueter une issue GitHub **`needs-owner`** avec la question de drift + option recommandée, checkpoint statut, **rendre le verrou de session** (`node .claude/skills/orchestrate/concurrency-guard.mjs release` — un stop-drift est une **sortie propre** : sans release, le lock survit avec un pid vivant et bloque à tort le run d'après jusqu'au TTL), et **NE PAS re-programmer** de reprise (attendre l'arbitrage à la prochaine session interactive). Au **démarrage**, si un blocage `needs-owner` est déjà ouvert → ne pas avancer dessus : le contourner, ou s'arrêter (voir juste en dessous).
+
+**Arrêt parce que tout le scope en dépend** = **sortie propre** (cas 3 de l'énumération §1.0) → `node .claude/skills/orchestrate/concurrency-guard.mjs release` avant le rapport : le lock a déjà été acquis au démarrage (§1.0), sans quoi il bloquerait à tort le run suivant jusqu'au TTL.
 
 ## 7. Contexte & quota (autonomie longue)
 **Contexte** — l'état durable vit dans **git / GitHub / `LEARNINGS` / mémoire**, pas dans le contexte → le contexte est **jetable aux frontières de story**.
@@ -140,6 +157,8 @@ Le % serveur / le reset / le quota hebdo **ne sont PAS lisibles localement** —
 
 > _Note de datation (#298)_ — le bloc ci-dessous a été rédigé le 2026-07-14, quand le **verrou pleine-durée était encore « à venir »**. Il est **livré depuis #298** et câblé en **§1.0** (`acquire` / `heartbeat` / `release` aux ancrages §5/§6/§7). Le résidu « crash / tir manuel qui chevauche » est donc désormais **couvert** — dans les limites **fail-open** documentées en §1.0 (un CLEAR ne prouve pas l'absence de concurrent).
 
+> _Note d'ancrage `release` (#298) — s'applique à **TOUTES** les puces du bloc ci-dessous._ Chaque motif d'arrêt listé est une **sortie propre du thread principal avec le lock posé** → exécuter `node .claude/skills/orchestrate/concurrency-guard.mjs release` **AVANT** de programmer le successeur (ou avant le rapport final quand il n'y en a pas). C'est **vital pour la puce « Fin de session / mur de contexte / pause propre, quota GO »** (cas 5 de l'énumération §1.0), la sortie propre **la plus fréquente** de la boucle autonome : le successeur démarre à `now + ~2 min`, très en-deçà du TTL de **90 min** — sans `release` il verrait le lock de son prédécesseur avec un **pid vivant** (le process `claude` survit au run) **et un heartbeat frais**, rendrait `BLOCKED` et **céderait** → l'auto-chaîne se casse **en silence**, précisément le « projet gelé en silence » que ce verrou existe pour empêcher. **Seule exception : la puce « Crash »**, où la frontière propre n'est jamais atteinte — aucun `release` n'est possible (cas 9, résidu borné par le TTL).
+
 **Auto-chaîne = SEUL réveil autonome (routine récurrente RETIRÉE — proprio #290 opt-3, 2026-07-14).** Plus de cron périodique qui relance l'orchestrateur → **toute pause propre avec du scope restant DOIT programmer son successeur en one-shot** (skill `schedule`, one-time, commande `continue multiplyz`), sinon la chaîne meurt = **projet gelé en silence**. C'est aussi le mécanisme **anti-collision cron** (#264/#290) : un seul successeur programmé à la fois → **jamais deux runs concurrents** (ferme le gap fenêtre planning/merge/retro du §1.0 côté cadence ; le **verrou pleine-durée fail-open** reste le fix durable pour un run crashé ou un tir manuel qui chevaucherait). Programmer le successeur **à la frontière propre** (après merge + rétro), selon le motif d'arrêt :
 - **Quota-wall** (message de limite reçu) → au **reset de la fenêtre bloquante** (détail ci-dessous).
 - **Fin de session / mur de contexte / pause propre, quota GO, scope restant** → one-shot **imminent** (`now + ~2 min`), `continue multiplyz` : le run suivant reprend direct.
@@ -156,7 +175,7 @@ Le % serveur / le reset / le quota hebdo **ne sont PAS lisibles localement** —
   - **Scheduling cloud indisponible** (gating plan) → ne pas programmer ; rapporter l'heure de reset + le chiffre mesuré pour reprise manuelle (`continue multiplyz`).
   - **Mur hebdo sans heure de reset exacte** → ne pas re-programmer une reprise qui retomberait dans le mur ; rapport + (si tout le scope est bloqué) issue `needs-owner`.
   - **Drift rencontré** (§6) → `needs-owner` + **ne pas** re-programmer.
-  - **Ne pas démarrer** une story quand `startGuard.verdict = HOLD` (évite les branches orphelines).
+  - **Ne pas démarrer** une story quand `startGuard.verdict = HOLD` (évite les branches orphelines). Si HOLD laisse le run **sans aucune story démarrable**, il s'arrête : c'est une **sortie propre** (cas 6 de l'énumération §1.0) → `node .claude/skills/orchestrate/concurrency-guard.mjs release` **avant** de programmer le successeur (au reset mesuré), sinon ce successeur verrait `BLOCKED` et céderait.
 
 ## Rapport (sans attendre d'aval)
 Rapporter en continu, sobrement : tri du backlog, épic/story choisis + pourquoi, parallélisation, chaque merge, rétro. Le propriétaire lit ; il n'a pas à répondre (sauf drift).
