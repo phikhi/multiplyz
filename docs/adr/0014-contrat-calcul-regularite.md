@@ -48,8 +48,9 @@ les valeurs calibrables sont dans `RegularityConfig` (`src/config/server-config.
    l'issue #235, calibration game-design sur la fourchette recommandée 60-90 min). **Libellé honnête
    (#164, correction #235)** : ce plafond borne le **nombre de minutes affiché** pour un jour à
    artefact multi-session (ex. une réponse isolée du matin + une du soir), il ne change **jamais** le
-   classement `under`/`within`/`over` du point 6 — tant qu'il reste `> respectWindowMaxMinutes` (20,
-   nécessaire pour rester généreux sur une vraie session longue), tout jour dont l'amplitude BRUTE
+   classement `under`/`within`/`over` du point 6 — tant qu'il reste `> respectWindowMaxMinutes` (20 par
+   défaut — vrai pour les défauts calibrés ici, mais **non garanti par une validation croisée** : un env
+   abaissant ce plafond sous la fenêtre saine romprait cette propriété), tout jour dont l'amplitude BRUTE
    dépasse la fenêtre saine reste classé **over** quelle que soit sa valeur ; seul le nombre affiché
    diminue. Un jour à **une seule** réponse a une amplitude nulle → 0 min (une question isolée ≈ temps
    négligeable). Ce n'est **pas** une durée de session mesurée : c'est un **repère** dérivé, calibrable

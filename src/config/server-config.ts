@@ -469,10 +469,11 @@ export interface RegularityConfig {
    * plutôt que de le laisser gonfler à plusieurs heures (l'ancien défaut `240` = 4 h était jugé trop
    * généreux, cf. issue #235). ⚠️ **Honnêteté du libellé (#164)** : ce plafond ne change **jamais** le
    * classement `under`/`within`/`over` (`classifyRespect`, cf. `respectWindowMinMinutes`/
-   * `respectWindowMaxMinutes`) — tant qu'il reste `> respectWindowMaxMinutes` (20 par défaut, ce qui
-   * est le cas par construction pour rester généreux sur une vraie session longue), tout jour dont
-   * l'amplitude BRUTE dépasse la fenêtre saine reste classé **over** quelle que soit la valeur de ce
-   * plafond — seul le nombre affiché diminue (moins absurde pour le parent), pas la classification. Un
+   * `respectWindowMaxMinutes`) — tant qu'il reste `> respectWindowMaxMinutes` (20 par défaut — vrai
+   * pour les défauts calibrés ici, mais **non garanti par une validation croisée** : un env abaissant
+   * ce plafond sous la fenêtre saine romprait cette propriété), tout jour dont l'amplitude BRUTE
+   * dépasse la fenêtre saine reste classé **over** quelle que soit la valeur de ce plafond — seul le
+   * nombre affiché diminue (moins absurde pour le parent), pas la classification. Un
    * modèle plus fidèle qui distinguerait ce cas (somme des intervalles inter-réponses plafonnés par
    * session) existe en **alternative documentée** de l'ADR 0014, mais change le contrat de calcul
    * (hors scope d'un simple resserrage de défaut). Défaut `75`. ≥ 1 (`parsePositiveInt`) — un plafond
