@@ -20,7 +20,12 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest.setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    include: [
+      "src/**/*.{test,spec}.{ts,tsx}",
+      // Outillage d'orchestration (verrou de concurrence #264/#290/#298) : logique PURE et
+      // injectable, testée sous le MÊME gate que l'app (cf. `coverage.include` plus bas).
+      ".claude/skills/orchestrate/*.{test,spec}.mjs",
+    ],
     // Restaure tous les `vi.spyOn` à leur implémentation d'origine **avant chaque test** (#193) :
     // règle la classe entière des fuites de spy inter-tests (un `spy.mockRestore()` non gardé posé
     // après une assertion qui lève ne s'exécute jamais → le spy fuit dans le test suivant et DÉPLACE
@@ -31,7 +36,14 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "html", "lcov", "json-summary"],
       all: true,
-      include: ["src/**/*.{ts,tsx}"],
+      include: [
+        "src/**/*.{ts,tsx}",
+        // Verrou de session pleine-durée (#298) : le module PUR (toute la logique de verdict,
+        // fail-open et écriture) entre dans le gate 100 %. Le CLI `concurrency-guard.mjs` reste
+        // hors scope : c'est un wiring I/O + `process.exit` (fs, `ps`, argv), sans logique propre —
+        // il est couvert empiriquement par `session-lock-selfcheck.mjs` (vrai process, vrai fichier).
+        ".claude/skills/orchestrate/session-lock.mjs",
+      ],
       exclude: [
         "src/**/*.{test,spec}.{ts,tsx}",
         // layout.tsx = boilerplate framework (rend <html>/<body>, non testable via RTL) ;

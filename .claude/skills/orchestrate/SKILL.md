@@ -12,13 +12,36 @@ Playbook de la **boucle autonome** (cf. **ADR 0004** + ADR 0003, WORKFLOW §20).
 
 ## 1. Synchroniser l'état
 
-**1.0 — Verrou d'exclusion mutuelle (EN PREMIER, avant tout — #264 Option A, ADR 0004).** Empêche de **démarrer une story** tant qu'un **build concurrent** est verrouillé (réduit fortement le recouvrement ; ne couvre pas la fenêtre planning/merge d'un autre run sans build actif — full-exclusion pleine-durée = follow-up lockfile/flock). Deux runs cron qui se recouvrent = merges parallèles + clôtures d'épic prématurées + worktrees écrasés (2 collisions réelles). Au démarrage, AVANT de spawn le moindre subagent :
+**1.0 — Verrou d'exclusion mutuelle (EN PREMIER, avant tout — #264 Option A / #290, ADR 0004).** Deux runs qui se recouvrent = merges parallèles + clôtures d'épic prématurées + worktrees écrasés + **revue bloquante contournée** (3 collisions réelles, #290). Le guard scanne **deux** verrous complémentaires :
+
+1. **`agent-*` (build)** — un worktree de build verrouillé dont le **pid est VIVANT** appartient à un autre run.
+2. **session pleine-durée (#298)** — `.session-lock.json` posé par CE playbook, qui couvre la fenêtre que le verrou `agent-*` ne voit pas : planning → choix de story → **merge** → rétro (entre deux builds, aucun worktree n'est verrouillé).
+
+Au démarrage, AVANT de spawn le moindre subagent, **depuis la racine du dépôt principal** (le lock vit à côté du script ; un worktree a le sien) :
 ```bash
-node .claude/skills/orchestrate/concurrency-guard.mjs   # scanne les verrous agent-* (pid vivant ?)
+node .claude/skills/orchestrate/concurrency-guard.mjs   # check : verrous agent-* + lock de session
 ```
-- **BLOCKED** (exit 3, un verrou `agent-*` dont le **pid est VIVANT** = build d'un AUTRE run en cours) → **YIELD** : ne démarrer **aucune** story, s'arrêter proprement, rapport court (« run concurrent actif sur <branche>, je cède »). Ne PAS tuer le process concurrent (destructif, domaine ops proprio) ; ne PAS re-programmer (le cron relancera, le concurrent aura fini).
-- **STALE** (exit 0, verrou dont le **pid est MORT** = run crashé/coupé) → nettoyer l'orphelin (`git worktree remove --force .claude/worktrees/<name>`), puis continuer.
+- **BLOCKED** (exit 3 — build `agent-*` vivant **et/ou** session vivante d'un autre run) → **YIELD** : ne démarrer **aucune** story, s'arrêter proprement, rapport court (« run concurrent actif sur <branche>, je cède »). Ne PAS tuer le process concurrent (destructif, domaine ops proprio) ; ne PAS re-programmer (le successeur one-shot du run actif prendra le relais, cf. §7).
+- **STALE** (exit 0, verrou `agent-*` dont le **pid est MORT** = run crashé/coupé) → nettoyer l'orphelin (`git worktree remove --force .claude/worktrees/<name>`), puis continuer.
 - **CLEAR** (exit 0) → continuer normalement.
+
+**Poser / tenir / rendre le verrou de session (obligatoire — un verrou que personne ne prend ne protège rien) :**
+```bash
+node .claude/skills/orchestrate/concurrency-guard.mjs acquire --note="<épic/story en cours>"  # juste après un check CLEAR/STALE
+node .claude/skills/orchestrate/concurrency-guard.mjs heartbeat                                # à CHAQUE frontière de story (après merge + rétro)
+node .claude/skills/orchestrate/concurrency-guard.mjs release                                  # à la sortie propre (fin de rapport), avant de programmer le successeur
+```
+- `acquire` sort en **3** si une session étrangère vivante détient déjà le lock → même conduite que BLOCKED (yield).
+- Le `heartbeat` est ce qui rend le TTL court sûr : sans lui, un run légitimement long verrait son propre lock périmer et un concurrent pourrait démarrer.
+
+**Portée RÉELLE — ce que ce verrou ne fait PAS (#164, ne pas sur-revendiquer).** Ce n'est **pas** un « anti-collision garanti » : verrou **consultatif** (aucun verrou noyau, pas de `flock`, aucune sérialisation imposée), un run qui ne l'appelle pas n'est pas contraint, et deux `acquire` exactement simultanés peuvent se croiser. Il est **FAIL-OPEN strict** : tout état incertain (pid indéterminable/mort, heartbeat périmé, âge > plafond dur, fichier corrompu) → **CLEAR**. Conséquence assumée : le pire cas d'un bug est « une collision non empêchée » = **le comportement d'aujourd'hui**, jamais un deadlock où tous les runs cèdent à jamais. Un verdict CLEAR **ne prouve donc pas** l'absence de run concurrent.
+
+**⚙️ calibrables** (env, défauts dans `session-lock.mjs`) : `SESSION_LOCK_TTL_MIN` (15) · `SESSION_LOCK_MAX_AGE_MIN` (90) · `SESSION_LOCK_MAX_ANCESTOR_DEPTH` (8). **Escape-hatch manuel** : supprimer `.claude/skills/orchestrate/.session-lock.json` (gitignoré) libère immédiatement.
+
+**Vérifier que le verrou n'est pas inerte** (un `CLEAR` ne prouve rien — il faut le voir dire BLOCKED sur un vivant connu) :
+```bash
+node .claude/skills/orchestrate/session-lock-selfcheck.mjs   # vrai process de fond → BLOCKED, puis kill → CLEAR
+```
 
 ```bash
 git fetch --prune && git status
@@ -101,6 +124,15 @@ Le % serveur / le reset / le quota hebdo **ne sont PAS lisibles localement** —
   Lecteur JSONL maison (pur stdlib, compte-account) → tokens du **bloc 5 h actif**, **minutes avant reset** (réelles), **plafond empirique** (max bloc passé, auto-calibré — 0 nombre deviné), **proxy hebdo 7 j**, et un `startGuard.verdict` :
   - **HOLD** (finir la story courante, n'en démarrer **aucune**) si `ratio ≥ START_GUARD_RATIO` (⚙️ 0.85) **ou** `resetsInMin ≤ STORY_WALLCLOCK_MIN` (⚙️ 30 min).
   - **GO** sinon.
+
+**Auto-chaîne = SEUL réveil autonome (routine récurrente RETIRÉE — proprio #290 opt-3, 2026-07-14).** Plus de cron périodique qui relance l'orchestrateur → **toute pause propre avec du scope restant DOIT programmer son successeur en one-shot** (skill `schedule`, one-time, commande `continue multiplyz`), sinon la chaîne meurt = **projet gelé en silence**. C'est aussi le mécanisme **anti-collision cron** (#264/#290) : un seul successeur programmé à la fois → **jamais deux runs concurrents** (ferme le gap fenêtre planning/merge/retro du §1.0 côté cadence ; le **verrou pleine-durée fail-open** reste le fix durable pour un run crashé ou un tir manuel qui chevaucherait). Programmer le successeur **à la frontière propre** (après merge + rétro), selon le motif d'arrêt :
+- **Quota-wall** (message de limite reçu) → au **reset de la fenêtre bloquante** (détail ci-dessous).
+- **Fin de session / mur de contexte / pause propre, quota GO, scope restant** → one-shot **imminent** (`now + ~2 min`), `continue multiplyz` : le run suivant reprend direct.
+- **Fin de scope** (plus d'épic/story ouverte) → **NE PAS** programmer (rapport de complétion).
+- **Drift / `needs-owner` bloquant ouvert** → **NE PAS** programmer (attendre l'arbitrage interactif, cf. §6).
+- **Crash** (frontière propre jamais atteinte) → aucun successeur = **chaîne rompue** → reprise **manuelle** (`continue multiplyz`) ; résidu couvert par le verrou pleine-durée à venir.
+
+> _Note de datation (#298)_ — le bloc ci-dessus a été rédigé le 2026-07-14, quand le **verrou pleine-durée était encore « à venir »**. Il est **livré depuis #298** et câblé en **§1.0** (`acquire` / `heartbeat` / `release`). Le résidu « crash / tir manuel qui chevauche » est donc désormais **couvert** — dans les limites **fail-open** documentées en §1.0 (un CLEAR ne prouve pas l'absence de concurrent).
 
 **Quota bas (message de limite reçu) → PAUSE PROPRE + reprise AUTO-PROGRAMMÉE :**
   1. Finir la story courante (**merge + rétro**), **checkpoint statut** (WIP + next + **chiffre MESURÉ** : `usedTokens` / `resetsInMin`, jamais un %). Ne jamais s'arrêter au milieu.
