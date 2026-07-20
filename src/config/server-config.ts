@@ -463,9 +463,20 @@ export interface RegularityConfig {
   dayTimeZone: string;
   /**
    * **Plafond d'amplitude** du temps de jeu **par jour**, en minutes (ADR 0014 : temps/jour ≈
-   * `min(dernier − premier attempt du jour, ce plafond)`). Borne l'approximation par amplitude pour
-   * qu'une réponse isolée du matin + une du soir ne gonfle pas le temps mesuré. Défaut `240` (4 h).
-   * ≥ 1 (`parsePositiveInt`) — un plafond `0` mesurerait toujours 0 (dégénéré → retombe sur le défaut).
+   * `min(dernier − premier attempt du jour, ce plafond)`). Resserré à `75` (issue #235 — calibration
+   * game-design, fourchette recommandée 60-90 min, milieu retenu) : borne le **nombre de minutes
+   * affiché** pour un jour à artefact multi-session (ex. une réponse isolée du matin + une du soir)
+   * plutôt que de le laisser gonfler à plusieurs heures (l'ancien défaut `240` = 4 h était jugé trop
+   * généreux, cf. issue #235). ⚠️ **Honnêteté du libellé (#164)** : ce plafond ne change **jamais** le
+   * classement `under`/`within`/`over` (`classifyRespect`, cf. `respectWindowMinMinutes`/
+   * `respectWindowMaxMinutes`) — tant qu'il reste `> respectWindowMaxMinutes` (20 par défaut, ce qui
+   * est le cas par construction pour rester généreux sur une vraie session longue), tout jour dont
+   * l'amplitude BRUTE dépasse la fenêtre saine reste classé **over** quelle que soit la valeur de ce
+   * plafond — seul le nombre affiché diminue (moins absurde pour le parent), pas la classification. Un
+   * modèle plus fidèle qui distinguerait ce cas (somme des intervalles inter-réponses plafonnés par
+   * session) existe en **alternative documentée** de l'ADR 0014, mais change le contrat de calcul
+   * (hors scope d'un simple resserrage de défaut). Défaut `75`. ≥ 1 (`parsePositiveInt`) — un plafond
+   * `0` mesurerait toujours 0 (dégénéré → retombe sur le défaut).
    */
   maxDayAmplitudeMinutes: number;
   /**
@@ -725,8 +736,9 @@ export const CONFIG_DEFAULTS = {
   regularity: {
     // Jour calendaire dans le fuseau de la famille (français) — jamais UTC brut (ADR 0014).
     dayTimeZone: "Europe/Paris",
-    // Plafond d'amplitude du temps/jour : 4 h (borne l'approximation par amplitude).
-    maxDayAmplitudeMinutes: 240,
+    // Plafond d'amplitude du temps/jour : 75 min (issue #235 — borne le NOMBRE affiché pour un
+    // artefact multi-session, jamais la classification under/within/over, cf. JSDoc).
+    maxDayAmplitudeMinutes: 75,
     // Série rompue dès un écart de 2 jours calendaires (jours consécutifs stricts).
     streakBreakGapDays: 2,
     // Fenêtre saine de temps de jeu quotidien : 15-20 min (PLAN §Espace parent, DETAILS §3 (Temps d'écran)).
