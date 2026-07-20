@@ -36,7 +36,10 @@ export default defineConfig({
     // ...puis amorce un profil dédié (`Nino`) + 5 créatures possédées (story 8.2b, #266) — la
     // collection ne se peuple qu'au boss (hors scope d'un test de reflow, boutique/gacha
     // inexistante cf. #269) : sans cet amorçage `/collection` resterait toujours vide.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && pnpm dev --port ${PORT}`,
+    // ...puis amorce un profil dédié (`Timéo`) + 6 jours d'`attempts` backdatés (issue #241) — la
+    // sparkline de justesse quotidienne n'affiche une FORME qu'à ≥2 jours DISTINCTS, hors
+    // d'atteinte d'un parcours de jeu E2E réel en un seul run (même patron que `seed-collection`).
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

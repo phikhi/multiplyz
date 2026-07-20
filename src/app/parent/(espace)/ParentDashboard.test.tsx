@@ -68,6 +68,16 @@ const FULL_STATS: ParentStats = {
       { dayOrdinal: 100, activeMs: 18 * 60_000, activeMinutes: 18, respect: "within" },
     ],
   },
+  // Série QUOTIDIENNE de justesse (issue #241) — 5 jours, ratios DISTINCTS et connus, dont un jour
+  // à 0 % (plancher 4 %, #170) et un à 100 % (hauteur pleine) — mêmes bornes que le graphique de
+  // régularité pour couvrir les deux cas extrêmes en un seul jeu de fixtures.
+  accuracyDaily: [
+    { dayOrdinal: 200, accuracy: 0.2 },
+    { dayOrdinal: 201, accuracy: 0.5 },
+    { dayOrdinal: 202, accuracy: 1 },
+    { dayOrdinal: 203, accuracy: 0 },
+    { dayOrdinal: 204, accuracy: 0.8 },
+  ],
 };
 
 /** Agrégats vides : profil jamais joué (tous les replis no-fail exercés). */
@@ -96,6 +106,7 @@ const EMPTY_STATS: ParentStats = {
     today: null,
     days: [],
   },
+  accuracyDaily: [],
 };
 
 /** Justesse/rapidité NON-nulles (l'enfant a déjà joué, un jour) mais SANS donnée dans la
@@ -146,6 +157,7 @@ const BASE_PROPS = {
   respectWindowMinMinutes: 15,
   respectWindowMaxMinutes: 20,
   pendingWorldsCount: 0,
+  sparklineWindowDays: 7, // défaut réel `ReportingConfig.trendWindowDays` (ADR 0012).
 };
 
 describe("ParentDashboard — bandeau + en-tête", () => {
@@ -253,6 +265,113 @@ describe("ParentDashboard — justesse (semaine) + par compétence", () => {
     const bar = screen.getByRole("img", { name: `${d.skills.comp10} : 88 %` });
     const fillEl = bar.firstElementChild as HTMLElement;
     expect(fillEl.style.width).toBe("88%");
+  });
+});
+
+// ==========================================================================
+// Sparkline de justesse QUOTIDIENNE (issue #241, ADR 0018) — réalise honnêtement la métaphore du
+// wireframe (WIREFRAMES §7 `▁▃▅▆▇`) avec de VRAIES données journalières `accuracyDaily`, jamais
+// `AccuracyStats.trend` (ADR 0012, current/previous seulement) — même patron de garde que le
+// graphique de régularité (#125 consommation, #170 plancher non-vacuous, compte EXACT #127).
+// ==========================================================================
+describe("ParentDashboard — sparkline de justesse quotidienne (#241)", () => {
+  it("graphique LISIBLE (≥2 jours) : consomme `sparklinePlural` en role=img (fenêtre PLURIEL), compte EXACT de barres", () => {
+    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
+    // Fenêtre ⚙️ = 7 (BASE_PROPS) → PLURIEL, même si seuls 5 points existent (même sémantique que
+    // `regularity.chartLabel`, la fenêtre nommée n'est pas le compte de barres réellement rendues).
+    const chart = screen.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
+    expect(chart.children).toHaveLength(5); // compte EXACT (5 jours dans la fixture)
+  });
+
+  it("repli textuel accessible : 0 jour → PAS de sparkline, `sparklineEmpty` affiché", () => {
+    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
+    expect(screen.getByText(d.accuracy.sparklineEmpty)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /Justesse par jour/u })).not.toBeInTheDocument();
+  });
+
+  it("repli textuel accessible : EXACTEMENT 1 jour → PAS de sparkline (un point isolé n'est pas une forme)", () => {
+    const oneDay: ParentStats = {
+      ...FULL_STATS,
+      accuracyDaily: [{ dayOrdinal: 200, accuracy: 0.5 }],
+    };
+    render(<ParentDashboard {...BASE_PROPS} stats={oneDay} progression={FULL_PROGRESSION} />);
+    expect(screen.getByText(d.accuracy.sparklineEmpty)).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /Justesse par jour/u })).not.toBeInTheDocument();
+  });
+
+  it("hauteur des barres = pourcentage RÉEL par jour, plancher 4 % pour 0 % (jamais invisible, #170)", () => {
+    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
+    const chart = screen.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
+    const bars = Array.from(chart.children) as HTMLElement[];
+    expect(bars).toHaveLength(5);
+    // Ordre CROISSANT de la fixture : 20 % / 50 % / 100 % / 0 %→plancher 4 % / 80 %.
+    expect(bars[0].style.height).toBe("20%");
+    expect(bars[1].style.height).toBe("50%");
+    expect(bars[2].style.height).toBe("100%");
+    expect(bars[3].style.height).toBe("4%"); // 0 % de justesse — plancher, jamais 0 %
+    expect(bars[4].style.height).toBe("80%");
+  });
+
+  it("aucune barre de la sparkline lisible n'a une hauteur nulle (rendu ≠ invisible, #170)", () => {
+    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
+    const chart = screen.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
+    const bars = Array.from(chart.children) as HTMLElement[];
+    expect(bars.length).toBeGreaterThan(0);
+    for (const bar of bars) {
+      expect(bar.style.height).not.toBe("0%");
+      expect(bar.style.height).not.toBe("");
+    }
+  });
+
+  it("MUTATION-PROUVÉ : ne rend QUE les `sparklineWindowDays` DERNIERS jours (fenêtre ⚙️ AGIT, tranche la fin)", () => {
+    const nineDays: ParentStats = {
+      ...FULL_STATS,
+      accuracyDaily: Array.from({ length: 9 }, (_, i) => ({
+        dayOrdinal: 300 + i,
+        accuracy: i / 8, // 0, 0.125, …, 1 — croissant, le DERNIER (i=8) vaut 1 (100 %)
+      })),
+    };
+    render(
+      <ParentDashboard
+        {...BASE_PROPS}
+        sparklineWindowDays={3}
+        stats={nineDays}
+        progression={FULL_PROGRESSION}
+      />,
+    );
+    // 9 jours dispo, fenêtre 3 → seuls les 3 DERNIERS (i=6,7,8) sont rendus, jamais les 9.
+    const chart = screen.getByRole("img", { name: /Justesse par jour \(3 derniers jours\)/u });
+    const bars = Array.from(chart.children) as HTMLElement[];
+    expect(bars).toHaveLength(3); // rougit si le slice `-windowDays` est retiré (rendrait 9)
+    expect(bars[2].style.height).toBe("100%"); // le TOUT DERNIER jour (i=8), pas un jour ancien
+  });
+
+  it("pluralisation FR EXACTE de la fenêtre : SINGULIER à `sparklineWindowDays=1`, PLURIEL à ≥2", () => {
+    const { rerender } = render(
+      <ParentDashboard
+        {...BASE_PROPS}
+        sparklineWindowDays={1}
+        stats={FULL_STATS}
+        progression={FULL_PROGRESSION}
+      />,
+    );
+    expect(
+      screen.getByRole("img", { name: "Justesse par jour (1 dernier jour)" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <ParentDashboard
+        {...BASE_PROPS}
+        sparklineWindowDays={2}
+        stats={FULL_STATS}
+        progression={FULL_PROGRESSION}
+      />,
+    );
+    // PLURIEL à ≥2 — retirer `pluralize()` au profit d'un gabarit unique figé romprait ce test.
+    expect(
+      screen.getByRole("img", { name: "Justesse par jour (2 derniers jours)" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/2 dernier jour\)/u)).toBeNull();
   });
 });
 
@@ -614,6 +733,21 @@ describe("ParentDashboard — contraste WCAG résolu (tous glyphes/traits rendus
       expect(
         contrastRatio(
           resolveTokenColor(theme, "parent-chart-fill-bg"),
+          resolveTokenColor(theme, "parent-chart-track-bg"),
+        ),
+      ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("sparkline de justesse quotidienne (#241) : remplissage ≥ 3:1 sur SON rail exact (élément NON-TEXTE)", () => {
+    // Fond de référence = le fond DOM RÉELLEMENT empilé derrière CETTE barre précise
+    // (`--parent-chart-track-bg`, réutilisé par `accuracySparklineTrackStyle`) — jamais supposé
+    // identique à la paire barre-de-justesse déjà testée plus haut (rétro #125 : un frère empilé
+    // n'a pas le fond du médaillon voisin ; chaque paire consommée a sa PROPRE garde).
+    for (const theme of THEMES) {
+      expect(
+        contrastRatio(
+          resolveTokenColor(theme, "parent-accuracy-sparkline-fill-bg"),
           resolveTokenColor(theme, "parent-chart-track-bg"),
         ),
       ).toBeGreaterThanOrEqual(3);
