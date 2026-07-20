@@ -19,7 +19,7 @@ import {
  * `computeRegularityStats` (7.4) — jamais une seconde définition du temps de jeu.
  */
 
-const CONFIG: RegularityConfig = loadRegularityConfig({}); // Paris, amplitude 240, gap 2, 15-20.
+const CONFIG: RegularityConfig = loadRegularityConfig({}); // Paris, amplitude 75 (#235), gap 2, 15-20.
 const MIN = 60 * 1000;
 const NOW = Date.UTC(2026, 6, 20, 12, 0, 0); // 14:00 Europe/Paris (été) — pas de bord de minuit.
 

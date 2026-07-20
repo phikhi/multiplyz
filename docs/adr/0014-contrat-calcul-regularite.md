@@ -44,10 +44,17 @@ les valeurs calibrables sont dans `RegularityConfig` (`src/config/server-config.
 3. **Jours joués** = nombre de jours calendaires **distincts** portant au moins une réponse (historique).
 
 4. **Temps de jeu/jour = amplitude bornée** (approximation assumée) : `min(dernier − premier attempt
-   du jour, maxDayAmplitudeMinutes)` (⚙️, défaut `240` min = 4 h). Le plafond borne l'approximation
-   pour qu'une réponse isolée du matin + une du soir ne gonflent pas le temps. Un jour à **une seule**
-   réponse a une amplitude nulle → 0 min (une question isolée ≈ temps négligeable). Ce n'est **pas**
-   une durée de session mesurée : c'est un **repère** dérivé, calibrable au playtest.
+   du jour, maxDayAmplitudeMinutes)` (⚙️, défaut `75` min — resserré depuis `240` min = 4 h par
+   l'issue #235, calibration game-design sur la fourchette recommandée 60-90 min). **Libellé honnête
+   (#164, correction #235)** : ce plafond borne le **nombre de minutes affiché** pour un jour à
+   artefact multi-session (ex. une réponse isolée du matin + une du soir), il ne change **jamais** le
+   classement `under`/`within`/`over` du point 6 — tant qu'il reste `> respectWindowMaxMinutes` (20 par
+   défaut — vrai pour les défauts calibrés ici, mais **non garanti par une validation croisée** : un env
+   abaissant ce plafond sous la fenêtre saine romprait cette propriété), tout jour dont l'amplitude BRUTE
+   dépasse la fenêtre saine reste classé **over** quelle que soit sa valeur ; seul le nombre affiché
+   diminue. Un jour à **une seule** réponse a une amplitude nulle → 0 min (une question isolée ≈ temps
+   négligeable). Ce n'est **pas** une durée de session mesurée : c'est un **repère** dérivé, calibrable
+   au playtest.
 
 5. **Série de jours** — deux jours joués appartiennent à la même série si leur écart d'ordinaux est
    **strictement inférieur** à `streakBreakGapDays` (⚙️, défaut `2` : écart 1 continue, écart ≥ 2
