@@ -36,7 +36,11 @@ export default defineConfig({
     // ...puis amorce un profil dédié (`Nino`) + 5 créatures possédées (story 8.2b, #266) — la
     // collection ne se peuple qu'au boss (hors scope d'un test de reflow, boutique/gacha
     // inexistante cf. #269) : sans cet amorçage `/collection` resterait toujours vide.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && pnpm dev --port ${PORT}`,
+    // ...puis amorce un profil dédié (`Milo`) + 6 niveaux complétés (story #268) — le nœud
+    // COURANT résultant (7ᵉ sur 11, ni le 1ᵉʳ ni le boss) prouve l'ancrage auto-scroll sur une
+    // position qui EXIGE le scroll pour être garantie visible (jouer 6 niveaux en E2E serait lent
+    // et hors-scope, le sujet est le SCROLL, pas la progression).
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

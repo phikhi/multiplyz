@@ -339,6 +339,15 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     await addCollectionSession(context);
     await page.goto("/carte");
     await page.waitForLoadState("networkidle");
+    // Auto-scroll vers le nœud courant au montage (story #268) : ce profil (`Nino`, aucune
+    // progression seedée) a son nœud courant au tout DÉBUT du chemin `column-reverse`
+    // (WIREFRAMES §2/§8, loin du haut de page) → la carte ancre désormais la page dessus au
+    // chargement (comportement VOULU). Sujet ORTHOGONAL à cette garde d'occlusion invite↔titre
+    // (#170/#190/defect PO round 2) : on resynchronise le scroll au sommet pour mesurer la
+    // coexistence invite/titre dans leur position NATURELLE de page (pré-#268), sans quoi
+    // `elementFromPoint` retomberait hors-viewport (points hors cadre → `null`), un artefact de
+    // mesure — pas une régression d'occlusion réelle.
+    await page.evaluate(() => window.scrollTo(0, 0));
     // La carte charge son titre `<h1>` (thématisé « Monde {n} · {thème} »).
     const mapTitle = page.getByRole("heading", { level: 1 });
     await expect(mapTitle).toBeVisible();
@@ -347,6 +356,7 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     await dispatchFakeBeforeInstallPrompt(page);
     await expect(page.getByRole("region", { name: strings.pwa.install.regionLabel })).toBeVisible();
     await expect(mapTitle).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0)); // ré-affirmé (#268) : la région ajoutée par l'invite peut re-décaler le layout.
     await expectInviteAndHostTitleCoexist(page);
     await page.screenshot({ path: "docs/captures/258-install-prompt-carte.png" });
 
@@ -354,6 +364,7 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     await page.setViewportSize(PHONE_VIEWPORT);
     await expect(page.getByRole("region", { name: strings.pwa.install.regionLabel })).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 0)); // #268 : resynchronisé à nouveau après le changement de viewport.
     await expectInviteAndHostTitleCoexist(page);
     await page.screenshot({ path: "docs/captures/258-install-prompt-carte-mobile.png" });
   });
