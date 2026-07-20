@@ -737,12 +737,15 @@ function WorldAccentBar() {
  * médaillon opaque) reste **inchangé**. Repli teinté `--world-bg-tint` **per-monde** sous l'image
  * (hérité de `<main>` qui le re-déclare, fix #184) : jamais un `<img>` vers une URL non validée.
  *
- * **Cadre « carte postale » (⚙️ playtest #203)** : sans bordure ni ombre, une bande plein-largeur se
- * fond visuellement dans le fond de la carte (surtout en tint-seul #199, même famille de couleur) et
- * se lit comme un artefact plutôt qu'un élément posé. `--map-tiles-border`/`--map-tiles-shadow`
- * (mêmes tokens que les CARTES de l'app, `--color-border-primary`/`--card-shadow`) l'habillent d'un
- * cadre discret cohérent avec le langage visuel des autres surfaces cartes — purement décoratif,
- * aucun changement de contraste texte (la bande ne porte aucun glyphe).
+ * **Cadre « carte postale » (⚙️ playtest #203)** : sans bordure VISIBLE, une bande plein-largeur se
+ * fond dans le fond de la carte (surtout en tint-seul #199, même famille de couleur) et se lit comme
+ * un artefact plutôt qu'un élément posé. `--map-tiles-border` = `--color-text-secondary` (neutre
+ * DISTINCTEMENT sombre, le JUMEAU de `--map-node-path-color` déjà prouvé **≥3:1 résolu** contre
+ * `--world-bg-tint` pour les 6 accents curatés × 2 thèmes) — **jamais** `--color-border-primary` (un
+ * neutre clair, ~1.1–1.2:1 contre le tint = bordure invisible, piège #226/#170 attrapé par calcul
+ * WCAG résolu, pas par la capture texturée). `--map-tiles-shadow` (`--card-shadow`) ne fait que
+ * renforcer : c'est la BORDURE ≥3:1 qui porte la séparation (non-texte, WCAG 1.4.11). Purement
+ * décoratif, la bande ne porte aucun glyphe (aucun contraste texte à préserver).
  */
 function WorldTilesBand({ src }: { readonly src: string }) {
   return (

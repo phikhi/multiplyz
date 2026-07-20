@@ -376,6 +376,26 @@ describe("MapScreen — bande de décor thématisée (tuiles per-monde, story #1
     await renderReady(map([node({ status: "current" })], 0, { tiles: null }));
     expect(document.querySelector("[data-world-tiles]")).toBeNull();
   });
+
+  it("la bordure du cadre (--map-tiles-border) est VISIBLE : ≥ 3:1 RÉSOLU contre le tint per-monde, pour CHAQUE accent curaté × 2 thèmes (⚙️ #203, piège #226/#170)", () => {
+    // Effet observable (#226/#170, round 2 Frontend) : le cadre « carte postale » (⚙️ #203) ne fait
+    // lire la bande comme un élément posé QUE si sa bordure est réellement VISIBLE contre le fond
+    // tint per-monde qui l'entoure en tint-seul (#199). `--color-border-primary` (le 1er choix) est
+    // un neutre CLAIR à ~1.1–1.2:1 résolu contre `--world-bg-tint` = bordure invisible (la capture
+    // texturée le masquait par contraste fortuit avec le motif rayé, PAS avec la bordure). On résout
+    // le tint réel `color-mix(accent 10%, surface)` pour chaque accent curaté et on vérifie le
+    // plancher WCAG non-texte ≥3:1 (1.4.11). MÊME garantie que le jumeau `--map-node-path-color`
+    // ci-dessus (les deux = `--color-text-secondary`). ROUGIT si `--map-tiles-border` repasse à un
+    // neutre clair (ex. `--color-border-primary`) : vérifié par mutation (build #203).
+    for (const theme of ["light", "dark"] as const) {
+      const surface = resolveTokenColor(theme, "--color-bg-secondary");
+      const border = resolveTokenColor(theme, "--map-tiles-border");
+      for (const accent of CURATED_ACCENTS) {
+        const tint = mixSrgb(accent, surface, 0.1); // même formule que --world-bg-tint (tokens.css)
+        expect(contrastRatio(border, tint)).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
 });
 
 describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190, ADR 0009)", () => {

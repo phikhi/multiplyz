@@ -1588,8 +1588,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // (b) NON-OCCLUSION AMONT (#170/#190, DUR pour #203) : le nœud 7 (locked) EXISTE bien en amont
     // du nœud 6 courant sur ce seed 11-nœuds — assertion FERME, jamais conditionnelle. Le sommet de
     // l'avatar reste SOUS le bas du médaillon amont. ROUGIT si `--map-node-teddy-size` est agrandi
-    // au point de déborder (vérifié en mutant temporairement le token à 56px pendant le build : ce
-    // test bascule rouge, cf. reçu).
+    // au point de déborder (vérifié en mutant temporairement le token à 64px = `--space-8` pendant
+    // le build : ce test bascule rouge à cette ligne, `expected >= 342, received 328`, cf. reçu).
     expect(teddyOcclusion!.upstreamMedBottom).not.toBeNull();
     expect(teddyOcclusion!.teddyTop).toBeGreaterThanOrEqual(teddyOcclusion!.upstreamMedBottom!);
 
