@@ -113,6 +113,15 @@ import { usePrefersReducedMotion } from "@/lib/sound/use-prefers-reduced-motion"
  * la même position. `prefers-reduced-motion` (a11y, CLAUDE.md) → `behavior:"auto"` (scroll
  * instantané, jamais l'animation `"smooth"`). Ne touche QUE le scroll : la géométrie de
  * `WorldMap.nodes` (compte/positions, invariance #123) est totalement inchangée.
+ *
+ * **Calibration richesse per-monde à froid (⚙️ playtest #203, discovered issue de #190)** : le
+ * proprio a joué la carte (32px, marge amont 8px) et rapporté Teddy à la fois « trop petit » ET
+ * « qui chevauche » — deux forces opposées. Recalibré au COUPLE taille+chevauchement (cf.
+ * `CurrentNodeTeddy`, 32→40px), jamais la taille seule (rétro #190 : agrandir sans creuser le
+ * chevauchement redonnerait l'occlusion originale). `WorldTilesBand` reçoit un cadre
+ * bordure+ombre (`--map-tiles-border`/`--map-tiles-shadow`) pour lire comme un décor intentionnel
+ * plutôt qu'un bandeau orphelin — hauteur (96px) inchangée, la question du proprio portait sur la
+ * LECTURE, pas la taille. Aucun changement de `WorldMap.nodes` ni de `--map-node-gap` (#123).
  */
 
 /** Glyphe décoratif (doublé du texte) par état de nœud — jamais la seule info portée. */
@@ -294,6 +303,17 @@ function StarsRow({ stars }: { readonly stars: MapStars }) {
  * son bas reste **au-dessus du glyphe de statut centré**, jamais recouvrant (`zIndex` > connecteur).
  * Garde DOUBLÉE (jsdom ne fait aucun layout) : preuve pixel (capture réelle ouverte) + preuve
  * **géométrie E2E** (`e2e/auth.spec.ts` : avatar visible, dans le cadre, bas ≤ centre du médaillon).
+ *
+ * **Calibration présence/occlusion (⚙️ playtest #203)** : le proprio a rapporté Teddy à la fois
+ * « trop petit » (32px, fix #170) ET « qui chevauche » — deux forces opposées sur le MÊME avatar.
+ * Résolu en faisant varier **le couple** taille (`--map-node-teddy-size`, 32→40px) ET profondeur du
+ * chevauchement décoratif du haut (`--space-2`→`--space-4`, -8px→-16px) **ensemble** : l'avatar
+ * « coiffe » davantage son PROPRE médaillon (plus de présence visuelle, glyphe de statut toujours
+ * dégagé — marge aval 16px, jamais < la moitié du rayon du médaillon) au lieu de déborder vers le
+ * médaillon AMONT (marge inchangée, 8px — même delta numérique que le fix #170 original). Agrandir
+ * SEULEMENT la taille sans approfondir le chevauchement referait déborder l'avatar (rétro #190) :
+ * la garde E2E `teddyTop ≥ bas du médaillon amont` (jamais une géométrie raisonnée seule) est
+ * l'arbitre, pas ce commentaire.
  */
 function CurrentNodeTeddy({ src }: { readonly src: string }) {
   return (
@@ -302,10 +322,11 @@ function CurrentNodeTeddy({ src }: { readonly src: string }) {
       data-world-teddy=""
       style={{
         position: "absolute",
-        // Flotte au-dessus de la pastille ; léger chevauchement décoratif du haut du médaillon
-        // (--space-2) → l'avatar « coiffe » le nœud sans jamais recouvrir le glyphe centré.
+        // Flotte au-dessus de la pastille ; chevauchement décoratif du haut du médaillon
+        // (--space-4, ⚙️ #203) → l'avatar « coiffe » le nœud (présence) sans jamais recouvrir
+        // le glyphe centré (marge aval encore généreuse, cf. commentaire de tête).
         bottom: "100%",
-        marginBottom: "calc(var(--space-2) * -1)",
+        marginBottom: "calc(var(--space-4) * -1)",
         left: "50%",
         transform: "translateX(-50%)",
         width: "var(--map-node-teddy-size)",
@@ -715,6 +736,13 @@ function WorldAccentBar() {
  * empilé **par-dessus** elle, donc le **fond de référence de contraste** des glyphes de nœud (leur
  * médaillon opaque) reste **inchangé**. Repli teinté `--world-bg-tint` **per-monde** sous l'image
  * (hérité de `<main>` qui le re-déclare, fix #184) : jamais un `<img>` vers une URL non validée.
+ *
+ * **Cadre « carte postale » (⚙️ playtest #203)** : sans bordure ni ombre, une bande plein-largeur se
+ * fond visuellement dans le fond de la carte (surtout en tint-seul #199, même famille de couleur) et
+ * se lit comme un artefact plutôt qu'un élément posé. `--map-tiles-border`/`--map-tiles-shadow`
+ * (mêmes tokens que les CARTES de l'app, `--color-border-primary`/`--card-shadow`) l'habillent d'un
+ * cadre discret cohérent avec le langage visuel des autres surfaces cartes — purement décoratif,
+ * aucun changement de contraste texte (la bande ne porte aucun glyphe).
  */
 function WorldTilesBand({ src }: { readonly src: string }) {
   return (
@@ -731,6 +759,8 @@ function WorldTilesBand({ src }: { readonly src: string }) {
         backgroundPosition: "center",
         backgroundRepeat: "no-repeat",
         borderRadius: "var(--map-tiles-radius)",
+        border: "1px solid var(--map-tiles-border)",
+        boxShadow: "var(--map-tiles-shadow)",
       }}
     />
   );

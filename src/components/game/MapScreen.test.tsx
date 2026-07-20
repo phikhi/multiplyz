@@ -364,6 +364,10 @@ describe("MapScreen — bande de décor thématisée (tuiles per-monde, story #1
     expect(band!.style.backgroundColor).toBe("var(--world-bg-tint)");
     // Dimension = token de bande (jamais une valeur en dur).
     expect(band!.style.height).toBe("var(--map-tiles-height)");
+    // Cadre « carte postale » (⚙️ playtest #203) : bordure + ombre tokenisées, jamais en dur —
+    // rougit si le cadre régresse à un bandeau nu (déclaré ≠ consommé, #125/#180).
+    expect(band!.style.border).toBe("1px solid var(--map-tiles-border)");
+    expect(band!.style.boxShadow).toBe("var(--map-tiles-shadow)");
   });
 
   it("pas de tuiles (tiles null) → AUCUNE bande de décor (repli propre, pas de fetch non validé)", async () => {
@@ -390,6 +394,9 @@ describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190,
     expect(teddy!.style.width).toBe("var(--map-node-teddy-size)");
     // Anti-occlusion (#170) : flotte AU-DESSUS de la pastille (bottom:100%) — jamais sur le glyphe.
     expect(teddy!.style.bottom).toBe("100%");
+    // Chevauchement décoratif du haut du médaillon (⚙️ playtest #203, couplé à la taille 40px pour
+    // garder la marge amont — cf. commentaire de tête) : rougit si le couple se désynchronise.
+    expect(teddy!.style.marginBottom).toBe("calc(var(--space-4) * -1)");
     // zIndex > connecteur (0) : l'avatar passe au-dessus du trait, jamais recouvert par lui.
     expect(Number(teddy!.style.zIndex)).toBeGreaterThan(0);
     // L'avatar est bien un enfant du médaillon du nœud COURANT (le marqueur « tu es ici »).
