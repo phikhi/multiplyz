@@ -146,4 +146,40 @@ describe("SKILL.md — câblage du verrou de session (#298)", () => {
     const releaseRows = rows.filter((line) => line.includes("`release`"));
     expect(releaseRows).toHaveLength(CLEAN_EXITS.length);
   });
+
+  it("le renvoi §1.0 (cas 1 « fin de scope ») cite l'étape RÉELLE portant le `release` dans la liste de clôture d'épic", () => {
+    // Ancre croisée fragile (#164/#296) : la colonne « Où » du cas 1 du tableau §1.0 pointe vers un
+    // numéro d'item de la liste « Clôture d'épic — DRAIN » (§5). Toute insertion dans cette liste
+    // décale l'item du `release` → le renvoi doit suivre, sinon il ment EN SILENCE (défaut exact du
+    // round 1 de R0.2 : insertion du gate playthrough → release passé de l'item 5 à l'item 6, mais
+    // le tableau citait encore « étape 5 »). C'est le piège que le test de câblage existant a raté.
+    const closureStart = lines.findIndex((line) => /Clôture d'épic — DRAIN obligatoire/.test(line));
+    expect(closureStart, "liste « Clôture d'épic — DRAIN » introuvable").toBeGreaterThanOrEqual(0);
+
+    // Numéro d'item RÉEL portant le `release` (scopé à la section §5, jusqu'au prochain en-tête `## `).
+    let releaseItem = null;
+    for (let i = closureStart + 1; i < lines.length; i++) {
+      if (/^## /.test(lines[i])) break;
+      const m = lines[i].match(/^(\d+)\.\s/);
+      if (m && lines[i].includes(RELEASE_CMD)) {
+        releaseItem = Number(m[1]);
+        break;
+      }
+    }
+    expect(
+      releaseItem,
+      "aucun item numéroté de la liste de clôture ne porte le `release`",
+    ).not.toBeNull();
+
+    // Numéro d'étape CITÉ par la ligne §1.0 du cas « fin de scope » (colonne « Où »).
+    const row = lines.find((line) => /^\| 1 \|/.test(line) && /Fin de scope/.test(line));
+    expect(row, "ligne §1.0 du cas 1 (fin de scope) introuvable").toBeTruthy();
+    const cited = row.match(/§5 clôture, étape (\d+)/);
+    expect(cited, "la colonne « Où » du cas 1 doit citer « §5 clôture, étape N »").toBeTruthy();
+
+    expect(
+      Number(cited[1]),
+      `renvoi §1.0 désync : le tableau cite « étape ${cited?.[1]} » mais le \`release\` de clôture est à l'item ${releaseItem}`,
+    ).toBe(releaseItem);
+  });
 });
