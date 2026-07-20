@@ -40,7 +40,10 @@ export default defineConfig({
     // COURANT résultant (7ᵉ sur 11, ni le 1ᵉʳ ni le boss) prouve l'ancrage auto-scroll sur une
     // position qui EXIGE le scroll pour être garantie visible (jouer 6 niveaux en E2E serait lent
     // et hors-scope, le sujet est le SCROLL, pas la progression).
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && pnpm dev --port ${PORT}`,
+    // ...puis amorce un profil dédié (`Timéo`) + 6 jours d'`attempts` backdatés (issue #241) — la
+    // sparkline de justesse quotidienne n'affiche une FORME qu'à ≥2 jours DISTINCTS, hors
+    // d'atteinte d'un parcours de jeu E2E réel en un seul run (même patron que `seed-collection`).
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && pnpm dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

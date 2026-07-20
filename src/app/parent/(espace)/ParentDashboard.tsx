@@ -13,17 +13,19 @@ import type {
   SpeedStats,
   Trend,
 } from "@/lib/parent/stats";
+import type { AccuracyDayPoint } from "@/lib/parent/accuracy-daily";
 import type { DayActivity, DayRespect } from "@/lib/parent/regularity";
 import type { ProgressionSummary } from "@/lib/parent/progression";
 import { pluralize, signedPercentPoints, toPercent, toSecondsFr } from "./dashboard-format";
 
 /**
- * **Tableau de bord parent** (story 7.7, WIREFRAMES §7, PLAN §Espace parent). Assemble les
- * agrégats **déjà calculés** côté serveur (7.2 `stats.ts` + 7.4 `regularity.ts` + 7.7
- * `progression.ts`) — ce composant est un pur **rendu**, aucun calcul pédagogique/statistique
- * n'y vit (CLAUDE.md : la logique de maîtrise/reporting ne se réinvente pas côté UI). Registre
- * **neutre/vouvoiement** (COPY §5, pas Teddy), zéro texte en dur (strings centralisées), zéro
- * valeur en dur (tokens `tokens.css`).
+ * **Tableau de bord parent** (story 7.7, WIREFRAMES §7, PLAN §Espace parent ; sparkline de
+ * justesse quotidienne : issue #241, ADR 0018). Assemble les agrégats **déjà calculés** côté
+ * serveur (7.2 `stats.ts` + 7.4 `regularity.ts` + 7.7 `progression.ts` + #241 `accuracy-daily.ts`)
+ * — ce composant est un pur **rendu**, aucun calcul pédagogique/statistique n'y vit (CLAUDE.md :
+ * la logique de maîtrise/reporting ne se réinvente pas côté UI). Registre **neutre/vouvoiement**
+ * (COPY §5, pas Teddy), zéro texte en dur (strings centralisées), zéro valeur en dur (tokens
+ * `tokens.css`).
  *
  * **Aucun élément superposé/positionné** (pas de `position:absolute`, pas de z-index) : barres,
  * badges et puces sont des frères en flux normal (`flex`) → hors du périmètre de la garde
@@ -33,7 +35,7 @@ import { pluralize, signedPercentPoints, toPercent, toSecondsFr } from "./dashbo
 export interface ParentDashboardProps {
   /** Prénom du profil affiché (gabarit du sous-titre, COPY §5 « Progression de {prénom} »). */
   readonly displayName: string;
-  /** Agrégats complets (7.2 + 7.4), lecture seule, déjà calculés côté serveur. */
+  /** Agrégats complets (7.2 + 7.4 + #241), lecture seule, déjà calculés côté serveur. */
   readonly stats: ParentStats;
   /** Résumé de progression (7.7), ou `null` si le socle de secours n'est pas amorcé
    * (`SocleUnavailableError` — repli neutre, n'affecte QUE ce bloc, jamais tout l'écran). */
@@ -46,6 +48,10 @@ export interface ParentDashboardProps {
   /** Nombre de mondes `buffered` en attente d'approbation (story 7.9, `countPendingWorlds`) —
    * repère de découvrabilité de l'impasse #231 (le lien reste affiché même à 0). */
   readonly pendingWorldsCount: number;
+  /** Nombre de jours affichés par la sparkline de justesse (issue #241, ADR 0018) — réutilise
+   * l'⚙️ EXISTANT `ReportingConfig.trendWindowDays` (ADR 0012, MÊME « semaine glissante » que le
+   * titre « Justesse (semaine) » ci-dessus), jamais un second réglage de largeur inventé. */
+  readonly sparklineWindowDays: number;
 }
 
 const d = strings.parent.dashboard;
@@ -287,7 +293,90 @@ function SkillBar({ skill, ratio }: { readonly skill: Skill; readonly ratio: num
   );
 }
 
-function AccuracySection({ accuracy }: { readonly accuracy: AccuracyStats }) {
+// ============================================================================
+// Sparkline de justesse QUOTIDIENNE (issue #241, ADR 0018) — réalise honnêtement la métaphore
+// du wireframe (WIREFRAMES §7 `▁▃▅▆▇`) avec de VRAIES données journalières `accuracyDaily`
+// (jamais `AccuracyStats.trend`, qui n'expose que current/previous, ADR 0012 inchangée).
+// ============================================================================
+const accuracySparklineTrackStyle = {
+  display: "flex",
+  alignItems: "flex-end",
+  gap: "var(--space-2)",
+  height: "var(--parent-chart-max-height)",
+  padding: "var(--space-2)",
+  backgroundColor: "var(--parent-chart-track-bg)",
+  borderRadius: "var(--border-radius-md)",
+} as const;
+
+// `accuracy` est TOUJOURS dans `[0,1]` (contrat `AccuracyDayPoint`) → hauteur = pourcentage
+// DIRECT, aucune mise à l'échelle par un maximum de fenêtre (contrairement au graphique de
+// régularité, qui normalise contre `maxMinutes`). Plancher 4 % : un jour à 0 % de justesse reste
+// une barre RÉELLE et VISIBLE, jamais une hauteur nulle qui lirait comme un bug (#170).
+const accuracySparklineBarStyle = (accuracy: number) =>
+  ({
+    display: "block",
+    width: "var(--parent-chart-bar-width)",
+    height: `${Math.max(accuracy * 100, 4)}%`,
+    backgroundColor: "var(--parent-accuracy-sparkline-fill-bg)",
+    borderRadius: "var(--parent-bar-radius)",
+  }) as const;
+
+/**
+ * Rend la sparkline si ≥2 jours de justesse existent dans l'**historique COMPLET** (une FORME
+ * exige au moins 2 points, WIREFRAMES §7 « voir la forme de la tendance ») ; sinon un repli
+ * textuel accessible (`sparklineEmpty`, même patron que `regularity.chartEmpty`). `days` = série
+ * COMPLÈTE triée croissante (`ParentStats.accuracyDaily`) — cette fonction tranche elle-même les
+ * derniers `windowDays` POINTS AVEC DONNÉES (même sémantique que `RegularitySection` tranchant ses
+ * 7 derniers jours JOUÉS, pas les 7 derniers jours calendaires) — jamais un second découpage
+ * inventé.
+ *
+ * **La garde de lisibilité porte sur `days.length` (l'historique ENTIER), PAS sur le compte
+ * post-découpage** : gater sur `days.slice(-windowDays).length` rendrait le gabarit SINGULIER
+ * (« 1 dernier jour ») structurellement INATTEIGNABLE — `windowDays = 1` produirait TOUJOURS
+ * `recentDays.length <= 1 < 2`, quel que soit le volume d'historique réel, donc jamais affiché
+ * (piège #125 « déclaré ≠ rendu », variante fenêtre plutôt que donnée). En gatant sur l'historique
+ * complet, un `windowDays` configuré à 1 (⚙️ valide, `trendWindowDays ≥ 1`) avec ≥2 jours
+ * d'historique réel rend légitimement 1 SEULE barre + le gabarit singulier — un rendu MINIMAL mais
+ * jamais un texte mort.
+ */
+function AccuracySparkline({
+  days,
+  windowDays,
+}: {
+  readonly days: readonly AccuracyDayPoint[];
+  readonly windowDays: number;
+}) {
+  if (days.length < 2) {
+    return <p style={mutedTextStyle}>{d.accuracy.sparklineEmpty}</p>;
+  }
+  const recentDays = days.slice(-windowDays);
+  const label = fill(
+    pluralize(windowDays, d.accuracy.sparkline, d.accuracy.sparklinePlural),
+    "{n}",
+    String(windowDays),
+  );
+  return (
+    <div role="img" aria-label={label} style={accuracySparklineTrackStyle}>
+      {recentDays.map((day) => (
+        <span
+          key={day.dayOrdinal}
+          aria-hidden="true"
+          style={accuracySparklineBarStyle(day.accuracy)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function AccuracySection({
+  accuracy,
+  accuracyDaily,
+  sparklineWindowDays,
+}: {
+  readonly accuracy: AccuracyStats;
+  readonly accuracyDaily: readonly AccuracyDayPoint[];
+  readonly sparklineWindowDays: number;
+}) {
   const valueText =
     accuracy.overall === null
       ? d.accuracy.empty
@@ -299,6 +388,7 @@ function AccuracySection({ accuracy }: { readonly accuracy: AccuracyStats }) {
       {accuracy.overall !== null && (
         <p style={mutedTextStyle}>{accuracyTrendText(accuracy.trend)}</p>
       )}
+      <AccuracySparkline days={accuracyDaily} windowDays={sparklineWindowDays} />
       <h3 style={{ ...headingStyle, fontSize: "var(--font-size-sm)" }}>
         {d.accuracy.bySkillHeading}
       </h3>
@@ -593,6 +683,7 @@ export function ParentDashboard({
   respectWindowMinMinutes,
   respectWindowMaxMinutes,
   pendingWorldsCount,
+  sparklineWindowDays,
 }: ParentDashboardProps) {
   return (
     <main className="bg-bg text-text" style={mainStyle}>
@@ -604,7 +695,11 @@ export function ParentDashboard({
           currentStreakDays={stats.regularity.currentStreakDays}
           levelsToday={progression === null ? null : progression.levelsToday}
         />
-        <AccuracySection accuracy={stats.accuracy} />
+        <AccuracySection
+          accuracy={stats.accuracy}
+          accuracyDaily={stats.accuracyDaily}
+          sparklineWindowDays={sparklineWindowDays}
+        />
         <SpeedSection speed={stats.speed} />
         <MasterySection masteryMap={stats.masteryMap} />
         <ReviewSection reviewList={stats.reviewList} />

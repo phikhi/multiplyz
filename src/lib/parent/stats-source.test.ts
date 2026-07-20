@@ -13,10 +13,10 @@ import type { StatsConfig } from "./stats";
 import { loadParentStats } from "./stats-source";
 
 /**
- * Pont **DB → agrégats parent** (stories 7.2 + 7.4) sur **base réelle** (SQLite en mémoire +
- * migrations). Vérifie la composition end-to-end (attempts + scope → agrégats, régularité incluse)
- * ET la garde **read-only observable** : aucune écriture DB (espions insert/update/delete + comptes
- * de lignes inchangés).
+ * Pont **DB → agrégats parent** (stories 7.2 + 7.4 + issue #241) sur **base réelle** (SQLite en
+ * mémoire + migrations). Vérifie la composition end-to-end (attempts + scope → agrégats, régularité
+ * ET justesse quotidienne incluses) ET la garde **read-only observable** : aucune écriture DB
+ * (espions insert/update/delete + comptes de lignes inchangés).
  */
 
 const CONFIG: StatsConfig = {
@@ -158,6 +158,46 @@ describe("loadParentStats", () => {
     // bridge fige `now` (ex. 0 = 1970 → dernier jour dans un futur lointain → série redevient
     // vivante = 1) — épingle le threading de `now` au call-site loadParentStats.
     expect(loadParentStats(db, profileId, CONFIG, NOW).regularity.currentStreakDays).toBe(0);
+  });
+
+  it("justesse quotidienne (#241) : série composée depuis LE MÊME journal `attempts` (records threadés)", () => {
+    // 2 jours distincts, ratios DIFFÉRENTS et connus : hier 1/2 (50 %), aujourd'hui 2/2 (100 %) —
+    // épingle le threading `attempts → computeAccuracyDailySeries` (muter records→[] rougit ce test).
+    seedAttempt(profileId, MULT_6X8, { correct: true, createdAt: NOW - 1 * DAY });
+    seedAttempt(profileId, MULT_2X3, { correct: false, createdAt: NOW - 1 * DAY });
+    seedAttempt(profileId, MULT_6X8, { correct: true, createdAt: NOW });
+    seedAttempt(profileId, MULT_2X3, { correct: true, createdAt: NOW });
+
+    const { accuracyDaily } = loadParentStats(db, profileId, CONFIG, NOW);
+    expect(accuracyDaily).toHaveLength(2);
+    expect(accuracyDaily[0].accuracy).toBeCloseTo(0.5); // hier
+    expect(accuracyDaily[1].accuracy).toBeCloseTo(1); // aujourd'hui
+  });
+
+  it("justesse quotidienne (#241) : un re-essai est EXCLU du ratio du jour (fidélité ADR 0012, ENGINE §9)", () => {
+    // 1 vraie réponse fausse + 1 re-essai JUSTE le même jour → si le re-essai comptait, le jour
+    // afficherait 50 % au lieu de 0 %.
+    seedAttempt(profileId, MULT_6X8, { correct: false, createdAt: NOW });
+    seedAttempt(profileId, MULT_6X8, { correct: true, createdAt: NOW + 60_000, isRetry: true });
+
+    const { accuracyDaily } = loadParentStats(db, profileId, CONFIG, NOW);
+    expect(accuracyDaily).toHaveLength(1);
+    expect(accuracyDaily[0].accuracy).toBe(0);
+  });
+
+  it("bridge : le FUSEAU threadé via config.regularity.dayTimeZone AGIT AUSSI sur la justesse quotidienne", () => {
+    // Mêmes 2 instants que le test de bridge régularité ci-dessus : 2 jours civils DISTINCTS en
+    // Paris (défaut), 1 SEUL en UTC — épingle le threading du ⚙️ jusqu'à `computeAccuracyDailySeries`
+    // (PAS seulement `computeRegularityStats`, un threading partiel resterait invisible sans ce test).
+    seedAttempt(profileId, MULT_6X8, { createdAt: Date.UTC(2026, 6, 20, 23, 30) });
+    seedAttempt(profileId, MULT_2X3, { createdAt: Date.UTC(2026, 6, 20, 21, 0) });
+
+    expect(loadParentStats(db, profileId, CONFIG, NOW).accuracyDaily).toHaveLength(2);
+    const utcConfig: StatsConfig = {
+      ...CONFIG,
+      regularity: { ...CONFIG.regularity, dayTimeZone: "UTC" },
+    };
+    expect(loadParentStats(db, profileId, utcConfig, NOW).accuracyDaily).toHaveLength(1);
   });
 
   it("isole le profil demandé (n'agrège pas les réponses d'un autre profil)", () => {

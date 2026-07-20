@@ -28,6 +28,7 @@ import type { EngineConfig, RegularityConfig, ReportingConfig } from "../../conf
 import { SKILLS, type Skill } from "../engine/domain";
 import type { ScopeEntry } from "../engine/level";
 import type { RegularityStats } from "./regularity";
+import type { AccuracyDayPoint } from "./accuracy-daily";
 import {
   INITIAL_BOX,
   isFactMastered,
@@ -165,10 +166,24 @@ export interface ParentStats {
   readonly masteryMap: MasteryMap;
   readonly reviewList: readonly ReviewItem[];
   readonly regularity: RegularityStats;
+  /**
+   * **Série QUOTIDIENNE de justesse** (issue #241, ADR 0018) — agrégat ADDITIONNEL, calculé par
+   * `lib/parent/accuracy-daily.ts` (fichier séparé, JAMAIS dans ce module) : réalise honnêtement
+   * la métaphore « sparkline » du wireframe (WIREFRAMES §7 `▁▃▅▆▇`) avec de VRAIES données
+   * journalières — le champ `accuracy` ci-dessus (ADR 0012) reste **inchangé** (`current`/
+   * `previous`, semaine glissante, AUCUNE série). Même patron d'ajout **à côté** du contrat que
+   * `regularity` (ADR 0014) : une série sœur, jamais une modification des sémantiques ADR 0012.
+   */
+  readonly accuracyDaily: readonly AccuracyDayPoint[];
 }
 
-/** Justesse d'un lot de réponses : `justes / total`, ou `null` si le lot est vide. */
-function accuracyOf(records: readonly AttemptRecord[]): number | null {
+/**
+ * Justesse d'un lot de réponses : `justes / total`, ou `null` si le lot est vide. **Exportée**
+ * (issue #241) pour être réutilisée telle quelle par `accuracy-daily.ts` (série QUOTIDIENNE) —
+ * même discipline DRY que `makeDayOrdinal` réutilisée par `regularity.ts`/`progression.ts` :
+ * le calcul du ratio de justesse n'est **jamais** dupliqué.
+ */
+export function accuracyOf(records: readonly AttemptRecord[]): number | null {
   if (records.length === 0) {
     return null;
   }

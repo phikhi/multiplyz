@@ -26,6 +26,7 @@ import type { AppDatabase } from "@/lib/db";
 import { attempts } from "@/lib/db/schema";
 import { loadScope } from "@/lib/engine/persistence";
 import { computeRegularityStats } from "./regularity";
+import { computeAccuracyDailySeries } from "./accuracy-daily";
 import {
   computeAccuracyStats,
   computeMasteryMap,
@@ -73,10 +74,11 @@ function loadAttemptRecords(db: ReadonlyStatsDb, profileId: number): AttemptReco
 
 /**
  * **Agrégats complets de l'espace parent** pour un profil (justesse, rapidité, carte de maîtrise, à
- * revoir, **régularité**). Lit `attempts` + le périmètre de maîtrise (`loadScope`, réutilisé — la
- * définition de maîtrise n'est jamais réinventée), puis compose les fonctions pures de `stats.ts`
- * (justesse/rapidité/maîtrise/à-revoir) et `regularity.ts` (jours joués/temps/série/respect).
- * **Lecture seule** : aucune écriture DB.
+ * revoir, **régularité**, **justesse quotidienne**). Lit `attempts` + le périmètre de maîtrise
+ * (`loadScope`, réutilisé — la définition de maîtrise n'est jamais réinventée), puis compose les
+ * fonctions pures de `stats.ts` (justesse/rapidité/maîtrise/à-revoir), `regularity.ts` (jours
+ * joués/temps/série/respect) et `accuracy-daily.ts` (série quotidienne de justesse, issue #241,
+ * ADR 0018). **Lecture seule** : aucune écriture DB.
  *
  * @param db connexion applicative (source de vérité serveur).
  * @param profileId profil **de la session parent** (jamais un profil client).
@@ -100,5 +102,9 @@ export function loadParentStats(
     // Régularité (story 7.4, ADR 0014) : dérivée du MÊME journal `attempts`, mais compte TOUTES les
     // réponses (engagement, re-essais inclus) — la couche pure filtre ce dont elle a besoin.
     regularity: computeRegularityStats(records, config.regularity, now),
+    // Justesse quotidienne (issue #241, ADR 0018) : série sœur d'`accuracy` ci-dessus, DÉRIVÉE du
+    // MÊME journal `attempts` (records identiques threadés) — le fuseau du jour calendaire
+    // (`dayTimeZone`) est celui de la régularité (ADR 0014), même découpage, jamais réinventé.
+    accuracyDaily: computeAccuracyDailySeries(records, config.regularity.dayTimeZone),
   };
 }

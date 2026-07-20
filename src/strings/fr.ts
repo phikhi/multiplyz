@@ -569,6 +569,16 @@ export const fr = {
           regressing: "en baisse",
           stable: "stable",
         },
+        /** Légende accessible de la sparkline de justesse QUOTIDIENNE (issue #241, ADR 0018) —
+         * consommée en `role="img"` sur le conteneur (jamais déclarée-orpheline, #125). Gabarit
+         * SINGULIER (fenêtre ⚙️ `trendWindowDays` à 1 jour — grammaire FR exacte, promotion #239). */
+        sparkline: "Justesse par jour ({n} dernier jour)",
+        /** Légende accessible, gabarit PLURIEL (≥2 jours — cas par défaut, `trendWindowDays` = 7). */
+        sparklinePlural: "Justesse par jour ({n} derniers jours)",
+        /** Repli textuel accessible : moins de 2 jours de données de justesse → pas de FORME à
+         * montrer (même patron que `regularity.chartEmpty` : un point isolé n'est pas une tendance,
+         * #170 « un trait quasi invisible vaut moins qu'un repli honnête »). */
+        sparklineEmpty: "Pas encore assez de jours pour voir la forme de la tendance.",
       },
       /** Libellés des 4 compétences (WIREFRAMES §7, ordre canonique `SKILLS`). */
       skills: {
