@@ -343,20 +343,53 @@
      rendu SOUS le bandeau d'accent et AU-DESSUS du chemin — jamais derrière un glyphe
      ni le connecteur (zéro régression contraste #104/#125/#170 : aucun texte ni trait
      n'est empilé dessus, le fond de référence des glyphes de nœud reste inchangé).
-     Repli teinté `--world-bg-tint` per-monde sous l'image (hérité de <main>, fix #184). */
+     Repli teinté `--world-bg-tint` per-monde sous l'image (hérité de <main>, fix #184).
+     Hauteur inchangée (96px, ⚙️ playtest #203) : la question du proprio portait sur la
+     LECTURE (« décor intentionnel ou bandeau orphelin ? »), pas la taille — corrigée en
+     habillant la bande d'un cadre (`--map-tiles-border`/`--map-tiles-shadow`, cf.
+     `WorldTilesBand`) plutôt qu'en changeant la hauteur : un bandeau plein-largeur SANS
+     bordure visible se fond dans le fond de carte (surtout en tint-seul #199, même
+     famille de couleur) → lu comme un artefact, pas un élément posé.
+     ⚠️ BORDURE = neutre DISTINCTEMENT SOMBRE, PAS `--color-border-primary` (piège #226/#170,
+     round 2 Frontend) : `--color-border-primary` (neutre CLAIR, #E7E0F6 light) n'atteint
+     que ~1.1–1.2:1 RÉSOLU contre `--world-bg-tint` (accent 10 % sur surface) → bordure
+     fonctionnellement INVISIBLE dans l'état tint-seul (le scénario le plus à risque). La
+     capture texturée E2E masquait le trou par contraste fortuit avec le motif rayé, PAS
+     avec la bordure — attrapé au calcul WCAG résolu, pas au pixel-look. Remappée sur
+     `--color-text-secondary` (le MÊME neutre sombre que `--map-node-path-color`, son
+     JUMEAU déjà prouvé ≥3:1 résolu contre le tint pour les 6 accents curatés × 2 thèmes,
+     MapScreen.test.tsx) → ≥3:1 garanti (élément non-texte, WCAG 1.4.11), donc bordure
+     RÉELLEMENT visible qui fait lire la bande comme un « médaillon carte postale »
+     intentionnel. La `--card-shadow` seule ne suffit PAS (non fiable/non testable) : c'est
+     la BORDURE qui porte la séparation, l'ombre ne fait que la renforcer. Contraste
+     mutation-prouvé (MapScreen.test.tsx : rougit sous `--color-border-primary`, vert sous
+     `--color-text-secondary`). Purement décoratif (aucun texte empilé sur la bande). */
   --map-tiles-height:  var(--space-9); /* 96px — hauteur de la bande de décor */
   --map-tiles-radius:  var(--card-radius);
+  /* Bordure ≥3:1 résolu contre --world-bg-tint (6 accents × 2 thèmes, cf. jumeau
+     --map-node-path-color) — jamais un neutre clair (#226, invisible sur le tint). */
+  --map-tiles-border:  var(--color-text-secondary);
+  --map-tiles-shadow:  var(--card-shadow);
   /* Avatar Teddy per-monde : marqueur « tu es ici » posé AU-DESSUS du médaillon du
      nœud COURANT (mascotte-guide, MAP §1 point de reprise). Décoratif (aria-hidden :
      le nœud porte déjà son nom accessible complet → pas de double annonce). Élément
      SUPERPOSÉ/positionné → garde DOUBLÉE pixels + géométrie (non-occlusion #170) : il
      flotte au-dessus de la pastille, ne recouvre jamais le glyphe de statut centré.
-     Taille = 32px (PAS 48px) : l'avatar (32) + son léger chevauchement bas (--space-2,
-     8px, cf. `CurrentNodeTeddy`) doit tenir dans la GOUTTIÈRE inter-nœuds
-     (--map-node-gap, 32px) SANS déborder sur le médaillon AMONT — un avatar de 48px
-     débordait de 6px sur le nœud du dessus (révélé par la garde E2E `teddyTop ≥ bas du
-     médaillon amont`, #170). À 32px : marge 8px côté amont ET 24px côté glyphe courant. */
-  --map-node-teddy-size:  var(--space-6); /* 32px — avatar Teddy sur le nœud courant */
+     ⚙️ playtest #203 : le proprio a rapporté Teddy à la fois « trop petit » (32px, fix
+     #170) ET « qui chevauche » — deux forces opposées. Recalibré à 40px
+     (`calc(--space-6 + --space-2)`, +25 % de présence) EN DURCISSANT SIMULTANÉMENT la
+     marge de sécurité amont : `CurrentNodeTeddy` approfondit son chevauchement décoratif
+     du haut du médaillon de -8px (--space-2) à -16px (--space-4) — l'avatar « coiffe »
+     davantage son PROPRE médaillon (glyphe de statut toujours dégagé, marge aval 16px,
+     jamais < la moitié du rayon) au lieu de déborder vers le médaillon AMONT. Marge amont
+     inchangée = 8px : l'avatar dépasse `40 − 16 = 24px` AU-DESSUS de son médaillon (taille
+     40 moins chevauchement 16), la gouttière inter-nœuds vaut 32px, donc `32 − 24 = 8px`
+     de marge sous le médaillon amont — même delta que le fix #170 original, revérifiée par
+     la garde E2E `teddyTop ≥ bas du médaillon amont`, jamais raisonnée seule (rétro
+     #190/#203). Un 48px symétrique (chevauchement inchangé -8px) dépasserait `48 − 8 = 40px`
+     > 32px de gouttière → occlusion originale #170 : c'est le COUPLE taille+chevauchement
+     qui doit varier ensemble, pas la taille seule. */
+  --map-node-teddy-size:  calc(var(--space-6) + var(--space-2)); /* 40px — avatar Teddy sur le nœud courant */
 
   /* étoiles de l'écran de RÉSULTATS (fin de niveau, story #126/5.5) — même piège
      que --map-node-star-* ci-dessus : --color-star/--color-star-empty sont des
