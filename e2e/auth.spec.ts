@@ -1718,6 +1718,29 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(backGeom!.width).toBeGreaterThanOrEqual(44);
     expect(backGeom!.height).toBeGreaterThanOrEqual(44);
 
+    // ---------- Lisibilité de la description (issue #272, playtest-⚙️) : troncature 2 lignes
+    // RÉELLE en vrai navigateur — jamais un token déclaré seul (#125/#164 « déclaré ≠ rendu ») :
+    // 1. le `-webkit-line-clamp` COMPUTED (pas juste posé en style inline) résout à "2" ;
+    // 2. « Douce comme une feuille. » (25 car., créature "Feuillette") dépasse réellement 2
+    //    lignes à la largeur de carte 375px ⇒ `scrollHeight` (contenu total) > `clientHeight`
+    //    (hauteur visible clampée) — retirer/reverter le line-clamp égaliserait les deux et
+    //    rougirait ce test (même patron que la garde de colonnes #127 ci-dessus).
+    const storyClamp = await page.evaluate((characterId) => {
+      const story = document.querySelector<HTMLElement>(
+        `[data-collection-card="${characterId}"] [data-collection-story]`,
+      );
+      if (story === null) return null;
+      const computed = getComputedStyle(story);
+      return {
+        webkitLineClamp: computed.getPropertyValue("-webkit-line-clamp"),
+        scrollHeight: story.scrollHeight,
+        clientHeight: story.clientHeight,
+      };
+    }, COLLECTION_CREATURES[2].id);
+    expect(storyClamp).not.toBeNull();
+    expect(storyClamp!.webkitLineClamp).toBe("2");
+    expect(storyClamp!.scrollHeight).toBeGreaterThan(storyClamp!.clientHeight);
+
     await page.screenshot({ path: "docs/captures/266-collection-phone.png", fullPage: true });
   });
 
