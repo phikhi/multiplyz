@@ -20,7 +20,13 @@ import { makeFact } from "@/lib/engine/facts";
 import type { LevelQuestion } from "@/lib/engine/service";
 import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+// `routerMocks` PARTAGÉ (vi.hoisted, même patron que `soundMocks` ci-dessous) — `useRouter()` est
+// appelé depuis PLUSIEURS sites (`PlayScreenInner` §336 + `LogoutButton`) ; une factory qui
+// recréerait `{ push: vi.fn(), refresh: vi.fn() }` À CHAQUE appel donnerait un espion DIFFÉRENT à
+// chaque composant, rendant `expect(push).toHaveBeenCalledWith(...)` invérifiable côté test. Une
+// SEULE paire d'espions, réutilisée par tous les appelants.
+const routerMocks = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => routerMocks }));
 vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 vi.mock("@/app/(app)/jouer/actions", () => ({
   diagnosticPlanAction: vi.fn(),
@@ -666,7 +672,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     expect(screen.queryByText(/pièce/u)).not.toBeInTheDocument();
   });
 
-  it("continuer depuis les résultats recharge un niveau (ou re-diagnostique)", async () => {
+  it("continuer depuis les résultats → retour à la carte (hub, story R1.2 #336), JAMAIS un rechargement direct de niveau", async () => {
     const fact68 = makeFact("mult", 6, 8);
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
@@ -690,13 +696,27 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
       ).toBeInTheDocument(),
     );
 
-    startLevelMock.mockResolvedValue({
-      level: { questions: [question("add_3+8")] },
-      starThresholds: STAR_THRESHOLDS,
-      locked: false,
-    });
+    // Défaut B corrigé (R1.2, #336, docs/playthroughs/R0-baseline.md) : avant #336, « Continuer »
+    // appelait `retryLoadLevel()` → `fetchLevel()` résolvait `diagnosticPlanAction()` PUIS appelait
+    // `startLevelAction` (bouclage /jouer→/jouer, jamais la carte, observé en LIVE sur ~8 cycles).
+    const startLevelCallsBeforeContinue = startLevelMock.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: strings.play.results.continue }));
-    await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
+    // Mutation-preuve PRINCIPALE (positive) : la navigation part vers le hub carte — rougit si
+    // `handleResultsContinue` cesse d'appeler `router.push("/carte")` (revert vers retryLoadLevel).
+    expect(routerMocks.push).toHaveBeenCalledWith("/carte");
+    // Mutation-preuve SECONDAIRE (négative, NON vacuous) : on DRAINE d'abord toute la file
+    // asynchrone (une macrotâche `setTimeout(0)` s'ordonnance APRÈS toutes les microtâches en
+    // attente → les 2 `await` de `fetchLevel` — `diagnosticPlanAction` puis l'appel à
+    // `startLevelAction` — auraient eu le temps de s'exécuter). SOUS UN REVERT vers
+    // `retryLoadLevel()`, le compteur `startLevelAction` s'incrémenterait donc ICI → l'assertion
+    // ROUGIT (vérifié en révertant `handleResultsContinue` localement). SANS ce drain l'assertion
+    // serait VACUOUS (#143/#173) : au tick synchrone le compteur est trivialement inchangé même
+    // sous le revert, l'appel ne survenant qu'après 2 microtâches. Le fix #336 (`router.push`) ne
+    // charge AUCUN niveau → compteur inchangé (vert).
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(startLevelMock.mock.calls.length).toBe(startLevelCallsBeforeContinue);
   });
 });
 
