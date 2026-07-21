@@ -26,7 +26,13 @@ import { copyFileSync, mkdirSync } from "node:fs";
 import Database from "better-sqlite3";
 import { regenerateSocleContent, socleSeed } from "../../src/lib/worldgen/socle";
 
-/** Fixture committée (dé-échantillonnée, ~115 Ko au total) — source unique dev+E2E. */
+/**
+ * Fixture committée (dé-échantillonnée) — source unique dev+E2E. `teddy.png` (RGBA, fond
+ * transparent, fix #329/story #338 — cf. `scripts/regen-teddy-cutout.ts`) diffère de
+ * `background.jpg`/`tiles.jpg` (JPEG opaque, décor plein-cadre, pas de besoin d'alpha) : c'est le
+ * SEUL des trois assets rendu comme avatar **superposé** au médaillon de nœud
+ * (`CurrentNodeTeddy`), donc le seul où un fond blanc opaque serait visible comme un patch carré.
+ */
 const FIXTURE_SOURCE_DIR = "test-fixtures/world/socle-sample";
 
 /**
@@ -58,10 +64,12 @@ export function seedRealWorldFixture(options: SeedRealWorldFixtureOptions): void
 
   mkdirSync(publicDir, { recursive: true });
   // Les trois assets du monde (fond #189 + tuiles/Teddy #190) — chacun sous une ref RENDABLE
-  // (`<namespace>/<name>.jpg`) que `isRenderableAssetRef` accepte (relatif, namespace `world`).
+  // (`<namespace>/<name>.<ext>`) que `isRenderableAssetRef` accepte (relatif, namespace `world`).
+  // `teddy.png` (RGBA, fix #329) — les deux autres restent `.jpg` (décor plein-cadre, pas d'alpha
+  // requise, cf. commentaire de tête).
   copyFileSync(`${FIXTURE_SOURCE_DIR}/background.jpg`, `${publicDir}/background.jpg`);
   copyFileSync(`${FIXTURE_SOURCE_DIR}/tiles.jpg`, `${publicDir}/tiles.jpg`);
-  copyFileSync(`${FIXTURE_SOURCE_DIR}/teddy.jpg`, `${publicDir}/teddy.jpg`);
+  copyFileSync(`${FIXTURE_SOURCE_DIR}/teddy.png`, `${publicDir}/teddy.png`);
 
   // Thème + palette RÉELS empruntés (déterministe, pure — même fonction que `buildSocleWorld`) :
   // cohérence titre/accent/tint avec l'art copié ci-dessus (cf. commentaire de tête).
@@ -69,7 +77,7 @@ export function seedRealWorldFixture(options: SeedRealWorldFixtureOptions): void
   const assetRefs = JSON.stringify({
     background: `${assetNamespace}/background.jpg`,
     tiles: `${assetNamespace}/tiles.jpg`,
-    teddy: `${assetNamespace}/teddy.jpg`,
+    teddy: `${assetNamespace}/teddy.png`,
   });
 
   const db = new Database(databasePath);

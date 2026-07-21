@@ -1307,7 +1307,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(richness!.tilesH).toBeGreaterThan(0);
     expect(richness!.tilesTop).toBeGreaterThanOrEqual(0);
     // (b) AVATAR TEDDY per-monde : émet l'URL de l'image Teddy du monde (câblage), un SEUL marqueur.
-    expect(richness!.teddyBg).toContain("world/e2e/teddy.jpg");
+    // `.png` (RGBA, fond transparent, fix #329/story #338) — seul des 3 assets fixture en PNG,
+    // cf. `scripts/lib/seed-real-world-fixture.ts`.
+    expect(richness!.teddyBg).toContain("world/e2e/teddy.png");
     expect(richness!.teddyCount).toBe(1);
     // (c) VISIBLE + DANS LE CADRE : dimensions non nulles, sommet ≥ 0 (jamais clippé hors du haut).
     expect(richness!.teddyW).toBeGreaterThan(0);
