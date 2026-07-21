@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import {
   getEconomyConfig,
@@ -291,6 +292,12 @@ function finishLevelRefusal(error: FinishLevelError | "UNAUTHENTICATED"): Finish
  * (MAP §1/§8). Barème = **config versionnée** (`EconomyConfig`), jamais en dur. `{ ok: false }`
  * **neutre** si non authentifié (pas de 500). Horloge serveur injectée (`new Date()`).
  *
+ * **Fraîcheur du solde du shell persistant** (story R1.1 #337 rétro → #346, corollaire #180) :
+ * un crédit **réellement appliqué** déclenche `revalidatePath("/carte", "layout")`, sans quoi le
+ * bandeau `(app)/layout.tsx` resterait figé à sa valeur périmée sur le retour carte (App Router
+ * ne re-rend pas un layout de groupe partagé en navigation douce entre routes-sœurs) — cf.
+ * commentaire au site d'appel ci-dessous pour le détail du mécanisme.
+ *
  * @param stars étoiles obtenues (0..3) — **seule** entrée client, validée par `finishLevel`.
  */
 export async function finishLevelAction(stars: unknown): Promise<FinishLevelActionResult> {
@@ -313,6 +320,27 @@ export async function finishLevelAction(stars: unknown): Promise<FinishLevelActi
   );
   if (!result.ok) {
     return finishLevelRefusal(result.error);
+  }
+  // **Fraîcheur du solde du shell persistant** (story R1.1 #337 rétro → #346, corollaire #180) :
+  // `(app)/layout.tsx` lit le portefeuille SERVEUR (`loadWallet`) au MONTAGE du layout de
+  // groupe. App Router ne re-rend PAS un layout partagé sur une navigation DOUCE entre
+  // routes-sœurs (`/jouer` → `/carte`, `PlayScreen.handleResultsContinue`) — sans revalidation
+  // explicite, le bandeau resterait figé au solde lu AVANT ce niveau.
+  //
+  // `revalidatePath("/carte", "layout")` cible **le layout de `/carte` + les segments qui lui sont
+  // IMBRIQUÉS** : c'est l'effet directement visé et empiriquement prouvé (E2E `auth.spec.ts` :
+  // au retour `/carte`, le bandeau relit le solde à jour). `/collection` est une route **SŒUR**
+  // (pas sous `/carte`) : elle N'EST PAS couverte par la portée `"layout"` de cet appel. Elle est
+  // néanmoins rafraîchie au prochain accès par un mécanisme Next DISTINCT — tout appel
+  // `revalidatePath`/`revalidateTag` **dans une Server Action** invalide en plus le **Router Cache
+  // client entier** (côté navigateur), pas seulement le segment ciblé côté serveur. On ne
+  // sur-revendique donc pas la portée `"layout"` : le seul effet garanti PAR CET ARGUMENT est le
+  // re-render du groupe-layout de `/carte`.
+  //
+  // Gardé par `coinsApplied` : un rejeu idempotent (retry réseau, aucun crédit appliqué) renvoie le
+  // MÊME solde — inutile de forcer une re-lecture qui ne changerait rien à l'affichage.
+  if (result.coinsApplied) {
+    revalidatePath("/carte", "layout");
   }
   return {
     ok: true,

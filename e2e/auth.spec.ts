@@ -610,6 +610,16 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
     await expect(page).toHaveURL(/\/carte$/);
+    // Solde du SHELL persistant AVANT de jouer ce niveau (#346, durcissement anti-ordre) : lu ICI,
+    // sur `/carte`, AVANT tout gain — sert de référence pour prouver un DELTA après le retour carte,
+    // indépendamment de la valeur de départ / de l'ordre des tests dans le `describe.serial` (un
+    // futur reflow qui ferait de ce niveau un REJEU — `coinsApplied:false`, solde inchangé — rendrait
+    // une assertion valeur-seule tautologique ; le delta `post !== pre` la garde non-vacuous).
+    const preCoinsRaw = await page
+      .locator('[data-shell-balance="coins"]')
+      .getAttribute("data-shell-balance-value");
+    const preCoins = Number(preCoinsRaw);
+    expect(Number.isInteger(preCoins)).toBe(true);
     await enterCurrentLevelFromMap(page);
     await expect(page.getByRole("progressbar")).toBeVisible();
 
@@ -716,6 +726,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     const resultsCoins = page.locator("[data-results-coins]");
     await expect(resultsCoins).toBeVisible({ timeout: 10_000 });
     await expect(resultsCoins).toHaveAttribute("aria-label", /pièce/u);
+    // Solde total (post-crédit) affiché par l'écran résultats — capturé AVANT le retour carte
+    // pour comparer à la balance du SHELL persistant après (#346, cf. plus bas).
+    const resultsCoinsValue = await resultsCoins.getAttribute("data-results-coins");
+    const earnedTotalCoins = Number(resultsCoinsValue);
+    expect(Number.isInteger(earnedTotalCoins) && earnedTotalCoins > 0).toBe(true);
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
     await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
 
@@ -735,6 +750,29 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // QUE la navigation client, jamais l'état serveur.
     await page.getByRole("button", { name: strings.play.results.continue }).click();
     await expect(page).toHaveURL(/\/carte$/);
+    // FRAÎCHEUR du solde du SHELL persistant après un gain (story R1.1 #337 retro → #346,
+    // corollaire #180) : `(app)/layout.tsx` lit le portefeuille SERVEUR au montage, mais React
+    // ne RE-MONTE PAS ce layout partagé sur une navigation DOUCE entre routes-sœurs — sans
+    // revalidation explicite (`finishLevelAction` → `revalidatePath`), le bandeau resterait
+    // figé à sa valeur lue AVANT ce niveau (périmée) après le clic « Continuer » ci-dessus.
+    //
+    // DEUX assertions complémentaires, toutes deux nécessaires :
+    // (1) **valeur EXACTE** (non-permissive, #239) : le bandeau montre le solde total tout juste
+    //     affiché sur l'écran résultats (`earnedTotalCoins`) — `toHaveAttribute` auto-attend que la
+    //     revalidation + la nav douce se soient posées ;
+    // (2) **DELTA explicite** (durcissement anti-ordre) : le solde a CHANGÉ par rapport à AVANT ce
+    //     niveau (`postCoins !== preCoins`) — prouve une mise à jour FRAÎCHE indépendamment de la
+    //     valeur de départ. Sans ce delta, si un futur reflow faisait de ce niveau un REJEU
+    //     (`coinsApplied:false`, solde inchangé = total), l'assertion (1) deviendrait tautologique
+    //     (périmé == total) et resterait verte à tort. Ici, ce niveau CRÉDITE (1ʳᵉ complétion notée)
+    //     donc `earnedTotalCoins > preCoins`.
+    //
+    // Rouge si la revalidation est retirée : `[data-shell-balance="coins"]` reste à `preCoins`
+    // (périmé) → (1) time-out (attend `earnedTotalCoins`) ET (2) `postCoins === preCoins` échoue.
+    const shellCoins = page.locator('[data-shell-balance="coins"]');
+    await expect(shellCoins).toHaveAttribute("data-shell-balance-value", String(earnedTotalCoins));
+    const postCoins = Number(await shellCoins.getAttribute("data-shell-balance-value"));
+    expect(postCoins).not.toBe(preCoins);
     await page.screenshot({
       path: "docs/captures/336-resultats-continuer-carte.png",
       fullPage: true,

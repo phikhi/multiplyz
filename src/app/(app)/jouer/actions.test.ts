@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { revalidatePath } from "next/cache";
 import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
 import {
   isRecalibrationRequested,
@@ -99,8 +100,10 @@ vi.mock("@/lib/parent/settings", () => ({
   writeHouseholdSettings: vi.fn(),
 }));
 vi.mock("@/lib/parent/screen-time-lock", () => ({ evaluateScreenTimeLock: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 const profileMock = vi.mocked(getCurrentChildProfileId);
+const revalidatePathMock = vi.mocked(revalidatePath);
 const startLevelMock = vi.mocked(startLevel);
 const submitAttemptMock = vi.mocked(submitAttempt);
 const seedDiagnosticMock = vi.mocked(seedDiagnostic);
@@ -489,6 +492,39 @@ describe("finishLevelAction", () => {
     const res = await finishLevelAction(2);
     expect(res.coinsApplied).toBe(false);
     expect(res.coins).toBe(20); // solde inchangé (pas de double crédit)
+    // AUCUNE revalidation sur un rejeu idempotent : le solde n'a pas changé, rien à
+    // rafraîchir côté shell (#346, cf. test dédié ci-dessous pour le cas crédité).
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  // Fraîcheur du solde du shell persistant après un gain (story R1.1 #337 rétro → #346,
+  // corollaire #180) : `(app)/layout.tsx` lit le portefeuille au montage, mais React ne
+  // re-rend PAS un layout de groupe partagé sur une navigation DOUCE entre routes-sœurs
+  // (`/jouer` → `/carte`) — sans cette revalidation explicite, le bandeau resterait figé à
+  // sa valeur PÉRIMÉE (empiriquement confirmé E2E : `auth.spec.ts`, rouge sans cet appel,
+  // vert avec). Mutation-preuve : retirer `revalidatePath(...)` du corps de l'action laisse
+  // ce test rouge (assertion `toHaveBeenCalledWith` exacte, pas `objectContaining`).
+  it("succès + crédit APPLIQUÉ → revalidatePath('/carte', 'layout') (fraîcheur du shell, #346)", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
+    finishLevelMock.mockReturnValue(successResult({ coinsApplied: true }));
+    await finishLevelAction(2);
+    expect(revalidatePathMock).toHaveBeenCalledTimes(1);
+    expect(revalidatePathMock).toHaveBeenCalledWith("/carte", "layout");
+  });
+
+  it("refus service → AUCUNE revalidation (aucun crédit à rafraîchir sur un refus propre)", async () => {
+    profileMock.mockResolvedValue(7);
+    resolveTargetMock.mockReturnValue(FAKE_TARGET);
+    finishLevelMock.mockReturnValue({ ok: false, error: "LEVEL_LOCKED" });
+    await finishLevelAction(2);
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+
+  it("non authentifié → AUCUNE revalidation", async () => {
+    profileMock.mockResolvedValue(null);
+    await finishLevelAction(2);
+    expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 });
 
