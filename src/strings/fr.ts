@@ -943,6 +943,34 @@ export const fr = {
     },
   },
   /**
+   * **Shell applicatif persistant** (story R1.1 #337, WIREFRAMES §2 « 🪙120 ✨40 ⚙️ 👤 »).
+   * Bandeau monté UNE SEULE fois par `(app)/layout.tsx`, visible en continu sur `/carte`,
+   * `/collection`, `/jouer` — remplace les `LogoutButton` dupliqués par écran. Registre
+   * ENFANT (même famille que `play.logout`/`play.soundQuickMute`, pas le vouvoiement parent).
+   */
+  shell: {
+    /**
+     * Solde de pièces (ECONOMY §3.1/§4.1) — nom accessible complet du groupe `role="img"`
+     * (l'emoji 🪙 + le chiffre sont `aria-hidden`, l'info complète vit ICI, a11y daltonisme).
+     * Singulier/pluriel **n ≤ 1 → singulier** (français, CLAUDE.md #239 — 0 ET 1 « pièce »,
+     * jamais « pièces » ; distinct du gabarit `results.coins`/`map.starsLabel` legacy qui
+     * bascule sur `n===1` seul, résidu pré-#239 hors scope de cette story).
+     */
+    balanceCoins: "{n} pièce",
+    balanceCoinsPlural: "{n} pièces",
+    /** Solde d'éclats (ECONOMY §3.1, doublon de créature) — même règle n≤1 que balanceCoins. */
+    balanceShards: "{n} éclat",
+    balanceShardsPlural: "{n} éclats",
+    /**
+     * **⚙️ réglages** — doorway RÉUTILISANT le point d'entrée PIN-gaté EXISTANT de l'espace
+     * parent (`ProfileSelector` « 🔒 Parent », WIREFRAMES §1a — jamais une nouvelle surface de
+     * réglages enfant). Le SEUL réglage no-PIN enfant reste `SoundQuickMute` (DETAILS §3,
+     * volontairement scopé « in-game », inchangé par cette story). Copie honnête : mène à `/`
+     * où le PIN reste à saisir, pas directement dans l'espace parent.
+     */
+    settingsLabel: "Réglages",
+  },
+  /**
    * **Copy du générateur de mondes** (WORLDGEN §4, story 6.3, épic #6). Banques de **noms
    * par défaut** et d'**histoires** (beats courts, COPY §4) piochées **déterministe** par seed
    * lors de la génération d'une créature **non légendaire** (commune/rare) — la légendaire garde

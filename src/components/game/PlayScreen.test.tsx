@@ -21,13 +21,13 @@ import type { LevelQuestion } from "@/lib/engine/service";
 import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
 
 // `routerMocks` PARTAGÉ (vi.hoisted, même patron que `soundMocks` ci-dessous) — `useRouter()` est
-// appelé depuis PLUSIEURS sites (`PlayScreenInner` §336 + `LogoutButton`) ; une factory qui
-// recréerait `{ push: vi.fn(), refresh: vi.fn() }` À CHAQUE appel donnerait un espion DIFFÉRENT à
-// chaque composant, rendant `expect(push).toHaveBeenCalledWith(...)` invérifiable côté test. Une
-// SEULE paire d'espions, réutilisée par tous les appelants.
+// appelé par `PlayScreenInner` (§336, `router.push("/carte")`) ; une factory qui recréerait
+// `{ push: vi.fn(), refresh: vi.fn() }` À CHAQUE appel donnerait un espion DIFFÉRENT, rendant
+// `expect(push).toHaveBeenCalledWith(...)` invérifiable côté test. Une SEULE paire d'espions.
+// (« Changer de joueur »/`LogoutButton`, qui appelait aussi `useRouter()`, n'est plus rendu par
+// `PlayScreen` depuis la story R1.1 #337 — il vit dans le shell persistant, `AppShell.test.tsx`.)
 const routerMocks = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => routerMocks }));
-vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 vi.mock("@/app/(app)/jouer/actions", () => ({
   diagnosticPlanAction: vi.fn(),
   finishLevelAction: vi.fn(),
@@ -216,8 +216,9 @@ describe("PlayScreen — verrou dur temps d'écran (story 7.8 #229, DETAILS §3 
     expect(
       screen.queryByRole("button", { name: strings.play.loadErrorRetry }),
     ).not.toBeInTheDocument();
-    // Sortie possible : changer de joueur (jamais bloqué HORS du jeu, seulement l'entrée en niveau).
-    expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument();
+    // Sortie possible : changer de joueur — désormais portée par le shell persistant
+    // (`AppShell.tsx`, story R1.1 #337), jamais bloquée HORS du jeu (seulement l'entrée en
+    // niveau) ; ce n'est plus un bouton local à `PlayScreen`, cf. `AppShell.test.tsx`.
   });
 
   it("verrou INACTIF (locked:false, level:null) → reste l'écran d'erreur générique (non-régression)", async () => {
@@ -720,29 +721,11 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
   });
 });
 
-describe("PlayScreen — déconnexion accessible à tout écran", () => {
-  it("le bouton de déconnexion est visible sur l'écran de diagnostic", async () => {
-    diagnosticPlanMock.mockResolvedValue({
-      items: [{ fact: makeFact("mult", 6, 8), difficulty: "easy" as const }],
-    });
-    render(<PlayScreen />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument(),
-    );
-  });
-
-  it("le bouton de déconnexion est visible pendant une question", async () => {
-    startLevelMock.mockResolvedValue({
-      level: { questions: [question("mult_6x8")] },
-      starThresholds: STAR_THRESHOLDS,
-      locked: false,
-    });
-    render(<PlayScreen />);
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument(),
-    );
-  });
-});
+// Le describe « déconnexion accessible à tout écran » (bouton visible sur diagnostic/question)
+// a été RETIRÉ (story R1.1 #337) : « Changer de joueur » n'est plus rendu PAR `PlayScreen` —
+// il vit dans le shell persistant (`AppShell.tsx`, `(app)/layout.tsx`), monté une seule fois
+// au-dessus de TOUTES les routes `(app)` indépendamment de l'état interne de `PlayScreen`.
+// Couverture équivalente : `AppShell.test.tsx` (le bouton est toujours rendu par le shell).
 
 describe("PlayScreen — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
   it("padding-bottom standard tablette/desktop (défaut, pas de régression)", async () => {
@@ -959,7 +942,7 @@ describe("PlayScreen — son : SFX bonne réponse/combo + musique de fond (story
 describe("PlayScreen — quick-mute enfant NO-PIN in-game (story 8.6, #282, DETAILS §3, ADR 0017)", () => {
   const sq = strings.play.soundQuickMute;
 
-  it("visible PENDANT une question, à côté du bouton de déconnexion (même écran « in-game »)", async () => {
+  it("visible PENDANT une question (écran « in-game »)", async () => {
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
       starThresholds: STAR_THRESHOLDS,
@@ -969,7 +952,8 @@ describe("PlayScreen — quick-mute enfant NO-PIN in-game (story 8.6, #282, DETA
     await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
     expect(screen.getByRole("switch", { name: sq.soundOn })).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: sq.musicOn })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: strings.play.logout })).toBeInTheDocument();
+    // « Changer de joueur » n'est plus rendu par `PlayScreen` (story R1.1 #337) — il vit
+    // dans le shell persistant au-dessus, cf. `AppShell.test.tsx`.
   });
 
   it("reflète l'état INITIAL fourni par le serveur (`sound` prop, pas un défaut figé)", async () => {

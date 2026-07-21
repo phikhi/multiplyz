@@ -35,9 +35,6 @@ const CURATED_ACCENTS = CURATED_THEMES.map((t) => t.accent);
  */
 
 vi.mock("@/app/(app)/carte/actions", () => ({ currentMapAction: vi.fn() }));
-vi.mock("@/components/LogoutButton", () => ({
-  LogoutButton: () => null,
-}));
 
 const currentMapActionMock = vi.mocked(currentMapAction);
 
@@ -459,39 +456,12 @@ describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190,
   });
 });
 
-describe("MapScreen — contraste des glyphes de bas d'écran sur photo arbitraire (scrim #189 généralisé, story #202)", () => {
-  const withPhoto = { background: "/generated/socle/0/background.png" as string };
-
-  it("photo réelle → bouton « Changer de joueur » enveloppé d'un scrim opaque --world-surface (contraste garanti sur photo)", async () => {
-    // Effet observable (#202/#170) : le bouton ghost (fond transparent) est peint sur la photo
-    // arbitraire → contraste non garanti. Le scrim opaque `--world-surface` derrière lui redevient le
-    // fond de référence. Rougit si le scrim n'est pas rendu (chemin photo) ou n'utilise pas le token.
-    await renderReady(map([node({ status: "current" })], 0, withPhoto));
-    const scrim = document.querySelector<HTMLElement>("[data-world-footer-scrim]");
-    expect(scrim).not.toBeNull();
-    expect(scrim!.style.backgroundColor).toBe("var(--world-surface)");
-  });
-
-  it("pas de photo (background null, #199 tint-seul) → AUCUN scrim de footer (contraste déjà prouvé analytiquement, pas de scrim superflu)", async () => {
-    // Effet observable : le scrim de footer n'apparaît QUE sur photo. Rougit s'il était rendu
-    // inconditionnellement (régression #125 : scrim inutile sur le tint borné déjà sûr, et sur les
-    // autres écrans partageant `LogoutButton`).
-    await renderReady(map([node({ status: "current" })], 0, { background: null }));
-    expect(document.querySelector("[data-world-footer-scrim]")).toBeNull();
-  });
-
-  it.each(["light", "dark"] as const)(
-    "%s : texte du bouton (--color-text-secondary, cf. LogoutButton) ≥ 4.5:1 sur le scrim (--world-surface résolu)",
-    (theme) => {
-      // Fond de RÉFÉRENCE du texte ghost du bouton = `--world-surface` (le scrim opaque empilé
-      // derrière, JAMAIS la photo, #125/#170). `--color-text-secondary` = la couleur de texte de
-      // `LogoutButton.tsx`. Rougit si `--world-surface` régresse vers une couleur à faible contraste.
-      const text = resolveTokenColor(theme, "--color-text-secondary");
-      const surface = resolveTokenColor(theme, "--world-surface");
-      expect(contrastRatio(text, surface)).toBeGreaterThanOrEqual(4.5);
-    },
-  );
-});
+// Le describe « contraste des glyphes de bas d'écran sur photo arbitraire (scrim #189
+// généralisé, story #202) » (bouton « Changer de joueur » + `FooterScrim`) a été RETIRÉ
+// (story R1.1 #337) : le bouton vit désormais dans le shell persistant (`AppShell.tsx`),
+// hors de `<main>` — jamais peint sur le fond-photo per-monde, donc plus de scrim à tester
+// ici. Couverture équivalente : `AppShell.test.tsx` (le bouton 👤 est sur `--topbar-bg`
+// **constant**, jamais une photo arbitraire — le problème #202 ne s'y pose plus).
 
 describe("MapScreen — casing opaque du trait du chemin sur photo arbitraire (story #202)", () => {
   const withPhoto = { background: "/generated/socle/0/background.png" as string };

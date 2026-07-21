@@ -1,17 +1,8 @@
 "use client";
 
-import {
-  type CSSProperties,
-  type ReactNode,
-  type Ref,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type Ref, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { strings } from "@/strings";
-import { LogoutButton } from "@/components/LogoutButton";
 import { currentMapAction } from "@/app/(app)/carte/actions";
 import type { MapNode, MapStars, NodeType, WorldMap } from "@/lib/game/map";
 import type { CurrentWorldMap, WorldTheme } from "@/lib/game/world-theme";
@@ -55,16 +46,17 @@ import { usePrefersReducedMotion } from "@/lib/sound/use-prefers-reduced-motion"
  * (non-occlusion #170), sans jamais recouvrir le glyphe de statut.
  *
  * **Contraste généralisé sur photo arbitraire (story #202)** : la photo (pas le tint, cf. #199)
- * est **arbitraire** — aucune garantie analytique possible (#170). Deux glyphes de bas de chemin
- * y étaient peints **sans** scrim (mesuré ~1.21:1 sur la fixture E2E rayée) : le bouton « Changer de
- * joueur » (`LogoutButton`, texte transparent) et le **trait du chemin** (`NodeConnector`, peint
- * dans la gouttière de `<main>`, backmost). Même patron que le scrim du titre (#189, opaque
- * `--world-surface`, jamais semi-transparent) : `FooterScrim` enveloppe `LogoutButton`, et
+ * est **arbitraire** — aucune garantie analytique possible (#170). Le **trait du chemin**
+ * (`NodeConnector`, peint dans la gouttière de `<main>`, backmost) y était peint **sans** scrim —
+ * même patron que le scrim du titre (#189, opaque `--world-surface`, jamais semi-transparent) :
  * `NodeConnector` reçoit une **casing** opaque sous le trait coloré — **seulement** quand
  * `theme.background !== null` (sans photo, #199 couvre déjà le contraste analytiquement, pas de
- * scrim superflu). Les autres glyphes de l'écran (médaillons de nœud, étoiles, badge de type) ont
- * **déjà** leur propre fond opaque local (`--map-node-*-bg`) — inchangés par le fond de `<main>`,
- * revérifié par audit (MapScreen.test.tsx, CLAUDE.md règle #126 : auditer TOUS les glyphes).
+ * scrim superflu). (Le bouton « Changer de joueur » avait le même défaut mesuré — corrigé alors par
+ * un `FooterScrim` local ; ce bouton vit désormais dans le shell persistant hors de `<main>`, story
+ * R1.1 #337, `FooterScrim` retiré — cf. commentaire à son ancien emplacement.) Les autres glyphes de
+ * l'écran (médaillons de nœud, étoiles, badge de type) ont **déjà** leur propre fond opaque local
+ * (`--map-node-*-bg`) — inchangés par le fond de `<main>`, revérifié par audit (MapScreen.test.tsx,
+ * CLAUDE.md règle #126 : auditer TOUS les glyphes).
  *
  * **Navigation nœud → niveau** (`(app)/jouer`) : le nœud **courant** (point de
  * reprise, MAP §1) et tout nœud **terminé** (rejoue, progression monotone) sont des
@@ -657,7 +649,7 @@ function NodePath({
  * nœuds (anti-occlusion #170). Sûr **sans scrim** dans l'état tint-seul : la palette d'accent est
  * bornée (6 thèmes curatés) → contraste des glyphes/titre/trait sur ce tint **prouvé
  * analytiquement** (MapScreen.test.tsx), contrairement à la photo arbitraire (qui, elle, exige un
- * scrim/casing opaque, cf. `ThemedTitle` #189 / `FooterScrim`+casing du trait #202).
+ * scrim/casing opaque, cf. `ThemedTitle` #189 / casing du trait #202).
  *
  * **Tint per-monde (fix #184, story #189/#199)** : `--world-bg-tint` (`color-mix(--world-accent 10%,
  * surface)`) est **RE-DÉCLARÉ ICI** (au niveau de la surcharge inline de `--world-accent`), pas
@@ -818,52 +810,11 @@ function ThemedTitle({
   );
 }
 
-/**
- * **Scrim de contraste du bouton de bas d'écran** (« Changer de joueur », `LogoutButton`, story
- * #202). Le bouton est un contrôle **ghost/outline** (`background:transparent`, texte
- * `--color-text-secondary`, cf. `LogoutButton.tsx`) : sans fond opaque, son texte est peint
- * directement sur le fond de `<main>`. Sur une **photo IA arbitraire** (`active`, i.e.
- * `theme.background !== null`), ce fond n'est plus un token → contraste **non garantissable**
- * (mesuré ~1.21:1 sur la fixture E2E rayée, quasi illisible — #170, audit #126).
- *
- * Même patron que le scrim du titre (#189) : une **carte scrim OPAQUE** (`--world-surface`, jamais
- * semi-transparente) enveloppe le bouton → le fond de RÉFÉRENCE du texte redevient `--world-surface`
- * (`--color-text-secondary` ≥4.5:1 sur `--world-surface`, résolu + testé, MapScreen.test.tsx),
- * INDÉPENDAMMENT de la photo. **Enfant en flux** (pas d'`absolute`/`z-index`) → aucun risque
- * d'occlusion (#170). Rendu **uniquement** sur photo (`active`) : sans photo (tint-seul #199 /
- * neutre), le bouton garde le contraste déjà prouvé sur son fond token (pas de scrim superflu, pas
- * de régression #125 dans les autres écrans — le bouton est partagé, cf. `PlayScreen`). Le hub
- * « Ma collection » a **déjà** son propre fond opaque local (`--color-bg-tertiary`) → pas concerné
- * (audit #126 : tous les glyphes du footer revus, seul le bouton ghost manquait de fond opaque).
- */
-function FooterScrim({
-  children,
-  active,
-}: {
-  readonly children: ReactNode;
-  readonly active: boolean;
-}) {
-  if (!active) {
-    // Pas de photo (états loading/error/unavailable, ou ready sans image) : le bouton garde son
-    // rendu natif sur un fond token → contraste déjà garanti, aucun scrim ajouté.
-    return <>{children}</>;
-  }
-  return (
-    <div
-      data-world-footer-scrim=""
-      style={{
-        display: "inline-flex",
-        // Scrim OPAQUE tokenisé (identique au scrim du titre #189) : le fond de référence du texte
-        // ghost du bouton redevient `--world-surface`, jamais la photo arbitraire (#170). `padding:0`
-        // + même `--border-radius-full` que le bouton → la pastille scrim épouse exactement le bouton.
-        backgroundColor: "var(--world-surface)",
-        borderRadius: "var(--border-radius-full)",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
+// `FooterScrim` (scrim de contraste du bouton « Changer de joueur » sur photo arbitraire,
+// story #202) a été RETIRÉ (story R1.1 #337) : le bouton vit désormais dans le shell
+// persistant (`AppShell.tsx`, header en flux au-dessus de `<main>`), jamais peint sur le
+// fond-photo per-monde de la carte — le problème de contraste #202 qu'il corrigeait ne peut
+// plus survenir pour ce bouton (absorbé, pas régressé — cf. tests `AppShell.test.tsx`).
 
 type ScreenState =
   | { readonly kind: "loading" }
@@ -916,13 +867,11 @@ export function MapScreen() {
   // Thème per-monde (câblage carte↔monde, story 6.7) — disponible seulement une fois la carte
   // chargée. `data-world` + `--world-accent` + fond du monde posés sur `<main>` (backmost).
   const theme = screen.kind === "ready" ? screen.map.theme : null;
-  // Une PHOTO réelle du monde est-elle rendue ? (`theme.background !== null`) → active les scrims
-  // opaques de contraste sur photo arbitraire (#202 : titre déjà #189, bouton de bas d'écran +
-  // casing du trait ici). Faux dans tous les autres états (loading/error/unavailable, ready
-  // sans-image #199 où le contraste sur le tint borné est prouvé analytiquement).
-  const hasBackground = theme?.background != null;
   const baseMainStyle: CSSProperties = {
-    minHeight: "100dvh",
+    // Shell persistant EN FLUX au-dessus (story R1.1 #337, `(app)/layout.tsx`) : réserve sa
+    // propre hauteur (`--app-shell-height`) hors de ce `<main>` — jamais `100dvh` brut, sinon
+    // le document dépasserait d'une hauteur de bandeau (cf. JSDoc `AppShell.tsx`).
+    minHeight: "calc(100dvh - var(--app-shell-height))",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -1045,13 +994,9 @@ export function MapScreen() {
           </Link>
         </>
       )}
-
-      {/* Bouton « Changer de joueur » (ghost/transparent) — enveloppé d'un scrim opaque
-          `--world-surface` quand une photo réelle est rendue (contraste garanti sur photo
-          arbitraire, #202) ; rendu nu sinon (fond token, contraste déjà garanti). */}
-      <FooterScrim active={hasBackground}>
-        <LogoutButton />
-      </FooterScrim>
+      {/* « Changer de joueur » vit désormais dans le shell persistant (story R1.1 #337,
+          `AppShell.tsx`, 👤) — un seul montage pour toutes les routes `(app)`, plus de
+          bouton dupliqué ni de scrim de contraste par écran (cf. rétro #202, absorbé). */}
     </main>
   );
 }

@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { strings } from "@/strings";
-import { LogoutButton } from "@/components/LogoutButton";
 import { QuestionCard } from "@/components/game/QuestionCard";
 import { FeedbackPanel } from "@/components/game/FeedbackPanel";
 import { ResultsScreen } from "@/components/game/ResultsScreen";
@@ -323,7 +322,8 @@ function PlayScreenInner() {
     // superposé (même patron que "error"/"empty"/"loading" — StatusMessage remplace tout
     // l'écran, aucun élément positionné/empilé à garder contre l'occlusion, #170/#190).
     // Aucun bouton « Réessayer » (rejouer ne changerait rien avant demain) — seule sortie :
-    // changer de joueur (LogoutButton, déjà porté par StatusMessage).
+    // changer de joueur, désormais toujours accessible via le shell persistant
+    // (`AppShell.tsx`, story R1.1 #337), pas un bouton local à cet écran.
     return (
       <StatusMessage
         key="locked"
@@ -524,7 +524,15 @@ function PlayingGame({
     <main
       className="bg-bg text-text"
       style={{
-        minHeight: "100dvh",
+        // Shell persistant EN FLUX au-dessus (story R1.1 #337, `(app)/layout.tsx`) : réserve sa
+        // propre hauteur (`--app-shell-height`) hors de ce `<main>` — jamais `100dvh` brut (sinon
+        // le centrage `justifyContent:"center"` décale le contenu encore PLUS bas). Ce calcul
+        // n'est FIDÈLE que parce qu'`AppShell` reste RÉELLEMENT sur UNE ligne à `--app-shell-height`
+        // à TOUTE largeur (icône SEULE, jamais de libellé visible sur ⚙️/👤, cf. `AppShell.tsx`) —
+        // un bandeau qui passerait à la ligne (texte visible trop large sur 375px) rendrait CE
+        // token FAUX (hauteur réelle > déclarée) et rognerait la marge sous la barre d'action fixe
+        // calibrée au pouce (story 8.1 #254) : régression mesurée puis corrigée à la source.
+        minHeight: "calc(100dvh - var(--app-shell-height))",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -559,10 +567,10 @@ function PlayingGame({
           écran où `SoundQuickMute` est monté (musique de fond EN BOUCLE + SFX joués ICI, cf.
           `useEffect(playMusic("play"))` ci-dessous ; `ResultsScreen` ne joue qu'un SFX ponctuel au
           montage — déjà terminé avant qu'un clic n'ait pu l'atteindre, donc scope volontairement
-          resserré à cet écran). Rendu EN FLUX à côté de `LogoutButton` (même patron, non-occlusion
-          structurelle). */}
+          resserré à cet écran). Rendu EN FLUX (non-occlusion structurelle) — « Changer de joueur »
+          n'est plus un bouton local ici : il vit dans le shell persistant (`AppShell.tsx`, story
+          R1.1 #337), toujours accessible au-dessus de cet écran. */}
       <SoundQuickMute />
-      <LogoutButton />
     </main>
   );
 }
@@ -598,7 +606,10 @@ function StatusMessage({
     <main
       className="bg-bg text-text"
       style={{
-        minHeight: "100dvh",
+        // Shell persistant EN FLUX au-dessus (story R1.1 #337, `(app)/layout.tsx`) : réserve sa
+        // propre hauteur (`--app-shell-height`) hors de ce `<main>` — jamais `100dvh` brut, même
+        // rationale/garde que `PlayingGame` ci-dessus (cf. son commentaire détaillé).
+        minHeight: "calc(100dvh - var(--app-shell-height))",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -635,7 +646,8 @@ function StatusMessage({
         </p>
       )}
       {children}
-      <LogoutButton />
+      {/* « Changer de joueur » n'est plus rendu ici : le shell persistant (`AppShell.tsx`, story
+          R1.1 #337) le porte au-dessus de CET écran, sur TOUS les états de `PlayScreen`. */}
     </main>
   );
 }

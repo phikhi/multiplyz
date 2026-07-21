@@ -393,7 +393,9 @@ export function CollectionScreen() {
     <main
       className="bg-bg text-text"
       style={{
-        minHeight: "100dvh",
+        // Shell persistant EN FLUX au-dessus (story R1.1 #337, `(app)/layout.tsx`) : réserve sa
+        // propre hauteur (`--app-shell-height`) hors de ce `<main>` — jamais `100dvh` brut.
+        minHeight: "calc(100dvh - var(--app-shell-height))",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",

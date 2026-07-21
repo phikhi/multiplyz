@@ -915,25 +915,26 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(qcmBottom!).toBeLessThanOrEqual(phoneBar!.barTop);
 
     /**
-     * Bas RENDU (`boundingClientRect`, jamais une marge raisonnée #190) du bouton dont le texte
-     * === `needle`, `null` si absent. Sert à prouver qu'un frère EN FLUX (dernier enfant de
-     * `<main>` sur téléphone) n'est pas recouvert par la barre fixe (#170/#190 : garder contre
-     * TOUS les frères empilables, pas seulement l'élément « sous » l'overlay).
+     * Bas RENDU (`boundingClientRect`, jamais une marge raisonnée #190) du groupe `role="group"`
+     * dont le nom accessible === `needle`, `null` si absent. Sert à prouver qu'un frère EN FLUX
+     * (dernier enfant de `<main>` sur téléphone) n'est pas recouvert par la barre fixe (#170/#190 :
+     * garder contre TOUS les frères empilables, pas seulement l'élément « sous » l'overlay).
      */
-    const inFlowButtonBottom = (needle: string) =>
+    const inFlowGroupBottom = (needle: string) =>
       page.evaluate((label) => {
-        const btn = [...document.querySelectorAll("button")].find(
-          (b) => (b.textContent ?? "").trim() === label,
+        const group = [...document.querySelectorAll('[role="group"]')].find(
+          (g) => g.getAttribute("aria-label") === label,
         );
-        return btn === undefined ? null : btn.getBoundingClientRect().bottom;
+        return group === undefined ? null : group.getBoundingClientRect().bottom;
       }, needle);
 
-    // Non-occlusion du DERNIER frère EN FLUX (#170/#190) : « Changer de joueur » (LogoutButton) est
-    // le dernier enfant de `<main>`, en flux normal SOUS le QCM — la barre fixe (padding-bottom
-    // réservé par PlayScreen) ne doit pas le recouvrir. Sa géométrie réelle le prouve, pas un raisonnement.
-    const logoutBottomQuestion = await inFlowButtonBottom(strings.play.logout);
-    expect(logoutBottomQuestion).not.toBeNull();
-    expect(logoutBottomQuestion!).toBeLessThanOrEqual(phoneBar!.barTop);
+    // Non-occlusion du DERNIER frère EN FLUX (#170/#190) : `SoundQuickMute` est le dernier enfant de
+    // `<main>` (« Changer de joueur »/`LogoutButton` vit désormais dans le shell persistant hors de
+    // `<main>`, story R1.1 #337), en flux normal SOUS le QCM — la barre fixe (padding-bottom réservé
+    // par PlayScreen) ne doit pas le recouvrir. Sa géométrie réelle le prouve, pas un raisonnement.
+    const quickMuteBottomQuestion = await inFlowGroupBottom(strings.play.soundQuickMute.legend);
+    expect(quickMuteBottomQuestion).not.toBeNull();
+    expect(quickMuteBottomQuestion!).toBeLessThanOrEqual(phoneBar!.barTop);
 
     await page.screenshot({ path: "docs/captures/254-jeu-mobile.png", fullPage: true });
 
@@ -966,11 +967,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(feedbackContentBottom).not.toBeNull();
     expect(feedbackContentBottom!).toBeLessThanOrEqual(feedbackBar!.barTop);
 
-    // ET le DERNIER frère EN FLUX de `<main>` en phase feedback (« Changer de joueur ») n'est pas
-    // non plus recouvert par la barre fixe (garde contre TOUS les frères empilables, #170/#190).
-    const logoutBottomFeedback = await inFlowButtonBottom(strings.play.logout);
-    expect(logoutBottomFeedback).not.toBeNull();
-    expect(logoutBottomFeedback!).toBeLessThanOrEqual(feedbackBar!.barTop);
+    // ET le DERNIER frère EN FLUX de `<main>` en phase feedback (`SoundQuickMute`) n'est pas non
+    // plus recouvert par la barre fixe (garde contre TOUS les frères empilables, #170/#190).
+    const quickMuteBottomFeedback = await inFlowGroupBottom(strings.play.soundQuickMute.legend);
+    expect(quickMuteBottomFeedback).not.toBeNull();
+    expect(quickMuteBottomFeedback!).toBeLessThanOrEqual(feedbackBar!.barTop);
 
     await page.screenshot({ path: "docs/captures/254-jeu-mobile-feedback.png", fullPage: true });
   });
@@ -997,19 +998,30 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     const soundSwitch = switches.first();
 
     // Non-occlusion EMPIRIQUE (jamais seulement raisonnée, #190) : `SoundQuickMute` est rendu EN
-    // FLUX (aucun `position`), premier des 2 derniers frères de `<main>` (`LogoutButton` suit
-    // juste après, cf. `PlayScreen.tsx`) — non-occlusion STRUCTURELLE (CLAUDE.md, extension
-    // #170/#190/#278), vérifiée ici par une VRAIE géométrie de navigateur : les 2 contrôles ne se
-    // chevauchent PAS verticalement et sont tous deux dans le viewport.
+    // FLUX (aucun `position`), dernier enfant de `<main>` — non-occlusion STRUCTURELLE (CLAUDE.md,
+    // extension #170/#190/#278), vérifiée ici par une VRAIE géométrie de navigateur : le contrôle
+    // est entièrement dans le viewport.
     const quickMuteBox = await group.boundingBox();
-    const logoutBox = await page.getByRole("button", { name: strings.play.logout }).boundingBox();
     expect(quickMuteBox).not.toBeNull();
-    expect(logoutBox).not.toBeNull();
-    expect(quickMuteBox!.y + quickMuteBox!.height).toBeLessThanOrEqual(logoutBox!.y + 1);
     const viewport = page.viewportSize();
     expect(viewport).not.toBeNull();
     expect(quickMuteBox!.y).toBeGreaterThanOrEqual(0);
     expect(quickMuteBox!.y + quickMuteBox!.height).toBeLessThanOrEqual(viewport!.height);
+
+    // Non-occlusion du shell persistant (story R1.1 #337, extension #278) : le bandeau
+    // (`AppShell`, 🪙✨⚙️👤) est EN FLUX AU-DESSUS de `<main>` — son bas ne recouvre jamais le
+    // contenu de l'écran de jeu qu'il précède. Géométrie RENDUE, jamais une marge raisonnée (#190).
+    const shellVsMain = await page.evaluate(() => {
+      const shell = document.querySelector("[data-app-shell]");
+      const main = document.querySelector("main");
+      if (shell == null || main == null) return null;
+      return {
+        shellBottom: shell.getBoundingClientRect().bottom,
+        mainTop: main.getBoundingClientRect().top,
+      };
+    });
+    expect(shellVsMain).not.toBeNull();
+    expect(shellVsMain!.shellBottom).toBeLessThanOrEqual(shellVsMain!.mainTop + 1);
 
     await page.screenshot({ path: "docs/captures/282-quickmute.png", fullPage: true });
 
@@ -1326,48 +1338,31 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(richness!.upstreamMedBottom).not.toBeNull();
     expect(richness!.teddyTop).toBeGreaterThanOrEqual(richness!.upstreamMedBottom!);
 
-    // ── Contraste des glyphes de bas d'écran sur photo (story #202) — RENDU + GÉOMÉTRIE vrai layout ──
-    // Sur la photo IA arbitraire, deux éléments étaient peints SANS fond opaque (contraste ~1.21:1 sur
-    // la fixture rayée, #170) : le bouton « Changer de joueur » (ghost) et le trait du chemin (peint
-    // dans la gouttière de <main>, backmost). #202 pose un scrim/casing opaque `--world-surface` sous
-    // chacun. jsdom ne fait pas de layout → ici on vérifie en vrai navigateur que (a) le scrim de footer
-    // ENVELOPPE le bouton (couvre son rect, fond opaque résolu) et le bouton reste visible, (b) la casing
-    // du trait est peinte, plus large que le trait, avec la MÊME géométrie (gouttière) → aucune occlusion
-    // nouvelle, fond de référence du trait = un token opaque, pas la photo.
-    const footer = await page.evaluate(() => {
-      const scrim = document.querySelector("[data-world-footer-scrim]");
-      const button = scrim?.querySelector("button");
+    // ── Contraste du trait de chemin sur photo (story #202) — RENDU + GÉOMÉTRIE vrai layout ──
+    // Sur la photo IA arbitraire, le trait du chemin (peint dans la gouttière de <main>, backmost)
+    // était peint SANS fond opaque (contraste ~1.21:1 sur la fixture rayée, #170). #202 pose une
+    // casing opaque `--world-surface` sous le trait. jsdom ne fait pas de layout → ici on vérifie en
+    // vrai navigateur que la casing est peinte, plus large que le trait, avec la MÊME géométrie
+    // (gouttière) → aucune occlusion nouvelle, fond de référence du trait = un token opaque, pas la
+    // photo. (Le bouton « Changer de joueur », qui avait le même défaut, vit désormais dans le shell
+    // persistant hors de `<main>`, jamais peint sur cette photo — story R1.1 #337, couverture
+    // équivalente dans `AppShell.test.tsx`.)
+    const casingCheck = await page.evaluate(() => {
       const casing = document.querySelector("[data-map-connector-casing]");
       const line = document.querySelector(
         "[data-map-connector] line:not([data-map-connector-casing])",
       );
       const casingSvg = casing?.closest("svg");
       const casingBadge = casingSvg?.closest("li")?.querySelector("[data-map-node-status]");
-      if (
-        scrim == null ||
-        button == null ||
-        casing == null ||
-        line == null ||
-        casingBadge == null
-      ) {
+      if (casing == null || line == null || casingBadge == null) {
         return null;
       }
-      const s = scrim.getBoundingClientRect();
-      const b = button.getBoundingClientRect();
       const casingRect = casing.getBoundingClientRect();
       const svgRect = casingSvg!.getBoundingClientRect();
       const badgeRect = casingBadge.getBoundingClientRect();
       const px = (v: string) => Number.parseFloat(v);
       return {
-        // (a) scrim de footer : fond opaque résolu (non transparent) + enveloppe le bouton + bouton visible.
-        scrimBg: getComputedStyle(scrim).backgroundColor,
-        scrimCoversButton:
-          s.top <= b.top + 1 &&
-          s.bottom >= b.bottom - 1 &&
-          s.left <= b.left + 1 &&
-          s.right >= b.right - 1,
-        buttonVisible: b.width > 0 && b.height > 0,
-        // (b) casing du trait : plus large que le trait coloré + couleur ≠ celle du trait + opaque.
+        // casing du trait : plus large que le trait coloré + couleur ≠ celle du trait + opaque.
         casingWidth: px(getComputedStyle(casing).strokeWidth),
         lineWidth: px(getComputedStyle(line).strokeWidth),
         casingStroke: getComputedStyle(casing).stroke,
@@ -1377,18 +1372,13 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
         casingInGutter: svgRect.top >= badgeRect.bottom - 1 && casingRect.height > 0,
       };
     });
-    expect(footer).not.toBeNull();
-    // (a) le scrim de footer est opaque (jamais transparent → contraste garanti) et enveloppe le bouton.
-    expect(footer!.scrimBg).not.toBe("rgba(0, 0, 0, 0)");
-    expect(footer!.scrimBg).not.toBe("transparent");
-    expect(footer!.scrimCoversButton).toBe(true);
-    expect(footer!.buttonVisible).toBe(true);
-    // (b) la casing est PLUS LARGE que le trait (halo visible de part et d'autre) et d'une couleur
+    expect(casingCheck).not.toBeNull();
+    // la casing est PLUS LARGE que le trait (halo visible de part et d'autre) et d'une couleur
     // DISTINCTE (opaque `--world-surface` vs `--map-node-path-color`) → le fond de référence du trait
     // n'est plus la photo. Non-occlusion : la casing partage la gouttière du connecteur (sous la pastille).
-    expect(footer!.casingWidth).toBeGreaterThan(footer!.lineWidth);
-    expect(footer!.casingStroke).not.toBe(footer!.lineStroke);
-    expect(footer!.casingInGutter).toBe(true);
+    expect(casingCheck!.casingWidth).toBeGreaterThan(casingCheck!.lineWidth);
+    expect(casingCheck!.casingStroke).not.toBe(casingCheck!.lineStroke);
+    expect(casingCheck!.casingInGutter).toBe(true);
 
     await page.screenshot({ path: "docs/captures/126-carte-progression.png", fullPage: true });
     // Capture dédiée story 6.7 (thématisation per-monde) — OUVERTE et analysée (pixels) en review.
@@ -1813,7 +1803,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
   test("déconnexion → session révoquée, /jouer redirige de nouveau", async ({ page }) => {
     // Connexion → `/carte` (défaut A corrigé, story R1.2 #336). Le bouton « Changer de joueur »
-    // (`LogoutButton`) est présent sur la carte au même titre que sur `/jouer` (`strings.play.logout`).
+    // (`LogoutButton`) vit désormais dans le shell persistant (`AppShell.tsx`, story R1.1 #337) —
+    // présent au même titre sur `/carte` et sur `/jouer` (`strings.play.logout`), un seul montage.
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
