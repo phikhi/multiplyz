@@ -748,21 +748,19 @@ describe("PlayScreen — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
         locked: false,
       });
       render(<PlayScreen />);
+      // `waitFor` : `PlayingGame` (et son `useIsPhone`) ne monte qu'APRÈS la résolution ASYNCHRONE
+      // de `fetchLevel` — ce `waitFor` attend ce montage post-fetch (matérialisé par l'apparition
+      // du texte de la question, rendu par `PlayingGame`), PAS un quelconque délai de
+      // resynchronisation. Sur un montage CLIENT PUR (RTL `render` = `createRoot`, jamais une
+      // hydratation), `useSyncExternalStore` renvoie `getSnapshot` — la VRAIE valeur (`true` ici,
+      // mockée) — DÈS le 1ᵉʳ rendu de `PlayingGame` ; `getServerSnapshot`(false) n'est utilisé
+      // QU'au SSR/hydratation (jamais ici). Donc le `paddingBottom` téléphone est correct
+      // immédiatement une fois `PlayingGame` monté — assertion synchrone après ce `waitFor`.
       await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
-      // `waitFor` (pas une assertion immédiate) : `PlayingGame` (et son `useIsPhone`) ne monte
-      // qu'APRÈS la résolution de `fetchLevel` (même render que le texte ci-dessus) — depuis le
-      // fix #305 (déterminisme d'hydratation), `isPhone` démarre TOUJOURS à `false` et ne se
-      // resynchronise à la vraie valeur (`true` ici, mocké) que dans l'effet de montage de
-      // `useIsPhone`, un effet PASSIF flushé par le scheduler après le commit — pas
-      // nécessairement synchrone avec la disparition du texte de la question que `waitFor`
-      // ci-dessus observe (même famille de course que l'auto-scroll #268, rétro CI #332/#230).
       // Garde à effet observable : si la réserve d'espace saute (retirée/mutée), le contenu
-      // jouable ne serait plus protégé de l'occlusion par la barre fixe (#170/#190) — `waitFor`
-      // reste rouge (timeout) dans ce cas, vert dès que l'effet flush sinon.
-      await waitFor(() =>
-        expect(screen.getByRole("main").style.paddingBottom).toBe(
-          "calc(var(--space-6) + var(--play-action-bar-height))",
-        ),
+      // jouable ne serait plus protégé de l'occlusion par la barre fixe (#170/#190).
+      expect(screen.getByRole("main").style.paddingBottom).toBe(
+        "calc(var(--space-6) + var(--play-action-bar-height))",
       );
     } finally {
       restore();

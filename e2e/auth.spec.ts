@@ -1709,12 +1709,20 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   // `useState` — cette lecture divergeait entre le SSR (`window` absent → toujours `false`) et
   // le 1ᵉʳ rendu CLIENT (l'hydratation, où `window` existe déjà) dès que le viewport réel passait
   // sous `--bp-phone` → mismatch d'hydratation React **100 % reproductible** sur `/carte` (jamais
-  // sur `/collection`). Fix (`src/lib/responsive/use-is-phone.ts`) : l'état initial est
-  // désormais TOUJOURS `false` (= la valeur SSR) et ne se resynchronise à la vraie valeur
-  // qu'APRÈS le montage, dans un effet passif — un effet s'exécute TOUJOURS après le
-  // commit/l'hydratation, jamais pendant, donc ce re-sync ne peut plus générer de mismatch.
-  // Réutilise le profil `Milo` (cookie de session injecté, même patron que #268 juste au-dessus)
-  // : surface disjointe, lecture seule, aucune mutation d'état partagé.
+  // sur `/collection`). Fix (`src/lib/responsive/use-is-phone.ts`) : `useSyncExternalStore` avec
+  // un `getServerSnapshot` qui renvoie TOUJOURS `false` — utilisé pour le rendu serveur ET le 1ᵉʳ
+  // rendu client à l'hydratation → HTML serveur et 1ᵉʳ commit client identiques par construction ;
+  // React resynchronise ensuite silencieusement vers la vraie valeur, sans jamais comparer ni
+  // avertir. Réutilise le profil `Milo` (cookie de session injecté, même patron que #268
+  // juste au-dessus) : surface disjointe, lecture seule, aucune mutation d'état partagé.
+  //
+  // ⚠️ Cet E2E est la SEULE preuve de non-mismatch console (la garde unitaire équivalente est
+  // structurellement vacuous : jsdom définit `window` pendant `renderToString`, donc l'ancien code
+  // y lirait matchMedia au SSR aussi → aucun mismatch React observable en jsdom, cf.
+  // `use-is-phone.test.tsx`). Ici seulement — vrai navigateur, SSR SANS `window` — la divergence
+  // réelle se manifeste. Tourne en CI contre `next dev` (`playwright.config webServer.command`,
+  // `reuseExistingServer:!CI` → serveur démarré par Playwright), donc le message d'hydratation
+  // React est émis en clair (non minifié) → le motif `/hydrat/` matche réellement.
   // ==========================================================================
   test("carte du monde → AUCUN mismatch d'hydratation React (fix #305), aux 3 tailles", async ({
     page,
@@ -1749,6 +1757,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       await page.setViewportSize(viewport);
       await page.goto("/carte");
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // Anti-faux-vert : le mismatch d'hydratation est logué par React PENDANT l'hydratation, juste
+      // après l'exécution du bundle. `networkidle` garantit que le bundle client s'est chargé et
+      // que l'hydratation a eu lieu AVANT de conclure « aucun `console.error` » (sinon on pourrait
+      // asserter la liste vide avant que React n'ait eu la chance de la remplir).
+      await page.waitForLoadState("networkidle");
     }
     // VÉRIF VISUELLE (garde-fou dur #170) — capture du dernier état (téléphone, le cas
     // discriminant du bug) : la carte doit rendre CORRECTEMENT (vrai art, nœuds, Teddy, top-bar),
@@ -1756,9 +1769,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // changement de comportement responsive une fois monté).
     await page.screenshot({ path: "docs/captures/305-carte-hydration-fix-phone.png" });
 
-    // Garde à effet observable : ROUGIT si le mismatch #305 revient (confirmé en revertant
-    // temporairement `useIsPhone` vers l'ancien initialiseur synchrone pendant le build — le
-    // test rougit alors précisément sur le viewport téléphone, cf. reçu de PR).
+    // Garde à effet observable : ROUGIT si le mismatch #305 revient (confirmé EMPIRIQUEMENT en
+    // revertant `useIsPhone` vers l'ancien `useState(getInitialIsPhone)` synchrone pendant le
+    // build → ce test rougit précisément au viewport téléphone avec le message React
+    // « A tree hydrated but some attributes of the server rendered HTML didn't match the client
+    // properties … » sur le `<main>` de `MapScreen` — cf. reçu de PR).
     const hydrationMismatches = consoleErrors.filter((text) => hydrationMismatchPattern.test(text));
     expect(hydrationMismatches).toEqual([]);
   });
