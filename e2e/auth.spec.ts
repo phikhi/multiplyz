@@ -716,6 +716,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     const resultsCoins = page.locator("[data-results-coins]");
     await expect(resultsCoins).toBeVisible({ timeout: 10_000 });
     await expect(resultsCoins).toHaveAttribute("aria-label", /pièce/u);
+    // Solde total (post-crédit) affiché par l'écran résultats — capturé AVANT le retour carte
+    // pour comparer à la balance du SHELL persistant après (#346, cf. plus bas).
+    const resultsCoinsValue = await resultsCoins.getAttribute("data-results-coins");
+    const earnedTotalCoins = Number(resultsCoinsValue);
+    expect(Number.isInteger(earnedTotalCoins) && earnedTotalCoins > 0).toBe(true);
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
     await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
 
@@ -735,6 +740,16 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // QUE la navigation client, jamais l'état serveur.
     await page.getByRole("button", { name: strings.play.results.continue }).click();
     await expect(page).toHaveURL(/\/carte$/);
+    // FRAÎCHEUR du solde du SHELL persistant après un gain (story R1.1 #337 retro → #346,
+    // corollaire #180) : `(app)/layout.tsx` lit le portefeuille SERVEUR au montage, mais React
+    // ne RE-MONTE PAS ce layout partagé sur une navigation DOUCE entre routes-sœurs — sans
+    // revalidation explicite (`finishLevelAction` → `revalidatePath`), le bandeau resterait
+    // figé à sa valeur lue AVANT ce niveau (périmée) après le clic « Continuer » ci-dessus.
+    // Rouge si la revalidation est retirée : `[data-shell-balance="coins"]` resterait à sa
+    // valeur d'avant ce niveau au lieu du solde EXACT tout juste affiché sur l'écran résultats
+    // (`earnedTotalCoins`, capturé plus haut).
+    const shellCoins = page.locator('[data-shell-balance="coins"]');
+    await expect(shellCoins).toHaveAttribute("data-shell-balance-value", String(earnedTotalCoins));
     await page.screenshot({
       path: "docs/captures/336-resultats-continuer-carte.png",
       fullPage: true,
