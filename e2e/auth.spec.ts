@@ -408,7 +408,18 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(page.getByRole("heading", { level: 1, name: strings.login.title })).toBeVisible();
     await expect(page.getByRole("button", { name: profileLabel })).toBeVisible();
 
+    // Teddy accueille en VRAI art (story R2.2, #360) — <img> RENDU (pas le repli emoji) ET
+    // réellement chargé (`naturalWidth>0`, jamais une assertion permissive #239). L'écran d'accueil
+    // n'était que l'emoji 🧸 avant #360 (Teddy = voix seulement hors carte).
+    const homeTeddy = page.locator('[data-asset="teddy-home"]');
+    await expect(homeTeddy).toBeVisible();
+    await expect(homeTeddy).toHaveAttribute("data-asset-state", "rendered");
+    expect(await homeTeddy.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(
+      0,
+    );
+
     await page.screenshot({ path: "docs/captures/31-selecteur.png", fullPage: true });
+    await page.screenshot({ path: "docs/captures/360-teddy-accueil.png", fullPage: true });
   });
 
   test("profil + bon PIN → session + redirection vers la carte (hub, story R1.2 #336), puis tap du nœud courant → jeu (capture)", async ({
@@ -654,6 +665,18 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(feedbackText.toLowerCase()).not.toMatch(/faux|erreur/u);
     await expect(page.getByRole("button", { name: strings.play.retry.tryAgain })).toBeVisible();
 
+    // Teddy réagit en VRAI art sur le feedback « pas encore » (story R2.2, #360) — <img> RENDU et
+    // chargé (`naturalWidth>0`). Re-essai ⇒ sprite `neutre` (calme), JAMAIS le triste `oups` :
+    // garde de posture croissance no-fail (CLAUDE.md/COPY §6). Assertion NON permissive (#239).
+    const feedbackTeddy = page.locator('[data-asset="teddy-feedback"]');
+    await expect(feedbackTeddy).toBeVisible();
+    await expect(feedbackTeddy).toHaveAttribute("data-asset-state", "rendered");
+    await expect(feedbackTeddy).toHaveAttribute("src", /socle\/teddy\/neutre\.png$/u);
+    expect(
+      await feedbackTeddy.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+    ).toBeGreaterThan(0);
+    await page.screenshot({ path: "docs/captures/360-teddy-feedback.png", fullPage: true });
+
     // Étayage visuel monté AU-DESSUS de la révélation (ordre inversé issue #100, ADR
     // 0007, WIREFRAMES §3d — l'étayage-découverte d'abord, le chiffre en synthèse dessous ;
     // épic #4 fondation #93) : conteneur `role="img"` labellisé, présent uniquement en
@@ -733,7 +756,18 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     const earnedTotalCoins = Number(resultsCoinsValue);
     expect(Number.isInteger(earnedTotalCoins) && earnedTotalCoins > 0).toBe(true);
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
+
+    // Teddy célèbre en VRAI art sur les résultats (story R2.2, #360, draine #357 « Teddy absent
+    // résultats ») — <img> RENDU et chargé (`naturalWidth>0`). Le sprite exact (`acclame`/`content`)
+    // dépend des étoiles (non déterministe en niveau normal), on garde donc la présence + le chargement.
+    const resultsTeddy = page.locator('[data-asset="teddy-results"]');
+    await expect(resultsTeddy).toBeVisible();
+    await expect(resultsTeddy).toHaveAttribute("data-asset-state", "rendered");
+    expect(
+      await resultsTeddy.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+    ).toBeGreaterThan(0);
     await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
+    await page.screenshot({ path: "docs/captures/360-teddy-resultats.png", fullPage: true });
 
     // Preuve RUNTIME de câblage sonore (story 8.4, #257 AC #1) : au moins un asset audio a été
     // réellement requêté par le navigateur pendant ce flux (musique de fond à l'entrée en jeu +

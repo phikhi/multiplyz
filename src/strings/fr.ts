@@ -160,6 +160,11 @@ export const fr = {
     checking: "Un instant…",
     /** Échec **générique** (mauvais code OU profil inconnu) — no-shame. */
     error: "Oups, on réessaie ?",
+    /**
+     * Nom accessible de Teddy sur l'accueil (story R2.2, #360) — sprite `content` (accueil chaleureux,
+     * ART §2). Voix de Teddy, tutoiement : c'est du contenu (chaleur), pas un décor muet.
+     */
+    teddyAlt: "Teddy t'attend pour jouer",
   },
   /**
    * Écran de jeu **nu** (story #64, ENGINE §5/§9, PRODUCT §2.2, COPY §3). Voix de
@@ -236,6 +241,11 @@ export const fr = {
     correct: {
       variants: ["Bravo !", "Dans le mille !", "Trop forte !", "Et hop !", "Génial, continue !"],
       next: "Continuer",
+      /**
+       * Nom accessible de Teddy en feedback JUSTE (story R2.2, #360) — sprite `content` (joie
+       * partagée, ART §2). Voix de Teddy, tutoiement.
+       */
+      teddyAlt: "Teddy saute de joie avec toi",
     },
     /** Feedback « pas encore » (ENGINE §9 no-fail — jamais « faux », COPY §3). */
     retry: {
@@ -252,6 +262,13 @@ export const fr = {
        */
       answerReveal: "Et voilà, ça fait {n} !",
       tryAgain: "Je réessaie",
+      /**
+       * Nom accessible de Teddy en re-essai « pas encore » (story R2.2, #360) — sprite `neutre`
+       * (calme, soutenant), **jamais** le sprite `oups` (visage triste → culpabiliserait l'enfant,
+       * contraire à la posture croissance no-fail, CLAUDE.md/COPY §6). Teddy montre le chemin, il
+       * ne juge pas. Voix de Teddy, tutoiement.
+       */
+      teddyAlt: "Teddy te montre le chemin",
     },
     /**
      * Étayage visuel du re-essai (WIREFRAMES §3d, PRODUCT §2.2, épic #4 — COMPLET,
@@ -337,6 +354,15 @@ export const fr = {
       legendaryTitle: "Créature légendaire !",
       legendaryLabel: "Créature légendaire gagnée : {nom} 🌟",
       continue: "Continuer",
+      /**
+       * Nom accessible de Teddy sur les résultats (story R2.2, #360). Deux variantes selon la
+       * réussite (ENGINE §5, no-fail) : `teddyAltCheer` (sprite `acclame`, 3 étoiles — Teddy
+       * t'acclame) ; `teddyAltProud` (sprite `content`, 0–2 étoiles — fierté chaleureuse, JAMAIS
+       * un visage triste même à 0 étoile : no-fail, « Bien joué, on avance ! »). Voix de Teddy,
+       * tutoiement.
+       */
+      teddyAltCheer: "Teddy t'acclame, championne !",
+      teddyAltProud: "Teddy est fier de toi",
     },
   },
   /**

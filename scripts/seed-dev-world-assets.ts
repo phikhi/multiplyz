@@ -13,6 +13,7 @@
 // dans le script `dev` de `package.json`.
 import { resolveDatabasePath } from "../src/lib/db/config";
 import { seedRealWorldFixture } from "./lib/seed-real-world-fixture";
+import { seedTeddyExpressionSprites } from "./lib/seed-teddy-sprites";
 
 seedRealWorldFixture({
   databasePath: resolveDatabasePath(),
@@ -22,3 +23,8 @@ seedRealWorldFixture({
   assetNamespace: "world/dev",
   logPrefix: "seed-dev-world-assets",
 });
+
+// Sprites d'expression de Teddy dans la boucle de jeu (story R2.2, #360) — servis à
+// `/generated/socle/teddy/<expr>.png` pour que Teddy soit VISIBLE (vrai art) en dev sur
+// l'accueil / le feedback / les résultats (pas seulement la carte).
+seedTeddyExpressionSprites("seed-dev-teddy-sprites");

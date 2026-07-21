@@ -8,6 +8,8 @@ import { BRAND_NAME } from "@/config/brand";
 import { PIN_LENGTH } from "@/lib/auth/validation";
 import type { PublicProfile } from "@/lib/auth/login";
 import { PinPad } from "@/components/PinPad";
+import { AssetImage } from "@/components/media/AssetImage";
+import { TEDDY_EXPRESSION_REF } from "@/config/teddy";
 import { loginAction } from "@/app/login/actions";
 import { loginParentAction } from "@/app/parent/actions";
 
@@ -360,6 +362,23 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
 
         {selected === null ? (
           <>
+            {/* Teddy en chair et en os accueille l'enfant (story R2.2, #360, ART §2 « fil rouge
+                présent dans tous les mondes ») — sprite `content` (accueil chaleureux). EN FLUX,
+                premier enfant de la carte : réserve son espace, ne recouvre rien (#278b). Repli
+                no-fail = 🧸 emoji si l'asset n'est pas servi (CI/pré-déploiement). */}
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <AssetImage
+                assetRef={TEDDY_EXPRESSION_REF.content}
+                alt={strings.login.teddyAlt}
+                width="var(--teddy-hero-size)"
+                dataAsset="teddy-home"
+                fallback={
+                  <span aria-hidden="true" style={{ fontSize: "var(--font-size-4xl)" }}>
+                    {BEAR_ICON}
+                  </span>
+                }
+              />
+            </div>
             {/* En-tête de marque « multiplyz 🧸 » (WIREFRAMES §1a) — 🧸 décoratif (aria-hidden). */}
             <p style={brandStyle}>
               <span>{BRAND_NAME}</span>

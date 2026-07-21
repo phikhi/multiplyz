@@ -5,6 +5,8 @@ import { strings } from "@/strings";
 import type { StarCount } from "@/lib/engine/stars";
 import type { GrantedLegendary } from "@/lib/game/finish-level";
 import { useSound } from "@/lib/sound/SoundProvider";
+import { AssetImage } from "@/components/media/AssetImage";
+import { TEDDY_EXPRESSION_REF } from "@/config/teddy";
 
 /**
  * Écran de résultats de fin de niveau (WIREFRAMES §4, ENGINE §5, ECONOMY §4.1, gains #126).
@@ -50,6 +52,8 @@ const EMPTY_STAR = "☆";
 const STAR_SLOTS: readonly StarCount[] = [1, 2, 3];
 /** Emoji décoratif de la silhouette placeholder de la légendaire (art réel = épic #6). */
 const LEGENDARY_EMOJI = "🐾";
+/** Repli no-fail de l'avatar Teddy si le sprite n'est pas servi (story R2.2, #360). */
+const TEDDY_FALLBACK = "🧸";
 
 function fill(template: string, token: string, value: string): string {
   return template.replace(token, value);
@@ -178,6 +182,15 @@ export function ResultsScreen({ stars, coins, legendary = null, onContinue }: Re
       ? fill(strings.play.results.starsLabel, "{n}", String(stars))
       : fill(strings.play.results.starsLabelPlural, "{n}", String(stars));
 
+  // Teddy célèbre (story R2.2, #360, ART §2 « sprites de réaction en jeu ») : `acclame` (bras
+  // levés, éclat) à 3 étoiles, sinon `content` (fierté chaleureuse) — JAMAIS un visage triste
+  // même à 0 étoile (no-fail, ENGINE §5 : « Bien joué, on avance ! »).
+  const isCheer = stars === 3;
+  const teddyRef = isCheer ? TEDDY_EXPRESSION_REF.acclame : TEDDY_EXPRESSION_REF.content;
+  const teddyAlt = isCheer
+    ? strings.play.results.teddyAltCheer
+    : strings.play.results.teddyAltProud;
+
   // Libellé pièces (singulier/pluriel) — sert **à la fois** de texte visible et de nom
   // accessible (`role="img"`). Doublage a11y : jamais la seule icône 🪙 (daltonisme).
   const coinsLabel =
@@ -211,6 +224,20 @@ export function ResultsScreen({ stars, coins, legendary = null, onContinue }: Re
       >
         {strings.play.results.title}
       </h1>
+
+      {/* Teddy célèbre EN FLUX (sous le titre, au-dessus des étoiles) — réserve son espace, ne
+          recouvre rien (#278b, non-occlusion structurelle). Repli no-fail = 🧸 emoji. */}
+      <AssetImage
+        assetRef={teddyRef}
+        alt={teddyAlt}
+        width="var(--teddy-results-size)"
+        dataAsset="teddy-results"
+        fallback={
+          <span aria-hidden="true" style={{ fontSize: "var(--font-size-3xl)" }}>
+            {TEDDY_FALLBACK}
+          </span>
+        }
+      />
 
       <div role="img" aria-label={starsLabel} style={{ display: "flex", gap: "var(--space-2)" }}>
         {STAR_SLOTS.map((slot) => (

@@ -114,6 +114,28 @@ describe("FeedbackPanel — slot d'étayage visuel (épic #4, WIREFRAMES §3d, i
   });
 });
 
+describe("FeedbackPanel — Teddy réagit (story R2.2, #360, ART §2)", () => {
+  // Effet observable du MAPPING expression→écran : `content` (joie) sur le feedback juste,
+  // `neutre` (calme) sur le « pas encore ». ROUGIT si le mapping est muté (ex. `neutre` en juste,
+  // ou le sprite TRISTE `oups` en re-essai — interdit par la posture croissance no-fail).
+  it("feedback JUSTE → Teddy `content` (joie), alt consommé", () => {
+    renderPanel({ phase: "correct" });
+    const teddy = screen.getByRole("img", { name: strings.play.correct.teddyAlt });
+    expect(teddy.tagName).toBe("IMG");
+    expect(teddy).toHaveAttribute("src", "/generated/socle/teddy/content.png");
+    expect(teddy).toHaveAttribute("data-asset", "teddy-feedback");
+  });
+
+  it("re-essai « pas encore » → Teddy `neutre` (JAMAIS le sprite triste `oups`), alt consommé", () => {
+    renderPanel({ phase: "retry" });
+    const teddy = screen.getByRole("img", { name: strings.play.retry.teddyAlt });
+    expect(teddy.tagName).toBe("IMG");
+    // Garde no-fail : `neutre`, jamais `oups` (visage triste culpabilisant, CLAUDE.md/COPY §6).
+    expect(teddy).toHaveAttribute("src", "/generated/socle/teddy/neutre.png");
+    expect(teddy.getAttribute("src")).not.toContain("oups");
+  });
+});
+
 describe("FeedbackPanel — focus au montage (a11y, LEARNINGS #36)", () => {
   // À la transition question→feedback, le bouton de réponse démonte : le panneau doit
   // recevoir le focus pour ne pas laisser l'utilisateur clavier sur `<body>`. Effet

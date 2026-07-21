@@ -7,6 +7,8 @@ import type { QuestionPhase } from "@/lib/game/session";
 import type { Skill } from "@/lib/engine/domain";
 import { VisualScaffold } from "@/components/game/scaffolds/VisualScaffold";
 import { ActionBar } from "@/components/game/ActionBar";
+import { AssetImage } from "@/components/media/AssetImage";
+import { TEDDY_EXPRESSION_REF } from "@/config/teddy";
 
 /**
  * Feedback no-fail après une réponse (ENGINE §9, WIREFRAMES §3c/§3d, COPY §3).
@@ -62,6 +64,8 @@ function fill(template: string, token: string, value: string): string {
 
 const CHECK_ICON = "✓";
 const RETRY_ICON = "↻";
+/** Repli no-fail de l'avatar Teddy si le sprite n'est pas servi (story R2.2, #360). */
+const TEDDY_FALLBACK = "🧸";
 
 const primaryButtonStyle = {
   minHeight: "var(--tap-target-min)",
@@ -88,6 +92,11 @@ export function FeedbackPanel({
   const isCorrect = phase === "correct";
   const variants = isCorrect ? strings.play.correct.variants : strings.play.retry.variants;
   const message = pickVariant(variants, variantSeed);
+  // Teddy réagit (story R2.2, #360, ART §2 « sprites de réaction en jeu ») : `content` (joie) sur
+  // le feedback JUSTE, `neutre` (calme, soutenant) sur le « pas encore » — JAMAIS le sprite `oups`
+  // (triste), qui culpabiliserait l'enfant (posture croissance no-fail, CLAUDE.md/COPY §6).
+  const teddyRef = isCorrect ? TEDDY_EXPRESSION_REF.content : TEDDY_EXPRESSION_REF.neutre;
+  const teddyAlt = isCorrect ? strings.play.correct.teddyAlt : strings.play.retry.teddyAlt;
 
   // Ref-callback : déplace le focus sur le panneau de feedback dès son montage
   // (LEARNINGS #36 — évite la branche `current === null` non couverte d'un `useEffect`
@@ -117,6 +126,20 @@ export function FeedbackPanel({
         textAlign: "center",
       }}
     >
+      {/* Teddy réagit EN FLUX (premier enfant du panneau) — réserve son espace, ne recouvre ni le
+          glyphe ni le message (#278b, non-occlusion structurelle). Repli no-fail = 🧸 emoji. */}
+      <AssetImage
+        assetRef={teddyRef}
+        alt={teddyAlt}
+        width="var(--teddy-feedback-size)"
+        dataAsset="teddy-feedback"
+        fallback={
+          <span aria-hidden="true" style={{ fontSize: "var(--font-size-2xl)" }}>
+            {TEDDY_FALLBACK}
+          </span>
+        }
+      />
+
       <span
         aria-hidden="true"
         style={{

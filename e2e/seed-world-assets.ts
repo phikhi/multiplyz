@@ -20,6 +20,7 @@
  */
 import { resolveDatabasePath } from "../src/lib/db/config";
 import { seedRealWorldFixture } from "../scripts/lib/seed-real-world-fixture";
+import { seedTeddyExpressionSprites } from "../scripts/lib/seed-teddy-sprites";
 
 seedRealWorldFixture({
   databasePath: resolveDatabasePath(),
@@ -28,3 +29,8 @@ seedRealWorldFixture({
   assetNamespace: "world/e2e",
   logPrefix: "seed-world-assets",
 });
+
+// Sprites d'expression de Teddy (story R2.2, #360) — servis à `/generated/socle/teddy/<expr>.png`
+// pour que Teddy soit rendu (VRAI art) en E2E sur l'accueil / le feedback / les résultats, sans
+// dépendre des assets gitignorés (`public/generated/` absent en CI). Même contexte cwd que le serveur.
+seedTeddyExpressionSprites("seed-world-assets-teddy");
