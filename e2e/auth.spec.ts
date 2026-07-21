@@ -10,6 +10,7 @@ import {
   ACCURACY_HISTORY_SESSION_TOKEN,
   ACCURACY_HISTORY_DAILY_RATIOS,
 } from "./seed-accuracy-history";
+import { CANARI_PROFILE_NAME, CANARI_PROFILE_PIN } from "./seed-canari";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -2834,5 +2835,147 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(await fresh.textContent()).not.toBe(recoveryCode); // ancien code consommé
 
     await page.screenshot({ path: "docs/captures/33-recuperation.png", fullPage: true });
+  });
+
+  // ==========================================================================
+  // CANARI « état jouable » — E2E full-loop (issue #326, WORKFLOW §21.d) : la sonde qui garde le
+  // jeu ASSEMBLÉ vert en continu (login→carte→niveau→résultats→carte→collection) sur le VRAI art
+  // (jamais un fixture de test), distincte de chaque test d'écran isolé ci-dessus. C'est la 2ᵉ
+  // condition de clôture d'épic (CLAUDE.md #316, indépendante du playthrough narré signé
+  // game-design+PO, WORKFLOW §21.d) : si elle rougit, le jeu ASSEMBLÉ est cassé même si chaque
+  // écran teste vert séparément (rétro #180).
+  //
+  // Profil DÉDIÉ (`Nova`, `seed-canari.ts`) — surface disjointe de Léa/Zoé/Milo/Nino/Timéo,
+  // AUCUNE dépendance à l'état laissé par les tests précédents de ce fichier : sa propre connexion
+  // RÉELLE via l'UI de login (jamais une injection de cookie — la 1ʳᵉ jambe de la boucle DOIT être
+  // réellement exercée) + son propre amorçage DB (cf. commentaire de tête du seed : 1 ligne
+  // `mastery` par compétence → saute le diagnostic, AUCUNE ligne `progress` → nœud courant = le
+  // 1ᵉʳ, Teddy dessus).
+  //
+  // SCOPE R1 (volontairement borné, cf. brief #326) : la jambe « récompense → CRÉATURE » n'est PAS
+  // exercée ici — les créatures sont des placeholders emoji aujourd'hui, jamais gagnées via la
+  // boucle niveau/résultats (la collection ne se peuple qu'au BOSS, `grantLegendaryInTx`, hors
+  // œufs, cf. `seed-collection.ts`) : cette jambe sera gardée quand R3 la câblera (issue future).
+  // Ce canari asserte donc que `/collection` est ATTEIGNABLE et RENDUE, JAMAIS qu'une créature y a
+  // été gagnée — une assertion de gain serait aspirationnelle/fausse aujourd'hui.
+  // ==========================================================================
+  test("canari état jouable — boucle complète R1 : login→carte→niveau→résultats→carte→collection (#326)", async ({
+    page,
+  }) => {
+    // Niveau complet (~10 questions ⚙️) + nav phone + collection : plus long qu'une simple
+    // navigation, même ordre de grandeur que « niveau normal → feedback no-fail » plus haut.
+    test.setTimeout(90_000);
+
+    // Garde anti-mismatch d'hydratation (fix #305) — écoute posée AVANT la 1ʳᵉ navigation, sur
+    // TOUTE la durée du test : « la boucle doit être propre » (CLAUDE.md), pas un point isolé.
+    const hydrationMismatchPattern = /hydrat|didn.t match|did not match/i;
+    const consoleErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    page.on("pageerror", (error) => consoleErrors.push(error.message));
+
+    // ---------- LEG 1 : login (UI RÉELLE, jamais une injection de cookie) → carte ----------
+    await page.goto("/");
+    await page.getByRole("button", { name: selectorLabel(CANARI_PROFILE_NAME) }).click();
+    await enterPin(page, CANARI_PROFILE_PIN); // auto-soumission au 4ᵉ chiffre
+    await expect(page).toHaveURL(/\/carte$/);
+
+    // VRAI art (jamais un fixture de convenance, WORKFLOW §21.b) : le titre thématisé porte le
+    // monde socle RÉELLEMENT emprunté par `seed-real-world-fixture.ts` (`BORROWED_SLOT`, "Forêt
+    // enchantée") — texte EXACT (non-permissif, #239), pas une regex générique `.+` : si la
+    // fixture change de monde emprunté, ce canari DOIT rougir (preuve que l'art réel est chargé,
+    // jamais un placeholder générique).
+    const worldHeading = page.getByRole("heading", {
+      level: 1,
+      name: strings.map.titleThemed.replace("{n}", "1").replace("{theme}", "Forêt enchantée"),
+    });
+    await expect(worldHeading).toBeVisible();
+
+    // Nœud COURANT + avatar Teddy per-monde dessus (MAP §1 « tu es ici », `CurrentNodeTeddy`) —
+    // profil frais (0 ligne `progress`) → le tout premier nœud du monde.
+    const currentNode = page.locator('[data-map-node-status="current"]').first();
+    await expect(currentNode).toBeVisible();
+    await expect(page.locator("[data-world-teddy]").first()).toBeVisible();
+    await page.screenshot({ path: "docs/captures/326-canari-carte.png", fullPage: true });
+
+    // Solde AVANT de jouer (référence du delta anti-tautologie, même patron que #346 plus haut
+    // dans ce fichier) — lu ICI, sur `/carte`, avant tout gain.
+    const preCoinsRaw = await page
+      .locator('[data-shell-balance="coins"]')
+      .getAttribute("data-shell-balance-value");
+    const preCoins = Number(preCoinsRaw);
+    expect(Number.isInteger(preCoins)).toBe(true);
+
+    // ---------- LEG 2 : tap du nœud courant → niveau (jamais le diagnostic) ----------
+    await enterCurrentLevelFromMap(page);
+    // Progressbar immédiatement visible, AUCUN écran d'intro diagnostic : preuve que
+    // `seed-canari.ts` a bien fait sauter le diagnostic (`needsDiagnostic()===false`) — un niveau
+    // NORMAL s'enchaîne directement, comme le nomme la boucle produit (PRODUCT §1.3 « Niveau »).
+    await expect(page.getByRole("progressbar")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.play.diagnostic.intro }),
+    ).not.toBeVisible();
+
+    // Joue le niveau jusqu'au bout — no-fail (PRODUCT §2.2), réponses toujours justes (le sujet
+    // ici est la BOUCLE assemblée, pas l'étayage de re-essai déjà couvert plus haut dans ce
+    // fichier). Boucle bornée (jamais infinie), robuste à ~10 questions ⚙️.
+    for (let i = 0; i < 15; i++) {
+      const onResults = await page
+        .getByRole("heading", { level: 1, name: strings.play.results.title })
+        .isVisible()
+        .catch(() => false);
+      if (onResults) break;
+
+      const feedbackVisible = await feedbackStatus(page)
+        .isVisible()
+        .catch(() => false);
+      if (feedbackVisible) {
+        await page.getByRole("button", { name: strings.play.correct.next }).click();
+        continue;
+      }
+      await answerCorrectly(page);
+    }
+
+    // ---------- LEG 3 : résultats (pièces gagnées, ancre STABLE #349, jamais l'img ambiguë) ----------
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.play.results.title }),
+    ).toBeVisible();
+    const resultsCoins = page.locator("[data-results-coins]");
+    await expect(resultsCoins).toBeVisible({ timeout: 10_000 });
+    await expect(resultsCoins).toHaveAttribute("aria-label", /pièce/u);
+    const earnedTotalCoins = Number(await resultsCoins.getAttribute("data-results-coins"));
+    expect(Number.isInteger(earnedTotalCoins) && earnedTotalCoins > 0).toBe(true);
+    await page.screenshot({ path: "docs/captures/326-canari-resultats.png", fullPage: true });
+
+    // ---------- LEG 4 : « Continuer » → carte, solde SHELL frais (valeur EXACTE + delta, #346) ----------
+    await page.getByRole("button", { name: strings.play.results.continue }).click();
+    await expect(page).toHaveURL(/\/carte$/);
+    const shellCoins = page.locator('[data-shell-balance="coins"]');
+    await expect(shellCoins).toHaveAttribute("data-shell-balance-value", String(earnedTotalCoins));
+    const postCoins = Number(await shellCoins.getAttribute("data-shell-balance-value"));
+    expect(postCoins).not.toBe(preCoins); // delta anti-tautologie (#346)
+
+    // ---------- Garde hydratation (fix #305) : nav FRAÎCHE de `/carte` au viewport téléphone ----------
+    // (le cas discriminant du bug) — fait partie de « la boucle doit être propre », pas un test à
+    // part (l'assertion finale, tout en bas, couvre l'ENSEMBLE du parcours ci-dessus ET ci-dessous).
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/carte");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.waitForLoadState("networkidle");
+
+    // ---------- LEG 5 : navigation vers /collection — ATTEIGNABLE + RENDUE, PAS de créature ----------
+    // gagnée (cf. commentaire de tête : la jambe gain-créature est R3, hors scope ici).
+    await page.getByRole("link", { name: strings.collection.title }).click();
+    await expect(page).toHaveURL(/\/collection$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.collection.title }),
+    ).toBeVisible();
+    await page.screenshot({ path: "docs/captures/326-canari-collection.png", fullPage: true });
+
+    // ---------- « La boucle doit être propre » : AUCUN mismatch d'hydratation React accumulé ----------
+    // sur l'ENSEMBLE du parcours ci-dessus (écoute posée en tête de test, #305).
+    const hydrationMismatches = consoleErrors.filter((text) => hydrationMismatchPattern.test(text));
+    expect(hydrationMismatches).toEqual([]);
   });
 });
