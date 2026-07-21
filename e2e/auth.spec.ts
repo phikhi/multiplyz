@@ -704,7 +704,18 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // crédite les pièces (base + étoiles) → l'écran de résultats affiche les pièces gagnées
     // (solde serveur, source de vérité). Doublage a11y : `role="img"` au nom accessible
     // « … pièce(s) 🪙 ». On attend son apparition (la persistance/crédit est async, no-fail).
-    await expect(page.getByRole("img", { name: /pièce/u })).toBeVisible({ timeout: 10_000 });
+    // Scopé via `[data-results-coins]` (#349) : le shell persistant (`AppShell`, story R1.1
+    // #337) affiche AUSSI un solde pièces `role="img"` (`data-shell-balance="coins"`) sur
+    // toutes les routes `(app)` — un sélecteur `getByRole("img", { name: /pièce/u })` non scopé
+    // matche 2 éléments (strict-mode violation Playwright, fail non-déterministe selon l'ordre
+    // de rendu). PAS de scope `<main>` possible ici : `ResultsScreen` (état `results` de
+    // `PlayScreenInner`) rend un `<div>` racine, jamais un `<main>` (seuls `PlayingGame` et
+    // `StatusMessage` en rendent un) — `[data-results-coins]` (déjà posé sur le `<p role="img">`
+    // de `ResultsScreen.tsx`) identifie SANS ambiguïté le solde de CET écran, distinct du
+    // bandeau.
+    const resultsCoins = page.locator("[data-results-coins]");
+    await expect(resultsCoins).toBeVisible({ timeout: 10_000 });
+    await expect(resultsCoins).toHaveAttribute("aria-label", /pièce/u);
     await expect(page.getByRole("button", { name: strings.play.results.continue })).toBeVisible();
     await page.screenshot({ path: "docs/captures/126-resultats.png", fullPage: true });
 
