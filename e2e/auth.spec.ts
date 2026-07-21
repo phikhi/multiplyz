@@ -2845,12 +2845,29 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   // game-design+PO, WORKFLOW §21.d) : si elle rougit, le jeu ASSEMBLÉ est cassé même si chaque
   // écran teste vert séparément (rétro #180).
   //
-  // Profil DÉDIÉ (`Nova`, `seed-canari.ts`) — surface disjointe de Léa/Zoé/Milo/Nino/Timéo,
-  // AUCUNE dépendance à l'état laissé par les tests précédents de ce fichier : sa propre connexion
-  // RÉELLE via l'UI de login (jamais une injection de cookie — la 1ʳᵉ jambe de la boucle DOIT être
-  // réellement exercée) + son propre amorçage DB (cf. commentaire de tête du seed : 1 ligne
-  // `mastery` par compétence → saute le diagnostic, AUCUNE ligne `progress` → nœud courant = le
-  // 1ᵉʳ, Teddy dessus).
+  // Profil DÉDIÉ (`Nova`, `seed-canari.ts`) — son propre PROFIL + amorçage DB (cf. commentaire de
+  // tête du seed : 1 ligne `mastery` par compétence → saute le diagnostic, AUCUNE ligne `progress`
+  // → nœud courant = le 1ᵉʳ, Teddy dessus) + sa connexion RÉELLE via l'UI de login (jamais une
+  // injection de cookie — la 1ʳᵉ jambe de la boucle DOIT être réellement exercée). Il n'a **aucune
+  // dépendance à l'état de JEU/progression** des autres profils (Léa/Zoé/Milo/Nino/Timéo) —
+  // surface disjointe de leurs mondes/collection/progress.
+  //
+  // MAIS il **dépend de l'onboarding de la test 2.2** pour l'EXISTENCE du foyer : `/` ne rend le
+  // `ProfileSelector` (donc la carte de « Nova ») que si `householdExists(db)` est vrai
+  // (`src/app/page.tsx`), et `householdExists` exige un profil avec `parent_pin_hash` non-null
+  // (`src/lib/auth/household.ts`) — le PROPRIÉTAIRE du foyer. Or ce `parent_pin_hash` est posé
+  // UNIQUEMENT par l'onboarding de la test 2.2 (Léa devient owner) ; AUCUN seed ne l'écrit
+  // (`seed-canari` insère `pin_hash` enfant seulement, jamais `parent_pin_hash`). Le foyer E2E est
+  // **single-tenant** (une seule maisonnée par base) → ce canari **ne PEUT pas** faire son propre
+  // onboarding (un 2ᵉ onboarding sur la même base E2E entrerait en conflit avec la test 2.2 : le
+  // foyer serait déjà configuré, `/` rendrait le `ProfileSelector`, pas l'onboarding). Cette
+  // dépendance à la test 2.2 est donc **structurellement REQUISE**, pas un oubli.
+  //
+  // LIMITATION CONNUE (tradeoff délibéré, QA #326) : ce canari vit en QUEUE du `describe.serial` →
+  // il est SKIPPÉ (`serial` : un échec amont saute le reste du bloc) si une test antérieure
+  // échoue. Acceptable car dans ce cas la CI est DÉJÀ rouge (l'échec amont), donc le canari ne
+  // masque aucune régression ; et l'architecture single-tenant du foyer interdit un bloc
+  // d'onboarding indépendant qui le rendrait autonome. Compromis assumé, pas un angle mort.
   //
   // SCOPE R1 (volontairement borné, cf. brief #326) : la jambe « récompense → CRÉATURE » n'est PAS
   // exercée ici — les créatures sont des placeholders emoji aujourd'hui, jamais gagnées via la
