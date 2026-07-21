@@ -46,8 +46,9 @@ import { SOUND_COMBO_THRESHOLD } from "@/lib/sound/config";
  * Orchestrateur client de l'écran de jeu (story #64, gains #126) — PRODUCT §2.2/§1.4,
  * ENGINE §3/§4/§5/§9, ECONOMY §4.1. Enchaîne : chargement → (diagnostic 1ʳᵉ session OU
  * niveau normal) → questions → **résultats (étoiles + pièces gagnées)** → **retour à la
- * carte** (hub, story R1.2 #336, PRODUCT §1.3 « Carte → Niveau → Résultats → (nœud suivant) »
- * — jamais un rechargement direct d'un nouveau niveau, cf. `handleResultsContinue`).
+ * carte** (hub, story R1.2 #336 ; PRODUCT §1.3 « Carte → Niveau → Résultats → (niveau
+ * suivant ou collection/boutique) », le nœud suivant resurgi sur la carte — jamais un
+ * rechargement direct d'un nouveau niveau, cf. `handleResultsContinue`).
  *
  * **Fin de niveau persistée serveur** (story #126, ferme #136) : à la dernière question,
  * les résultats s'affichent **immédiatement** (no-fail, jamais bloquant) avec les étoiles
@@ -285,7 +286,8 @@ function PlayScreenInner() {
    * l'ancien `retryLoadLevel()` rebouclait DIRECTEMENT sur un nouveau niveau, sans jamais
    * repasser par la carte — vérifié en LIVE sur ~8 cycles, l'URL ne changeait jamais de
    * `/jouer`). L'enfant revit désormais le monde/Teddy/sa progression à chaque cycle
-   * (PRODUCT §1.3 « Carte → Niveau → Résultats → (nœud suivant) », valeur centrale de
+   * (PRODUCT §1.3 « Carte → Niveau → Résultats → (niveau suivant ou collection/boutique) » ;
+   * WIREFRAMES §4 « Continuer » → nœud suivant, resurgi sur la carte — valeur centrale de
    * l'épic R1 #180). Le prochain nœud recommandé reste résolu **côté serveur** au chargement
    * de `/carte` (ENGINE §3/§4 via `currentMapAction`/`loadCurrentWorldMap`) — jamais
    * recalculé ni transmis ici (SYNC §1).
