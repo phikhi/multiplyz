@@ -1422,6 +1422,110 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(richness!.upstreamMedBottom).not.toBeNull();
     expect(richness!.teddyTop).toBeGreaterThanOrEqual(richness!.upstreamMedBottom!);
 
+    // ── (f) NON-OCCLUSION du VISAGE de Teddy par le CONNECTEUR amont — PAINT-ORDER vrai navigateur ──
+    // ── (fix #343, classe #170/#190). ──
+    // Contrairement aux gardes (d)/(e) qui prouvent que Teddy ne CHEVAUCHE pas géométriquement les
+    // médaillons, ici Teddy chevauche DÉLIBÉRÉMENT la gouttière où vit le connecteur du nœud AMONT
+    // (`<li>` suivant dans le DOM = rendu au-dessus en column-reverse) : le sujet n'est donc pas la
+    // géométrie mais l'ORDRE DE PEINTURE. Chaque `<li>` porte un `transform` → est un stacking context
+    // distinct → les sœurs se peignent en ordre DOM ; sans le fix #343 (li courant élevé,
+    // `CURRENT_NODE_LAYER` + `isolation` sur l'`<ol>`), tout le sous-arbre du li amont — dont ce
+    // connecteur — se peint PAR-DESSUS Teddy (son `zIndex:3` ne franchit pas la frontière de la sœur),
+    // recouvrant son visage (défaut #343 playtest). jsdom ne fait NI layout NI paint → seule cette
+    // sonde vrai-navigateur tranche (jamais un raisonnement géométrique, rétro #190).
+    // On LIT l'ordre de PEINTURE réel : Teddy ET le connecteur sont `pointer-events:none` (transparents
+    // au hit-test) → on ré-active TEMPORAIREMENT leur hit-test (pointer-events n'affecte PAS la
+    // peinture, seulement le hit-test) pour lire via `elementsFromPoint` (topmost-first) leur ordre de
+    // peinture INCHANGÉ, puis on restaure.
+    const teddyPaintOrder = await page.evaluate(() => {
+      const teddy = document.querySelector("[data-world-teddy]");
+      const currentLink = document.querySelector('a[data-map-node-status="current"]');
+      const currentLi = currentLink?.closest("li");
+      const upstreamLi = currentLi?.nextElementSibling; // column-reverse : suivant DOM = amont visuel
+      const connectorLine = upstreamLi?.querySelector(
+        "[data-map-connector] line:not([data-map-connector-casing])",
+      );
+      const svg = connectorLine?.closest("svg") ?? null;
+      if (teddy == null || currentLink == null || connectorLine == null || svg == null) return null;
+
+      // `elementsFromPoint` utilise des coords VIEWPORT → le nœud courant (bas du chemin
+      // `column-reverse`) doit être scrollé DANS le viewport, sinon chaque sonde est hors-écran →
+      // pile vide → recouvrement 0 (faux vacuous). Ne change pas la peinture, juste le scroll.
+      currentLink.scrollIntoView({ block: "center" });
+
+      // Ré-active le hit-test des deux éléments décoratifs pour LIRE l'ordre de peinture (la peinture
+      // reste identique — `pointer-events` ne touche QUE le hit-test). `stroke` sur le trait : ne
+      // matche QUE là où le stroke est réellement peint (pas la boîte SVG transparente).
+      const teddyEl = teddy as SVGElement | HTMLElement;
+      const svgEl = svg as SVGElement;
+      const lineEl = connectorLine as SVGElement;
+      const saved = [
+        teddyEl.style.pointerEvents,
+        svgEl.style.pointerEvents,
+        lineEl.style.pointerEvents,
+      ];
+      teddyEl.style.pointerEvents = "auto";
+      svgEl.style.pointerEvents = "auto";
+      lineEl.style.pointerEvents = "stroke";
+
+      const tr = teddy.getBoundingClientRect();
+      const sr = svg.getBoundingClientRect();
+      let overlapSamples = 0;
+      let teddyAlwaysAbove = true;
+      // Scan TOUTE la boîte de recouvrement (Teddy ∩ SVG) — le connecteur est un trait DIAGONAL fin,
+      // donc on scanne x ET y (jamais seulement le centre : selon le décalage serpentin, le trait ne
+      // croise le centre de Teddy qu'à son extrémité basse). Partout où Teddy ET le trait sont
+      // hit-testés au MÊME point (donc peints au même endroit), Teddy doit être TOPMOST (index < ).
+      const yLo = Math.ceil(Math.max(tr.top, sr.top));
+      const yHi = Math.floor(Math.min(tr.bottom, sr.bottom));
+      const xLo = Math.ceil(Math.max(tr.left, sr.left));
+      const xHi = Math.floor(Math.min(tr.right, sr.right));
+      for (let y = yLo; y <= yHi; y++) {
+        for (let x = xLo; x <= xHi; x++) {
+          const stack = document.elementsFromPoint(x, y);
+          const ti = stack.indexOf(teddy);
+          const li = stack.indexOf(connectorLine);
+          if (ti !== -1 && li !== -1) {
+            overlapSamples++;
+            if (ti > li) teddyAlwaysAbove = false; // connecteur peint AU-DESSUS de Teddy → occlusion #343
+          }
+        }
+      }
+
+      teddyEl.style.pointerEvents = saved[0];
+      svgEl.style.pointerEvents = saved[1];
+      lineEl.style.pointerEvents = saved[2];
+      return { overlapSamples, teddyAlwaysAbove };
+    });
+    expect(teddyPaintOrder).not.toBeNull();
+    // NON-VACUITÉ : Teddy et le connecteur amont se CHEVAUCHENT réellement au même pixel (sinon la
+    // garde ne prouverait rien — piège #60). Rouge si le probe ne trouve aucun recouvrement.
+    expect(teddyPaintOrder!.overlapSamples).toBeGreaterThan(0);
+    // FIX #343 : le visage de Teddy est TOUJOURS peint AU-DESSUS du connecteur amont. Rougit sans le
+    // fix (li courant NON élevé → sous-arbre du li amont, dont le trait, peint par-dessus Teddy).
+    expect(teddyPaintOrder!.teddyAlwaysAbove).toBe(true);
+    // Capture DÉDIÉE #343 (pixel-look non-occlusion Teddy vs connecteur amont) — nœud courant scrollé
+    // en vue + zoom serré, OUVERTE + regardée en review (#170 : générer ne suffit pas, on REGARDE que
+    // le visage de Teddy n'est pas barré par le trait). Doublée de la garde PAINT-ORDER ci-dessus.
+    const teddyClip = await page.evaluate(() => {
+      const link = document.querySelector('a[data-map-node-status="current"]')!;
+      link.scrollIntoView({ block: "center" });
+      const t = document.querySelector("[data-world-teddy]")!.getBoundingClientRect();
+      const m = document
+        .querySelector('a[data-map-node-status="current"] [data-map-medallion]')!
+        .getBoundingClientRect();
+      return {
+        x: Math.max(0, t.left - 60),
+        y: Math.max(0, t.top - 40),
+        width: 200,
+        height: m.bottom - t.top + 60,
+      };
+    });
+    await page.screenshot({ path: "docs/captures/343-carte-teddy-zorder.png", clip: teddyClip });
+    // Le probe ci-dessus a `scrollIntoView` le nœud courant → restaure scrollY=0 (les mesures de
+    // géométrie absolue en aval — casing #202 — datent d'un chargement scrollY=0, cf. l.~1182).
+    await page.evaluate(() => window.scrollTo(0, 0));
+
     // ── Contraste du trait de chemin sur photo (story #202) — RENDU + GÉOMÉTRIE vrai layout ──
     // Sur la photo IA arbitraire, le trait du chemin (peint dans la gouttière de <main>, backmost)
     // était peint SANS fond opaque (contraste ~1.21:1 sur la fixture rayée, #170). #202 pose une
@@ -3028,6 +3132,22 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await expect(resultsCoins).toHaveAttribute("aria-label", /pièce/u);
     const earnedTotalCoins = Number(await resultsCoins.getAttribute("data-results-coins"));
     expect(Number.isInteger(earnedTotalCoins) && earnedTotalCoins > 0).toBe(true);
+
+    // Teddy célèbre EN VRAI ART sur les résultats (valeur CENTRALE R2 « Teddy vécu DANS la boucle »,
+    // story R2.2 #360, drainé #357) — la boucle canari #326 traverse déjà cet écran mais n'assertait
+    // QUE le Teddy CARTE (`[data-world-teddy]`, plus haut) : le garde-fou « état jouable » restait
+    // PÉRIMÉ vs la valeur R2 (rétro R2.2, #365, extension #180 « le canari doit GRANDIR avec la valeur
+    // d'épic »). On assert donc ici le Teddy IN-FLOW : `<img>` RENDU (pas le repli emoji 🧸) ET
+    // réellement chargé (`naturalWidth>0`) — assertion NON permissive (#239), rouge si le Teddy des
+    // résultats régresse vers le fallback/absent. Le sprite exact (`acclame`/`content`) dépend des
+    // étoiles (non déterministe en niveau normal) → on garde la présence + le chargement, jamais le
+    // ref exact.
+    const resultsTeddy = page.locator('[data-asset="teddy-results"]');
+    await expect(resultsTeddy).toBeVisible();
+    await expect(resultsTeddy).toHaveAttribute("data-asset-state", "rendered");
+    expect(
+      await resultsTeddy.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+    ).toBeGreaterThan(0);
     await page.screenshot({ path: "docs/captures/326-canari-resultats.png", fullPage: true });
 
     // ---------- LEG 4 : « Continuer » → carte, solde SHELL frais (valeur EXACTE + delta, #346) ----------

@@ -456,6 +456,47 @@ describe("MapScreen — avatar Teddy per-monde sur le nœud courant (story #190,
   });
 });
 
+describe("MapScreen — z-order du nœud courant vs connecteur amont (fix occlusion #343)", () => {
+  // ⚠️ jsdom ne fait NI layout NI paint → ces tests ne PROUVENT PAS la non-occlusion (impossible en
+  // unit, #170). Ils LOCKENT le CÂBLAGE du fix #343 : le `<li>` du nœud COURANT est élevé
+  // (`CURRENT_NODE_LAYER`, z-index positif) au-dessus de ses sœurs (chacune un stacking context via
+  // son `transform` → sinon le connecteur du `<li>` AMONT se peint par-dessus le visage de Teddy),
+  // contenu par `isolation:isolate` sur l'`<ol>` (anti-relocalisation vers la chrome de page #278). La
+  // PREUVE de non-occlusion réelle (ordre de PEINTURE) vit en E2E vrai-navigateur (`auth.spec.ts`,
+  // sonde `elementsFromPoint` mutation-prouvée : `teddyAlwaysAbove` bascule à false sans le fix).
+  it("le <li> du nœud COURANT porte un z-index POSITIF, les autres nœuds non (câblage du fix #343)", async () => {
+    await renderReady(
+      map([
+        node({ index: 0, status: "completed", stars: 2 }),
+        node({ index: 1, status: "current" }),
+        node({ index: 2, status: "locked" }),
+      ]),
+    );
+    const ol = document.querySelector("ol");
+    expect(ol).not.toBeNull();
+    const lis = [...ol!.querySelectorAll("li")];
+    const currentLi = document
+      .querySelector('[data-map-node-status="current"]')!
+      .closest("li") as HTMLLIElement;
+    // Le nœud courant est élevé (z-index positif) → son sous-arbre (Teddy) se repeint AU-DESSUS du
+    // connecteur du nœud amont. Rougit si la condition `status === "current"` saute (z-index vide → 0).
+    expect(Number(currentLi.style.zIndex)).toBeGreaterThan(0);
+    // Tous les AUTRES nœuds gardent z-index:auto (ordre DOM, géométrie/positions inchangées #123).
+    for (const li of lis.filter((l) => l !== currentLi)) {
+      expect(li.style.zIndex).toBe("");
+    }
+  });
+
+  it("l'`<ol>` du chemin isole ses couches (`isolation:isolate`) → le nœud courant élevé ne compétitionne pas avec la chrome de page (#278)", async () => {
+    await renderReady(map([node({ status: "current" })]));
+    const ol = document.querySelector("ol");
+    expect(ol).not.toBeNull();
+    // Rougit si `isolation:isolate` est retiré du `<ol>` (le z-index du li courant fuirait alors dans
+    // le stacking context racine et pourrait relocaliser une occlusion sur le shell — #278).
+    expect((ol as HTMLOListElement).style.isolation).toBe("isolate");
+  });
+});
+
 // Le describe « contraste des glyphes de bas d'écran sur photo arbitraire (scrim #189
 // généralisé, story #202) » (bouton « Changer de joueur » + `FooterScrim`) a été RETIRÉ
 // (story R1.1 #337) : le bouton vit désormais dans le shell persistant (`AppShell.tsx`),
