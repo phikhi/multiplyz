@@ -452,6 +452,17 @@ describe("strings (i18n FR)", () => {
     expect(strings.play.results.legendaryTitle.length).toBeGreaterThan(0);
   });
 
+  it("shell = solde pièces/éclats singulier n≤1 (règle FR CLAUDE.md #239, story R1.1 #337)", () => {
+    expect(strings.shell.balanceCoins).toContain("{n}");
+    expect(strings.shell.balanceCoinsPlural).toContain("{n}");
+    expect(strings.shell.balanceShards).toContain("{n}");
+    expect(strings.shell.balanceShardsPlural).toContain("{n}");
+    // Singulier ≠ pluriel (sinon la distinction n≤1 vs n≥2 est inerte, #239).
+    expect(strings.shell.balanceCoins).not.toBe(strings.shell.balanceCoinsPlural);
+    expect(strings.shell.balanceShards).not.toBe(strings.shell.balanceShardsPlural);
+    expect(strings.shell.settingsLabel.length).toBeGreaterThan(0);
+  });
+
   it("worldgen = banques créatures déterministes non vides (noms mignons + histoires, story 6.3)", () => {
     // Les banques peuplent les 6-8 créatures/monde (ECONOMY §5) — assez de noms pour ne pas
     // réutiliser dans un même monde (jusqu'à 7 œufs = 6-8 − 1 légendaire).

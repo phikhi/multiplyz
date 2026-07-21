@@ -106,3 +106,27 @@ describe("LogoutButton", () => {
     expect(button).not.toHaveAttribute("aria-disabled", "true");
   });
 });
+
+describe("LogoutButton — mode `compact` (story R1.1 #337, `AppShell.tsx` sur le bandeau persistant)", () => {
+  it("défaut (compact absent) : libellé VISIBLE, aucun aria-label ajouté (comportement historique inchangé)", () => {
+    render(<LogoutButton />);
+    const button = screen.getByRole("button", { name: strings.play.logout });
+    expect(button.textContent).toContain(strings.play.logout);
+    expect(button).not.toHaveAttribute("aria-label");
+  });
+
+  it("compact=true : ICÔNE SEULE (aucun texte visible), nom accessible porté par aria-label strictement identique", () => {
+    render(<LogoutButton compact />);
+    // Même nom accessible qu'en mode normal (a11y inchangée) — seul le RENDU visuel diffère.
+    const button = screen.getByRole("button", { name: strings.play.logout });
+    expect(button).toHaveAttribute("aria-label", strings.play.logout);
+    expect(button.textContent).toBe("👤"); // jamais le texte « Changer de joueur » en clair
+  });
+
+  it("compact=true : cible tactile carrée ≥44px (min-width posé en plus de min-height)", () => {
+    render(<LogoutButton compact />);
+    const button = screen.getByRole("button", { name: strings.play.logout });
+    expect(button.style.minHeight).toBe("var(--tap-target-min)");
+    expect(button.style.minWidth).toBe("var(--tap-target-min)");
+  });
+});

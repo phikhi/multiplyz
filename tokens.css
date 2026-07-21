@@ -168,10 +168,39 @@
   --card-radius:  var(--border-radius-lg);
   --card-shadow:  var(--shadow-md);
 
-  /* top bar (pièces / éclats) */
+  /* top bar (pièces / éclats) — shell persistant (story R1.1 #337, WIREFRAMES §2
+     « 🪙120  ✨40   ⚙️  👤 »). Déclarés depuis l'épic #5 mais restés SANS consommateur
+     DOM jusqu'ici (piège #125 « déclaré ≠ rendu ») — `AppShell.tsx` les consomme. */
   --topbar-bg:     var(--color-bg-secondary);
+  --topbar-border: var(--color-border-primary);
   --topbar-coin:   var(--color-coin);
   --topbar-shard:  var(--color-shard);
+  /* --color-coin/--color-shard (comme --color-star/--color-reward-*) ÉCHOUENT le contraste
+     texte/glyphe sur fond neutre (~1.5:1, rétro #104/#125/#126, cf. commentaires
+     --map-node-star-filled et --collection-rarity-glyph plus bas) : jamais posés en
+     `color` sur le CHIFFRE du solde (`--color-text-primary` fiable, ResultsScreen.tsx même
+     règle) ni sur l'emoji (🪙/✨ = police emoji couleur native, `color` CSS sans effet dessus).
+     Consommation SÛRE = un lavis DÉCORATIF dilué (même technique que --world-bg-tint,
+     `color-mix` 10 %, fix #184/#199) derrière chaque pastille de solde — redondant avec
+     l'emoji (jamais la SEULE info), donc hors du réquisit WCAG 1.4.11 « objet graphique
+     requis ». Formule dupliquée ici volontairement (couplage #184 : `color-mix` référençant
+     une var `:root` re-résout correctement SEULEMENT si aucun descendant ne surcharge cette
+     var en inline — non le cas ici, `--topbar-*` n'est jamais surchargé par élément). */
+  --topbar-coin-tint:  color-mix(in srgb, var(--topbar-coin) 12%, var(--topbar-bg));
+  --topbar-shard-tint: color-mix(in srgb, var(--topbar-shard) 12%, var(--topbar-bg));
+  /* Hauteur totale du bandeau (tap-target 44px + padding vertical --space-2×2, story R1.1) —
+     consommée par `AppShell.tsx` (sa propre `minHeight`) ET par CHAQUE écran du groupe `(app)`
+     (`MapScreen`/`CollectionScreen`/`PlayScreen`) via `calc(100dvh - var(--app-shell-height))`
+     sur leur `<main>`, jamais 100dvh brut, pour rester exactement un viewport. Ce calcul n'est
+     FIDÈLE que parce qu'`AppShell` reste RÉELLEMENT sur UNE seule ligne à `--app-shell-height` à
+     TOUTE largeur (icône SEULE sur ⚙️/👤, jamais de libellé visible — cf. JSDoc `AppShell.tsx`) :
+     un bandeau qui passerait à la ligne (mesuré à 147px réels pour 60px déclarés, avant ce
+     correctif) rendrait ce token FAUX et rognerait la marge sous la barre d'action `fixed`
+     calibrée au pouce de `PlayScreen` (story 8.1 #254, régression réelle rencontrée puis
+     corrigée à la source). Le bandeau reste EN FLUX partout (non-occlusion structurelle, jamais
+     `position:fixed`, CLAUDE.md #278) : le seul coût résiduel est quelques px de capacité de
+     scroll invisibles sous la marque de pli, jamais une occlusion. */
+  --app-shell-height: calc(var(--tap-target-min) + var(--space-4));
 
   /* cible tactile mini (a11y) */
   --tap-target-min: 2.75rem; /* 44px */

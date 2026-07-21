@@ -31,8 +31,26 @@ import { logoutAction } from "@/app/login/actions";
  * jeu. Texte **plein-alpha** (`--color-text-secondary`, ≥4.5:1 peint sur `--color-bg-tertiary`) ;
  * le signal « désactivé » vient de `disabled`/`aria-disabled` + `cursor:not-allowed` + fond atténué
  * (`--color-bg-tertiary`, même token que le clavier PIN), jamais d'une dilution du texte.
+ *
+ * **Monté UNE SEULE FOIS dans le shell persistant** (story R1.1 #337, `AppShell.tsx`,
+ * WIREFRAMES §2 « 👤 ») — remplace les 3 montages dupliqués par écran (`MapScreen`,
+ * `PlayScreen` ×2, rétro #337). Le glyphe 👤 (décoratif, `aria-hidden`) préfixe le texte
+ * visible existant (jamais icône SEULE **par défaut** — a11y, cohérent avec `🔒 Parent`/
+ * `🔊 Son activé` ailleurs dans l'app) ; le nom accessible reste EXACTEMENT
+ * `strings.play.logout` (le glyphe `aria-hidden` est exclu du calcul du nom accessible,
+ * `LogoutButton.test.tsx` inchangé par cet ajout — `compact` par défaut `false`).
+ *
+ * **`compact` (story R1.1 #337, `AppShell.tsx` sur téléphone)** : masque le libellé VISIBLE
+ * (jamais une dilution `opacity`, #226 — le texte est simplement ABSENT du DOM, remplacé par
+ * un `aria-label` équivalent, nom accessible strictement identique) et resserre le padding en
+ * pastille carrée. Nécessaire pour que le bandeau persistant reste RÉELLEMENT sur une seule
+ * ligne à `--app-shell-height` sur les viewports étroits (375px, WIREFRAMES §8) — un bandeau qui
+ * passerait à la ligne rendrait ce token FAUX et rognerait la marge sous la barre d'action fixe
+ * de `PlayScreen` (story 8.1 #254, régression mesurée puis corrigée à la source).
  */
-export function LogoutButton() {
+const PROFILE_ICON = "👤"; // décoratif (aria-hidden) — react/jsx-no-literals, même patron que ProfileSelector.
+
+export function LogoutButton({ compact = false }: { readonly compact?: boolean } = {}) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [navPending, startTransition] = useTransition();
@@ -61,10 +79,16 @@ export function LogoutButton() {
       className="mz-focusable"
       disabled={disabled}
       aria-disabled={disabled}
+      aria-label={compact ? strings.play.logout : undefined}
       onClick={onClick}
       style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "var(--space-2)",
         minHeight: "var(--tap-target-min)",
-        padding: "var(--space-3) var(--space-6)",
+        minWidth: compact ? "var(--tap-target-min)" : undefined,
+        padding: compact ? "var(--space-2)" : "var(--space-3) var(--space-6)",
         fontFamily: "var(--font-family-body)",
         fontSize: "var(--font-size-base)",
         fontWeight: "var(--font-weight-semibold)",
@@ -75,7 +99,8 @@ export function LogoutButton() {
         cursor: disabled ? "not-allowed" : "pointer",
       }}
     >
-      {strings.play.logout}
+      <span aria-hidden="true">{PROFILE_ICON}</span>
+      {!compact && strings.play.logout}
     </button>
   );
 }
