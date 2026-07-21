@@ -91,6 +91,14 @@ import { usePrefersReducedMotion } from "@/lib/sound/use-prefers-reduced-motion"
  * géométrie seulement raisonnée, rétro #190 : ce même écran EST la surface littérale de ce piège).
  * Collection (grille)/Boutique (cartes empilées) = story 8.2b, **hors scope ici**.
  *
+ * **Hydratation déterministe (fix #305)** : `isPhone` (donc le `padding` de `<main>`) est
+ * appliqué dans **tous** les états de cet écran, y compris `loading` — lui-même SSR'd (contenu
+ * affiché avant la fin du `fetchMap` client-only). `useIsPhone` (`useSyncExternalStore`) garantit
+ * désormais que le rendu serveur et le 1ᵉʳ rendu client sont TOUJOURS identiques (`false`) par
+ * construction, puis se resynchronise silencieusement à la vraie valeur juste après (cf. JSDoc
+ * `use-is-phone.ts`) — élimine le mismatch d'hydratation React 100 % reproductible qui affectait
+ * `/carte` sous `--bp-phone` avant ce fix.
+ *
  * **Auto-scroll vers le nœud courant au montage (story #268, discovered playtest-⚙️)** : sur
  * téléphone la carte scrolle verticalement (WIREFRAMES §8, `<main>` sans `overflow`, scroll de
  * PAGE natif) et le nœud courant (Teddy + ▶) n'est PAS toujours dans le premier écran — sa

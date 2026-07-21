@@ -748,6 +748,14 @@ describe("PlayScreen — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
         locked: false,
       });
       render(<PlayScreen />);
+      // `waitFor` : `PlayingGame` (et son `useIsPhone`) ne monte qu'APRÈS la résolution ASYNCHRONE
+      // de `fetchLevel` — ce `waitFor` attend ce montage post-fetch (matérialisé par l'apparition
+      // du texte de la question, rendu par `PlayingGame`), PAS un quelconque délai de
+      // resynchronisation. Sur un montage CLIENT PUR (RTL `render` = `createRoot`, jamais une
+      // hydratation), `useSyncExternalStore` renvoie `getSnapshot` — la VRAIE valeur (`true` ici,
+      // mockée) — DÈS le 1ᵉʳ rendu de `PlayingGame` ; `getServerSnapshot`(false) n'est utilisé
+      // QU'au SSR/hydratation (jamais ici). Donc le `paddingBottom` téléphone est correct
+      // immédiatement une fois `PlayingGame` monté — assertion synchrone après ce `waitFor`.
       await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
       // Garde à effet observable : si la réserve d'espace saute (retirée/mutée), le contenu
       // jouable ne serait plus protégé de l'occlusion par la barre fixe (#170/#190).

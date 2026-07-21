@@ -1,4 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { getInitialIsPhone, phoneMediaQuery, useIsPhone } from "./use-is-phone";
 
@@ -72,6 +74,68 @@ describe("useIsPhone", () => {
       const { result } = renderHook(() => useIsPhone());
       expect(result.current).toBe(true);
     } finally {
+      window.matchMedia = original;
+    }
+  });
+
+  it("le rendu SSR utilise getServerSnapshot=false (jamais matchMedia) MÊME quand matchMedia annonce déjà un match téléphone, puis se resynchronise après hydratation (déterminisme SSR, fix #305)", () => {
+    // Ce que CE test unitaire prouve : le rendu SERVEUR (`renderToString`) émet TOUJOURS la valeur
+    // `getServerSnapshot` (`false` → "desktop"), sans JAMAIS lire `window.matchMedia`, MÊME quand
+    // celui-ci est mocké à "téléphone" (le pire cas #305) — c'est LA propriété qui garantit que le
+    // HTML serveur et le 1ᵉʳ rendu client à l'hydratation sont identiques par construction. La
+    // resynchronisation post-hydratation (`useSyncExternalStore` → `getSnapshot`) applique ensuite
+    // la vraie valeur ("phone") sans perte de comportement responsive.
+    //
+    // ⚠️ Ce que ce test NE prouve PAS (et ne PEUT pas, structurellement) : l'ABSENCE d'un
+    // `console.error` de mismatch d'hydratation. Dans jsdom, `window` EXISTE pendant
+    // `renderToString`, donc l'ANCIEN code (revert : `useState(getInitialIsPhone)`) lirait
+    // matchMedia AU SSR AUSSI → rendus serveur et client identiques ("phone"/"phone") → AUCUN
+    // mismatch React observable en jsdom. Un test « pas de `console.error` /hydrat/ » resterait
+    // donc VERT sur revert = VACUOUS (#143). La preuve du mismatch console vit **EXCLUSIVEMENT dans
+    // l'E2E** (`auth.spec.ts`, vrai navigateur, SSR SANS `window` → la divergence réelle) — pas ici.
+    //
+    // Root cause #305 : l'ANCIEN `useIsPhone` appelait `getInitialIsPhone` (lecture SYNCHRONE de
+    // `matchMedia`) comme initialiseur de `useState` — en vrai navigateur le 1ᵉʳ rendu CLIENT
+    // (hydratation) reflétait DÉJÀ la vraie valeur, divergeant du SSR (`window` absent → `false`)
+    // dès que le viewport matchait `--bp-phone` → mismatch d'hydratation 100 % reproductible sur
+    // `/carte` (`MapScreen` applique `isPhone` dans TOUS ses états, y compris `loading`, SSR'd).
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: true, // matchMedia annonce "téléphone" DÈS le tout 1ᵉʳ appel (le pire cas #305).
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+
+    function Probe() {
+      return <span>{useIsPhone() ? "phone" : "desktop"}</span>;
+    }
+
+    const container = document.createElement("div");
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    try {
+      // GARDE À EFFET OBSERVABLE (#60) qui ROUGIT sur revert : le rendu SERVEUR utilise
+      // `getServerSnapshot`=false → "desktop", jamais matchMedia (mocké "téléphone" ici). Sur un
+      // revert vers `useState(getInitialIsPhone)`, jsdom a `window` au SSR → matchMedia est lu →
+      // `renderToString` produirait "phone" → cette assertion échoue (`expected 'phone' to be
+      // 'desktop'`, vérifié empiriquement au build). C'est LA garde non-vacuous de ce test unitaire.
+      container.innerHTML = renderToString(<Probe />);
+      expect(container.textContent).toBe("desktop");
+
+      // Hydratation — 1ᵉʳ rendu CLIENT réel (`getServerSnapshot`), puis resynchronisation.
+      act(() => {
+        root = hydrateRoot(container, <Probe />);
+      });
+
+      // Le comportement responsive n'est pas perdu : après resynchronisation (`useSyncExternalStore`
+      // → `getSnapshot`), le DOM reflète la vraie valeur ("phone"). Lu AVANT `unmount()` (finally).
+      expect(container.textContent).toBe("phone");
+    } finally {
+      root?.unmount();
       window.matchMedia = original;
     }
   });

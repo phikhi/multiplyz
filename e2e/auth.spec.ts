@@ -1700,6 +1700,85 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   });
 
   // ==========================================================================
+  // Hydratation déterministe de `/carte` (fix #305, discovered en review Frontend de #268/PR
+  // #304) — le `<main>` de `MapScreen` applique un `padding`/`gap` dérivé d'`isPhone`
+  // (`useIsPhone`, lu depuis `window.matchMedia`) dans TOUS les états de l'écran, y compris
+  // `loading` (lui-même SSR'd, contrairement à `QuestionCard`/`ActionBar`/`PlayScreen` qui ne
+  // montent jamais avant la fin d'un fetch client-only). Avant le fix, l'état initial
+  // d'`useIsPhone` lisait `window.matchMedia` de façon SYNCHRONE dans l'initialiseur de
+  // `useState` — cette lecture divergeait entre le SSR (`window` absent → toujours `false`) et
+  // le 1ᵉʳ rendu CLIENT (l'hydratation, où `window` existe déjà) dès que le viewport réel passait
+  // sous `--bp-phone` → mismatch d'hydratation React **100 % reproductible** sur `/carte` (jamais
+  // sur `/collection`). Fix (`src/lib/responsive/use-is-phone.ts`) : `useSyncExternalStore` avec
+  // un `getServerSnapshot` qui renvoie TOUJOURS `false` — utilisé pour le rendu serveur ET le 1ᵉʳ
+  // rendu client à l'hydratation → HTML serveur et 1ᵉʳ commit client identiques par construction ;
+  // React resynchronise ensuite silencieusement vers la vraie valeur, sans jamais comparer ni
+  // avertir. Réutilise le profil `Milo` (cookie de session injecté, même patron que #268
+  // juste au-dessus) : surface disjointe, lecture seule, aucune mutation d'état partagé.
+  //
+  // ⚠️ Cet E2E est la SEULE preuve de non-mismatch console (la garde unitaire équivalente est
+  // structurellement vacuous : jsdom définit `window` pendant `renderToString`, donc l'ancien code
+  // y lirait matchMedia au SSR aussi → aucun mismatch React observable en jsdom, cf.
+  // `use-is-phone.test.tsx`). Ici seulement — vrai navigateur, SSR SANS `window` — la divergence
+  // réelle se manifeste. Tourne en CI contre `next dev` (`playwright.config webServer.command`,
+  // `reuseExistingServer:!CI` → serveur démarré par Playwright), donc le message d'hydratation
+  // React est émis en clair (non minifié) → le motif `/hydrat/` matche réellement.
+  // ==========================================================================
+  test("carte du monde → AUCUN mismatch d'hydratation React (fix #305), aux 3 tailles", async ({
+    page,
+  }) => {
+    const cookie = {
+      name: "mz_session",
+      value: MAP_PROGRESS_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+
+    // Rougit si React réémet un warning de mismatch d'hydratation (le libellé exact varie selon
+    // la version React/Next, ce motif couvre les formulations connues, cf. reçu de build).
+    const hydrationMismatchPattern = /hydrat|didn.t match|did not match/i;
+    const consoleErrors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    page.on("pageerror", (error) => consoleErrors.push(error.message));
+
+    // Nav FRAÎCHE à CHAQUE taille (pas un simple resize sur une page déjà hydratée — seule une
+    // vraie SSR + hydratation peut manifester ce mismatch). Téléphone (375×812) = le viewport SOUS
+    // `--bp-phone` qui reproduisait 100 % le mismatch AVANT ce fix (`isPhone` divergeait SSR/1ᵉʳ
+    // rendu client) ; desktop/tablette confirment l'absence de régression aux tailles inchangées.
+    for (const viewport of [
+      { width: 1280, height: 800 }, // desktop
+      { width: 834, height: 1194 }, // tablette
+      { width: 375, height: 812 }, // téléphone — sous --bp-phone, cas discriminant du bug #305
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/carte");
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // Anti-faux-vert : le mismatch d'hydratation est logué par React PENDANT l'hydratation, juste
+      // après l'exécution du bundle. `networkidle` garantit que le bundle client s'est chargé et
+      // que l'hydratation a eu lieu AVANT de conclure « aucun `console.error` » (sinon on pourrait
+      // asserter la liste vide avant que React n'ait eu la chance de la remplir).
+      await page.waitForLoadState("networkidle");
+    }
+    // VÉRIF VISUELLE (garde-fou dur #170) — capture du dernier état (téléphone, le cas
+    // discriminant du bug) : la carte doit rendre CORRECTEMENT (vrai art, nœuds, Teddy, top-bar),
+    // AUCUNE régression visuelle introduite par le fix (déterminisme d'hydratation, pas de
+    // changement de comportement responsive une fois monté).
+    await page.screenshot({ path: "docs/captures/305-carte-hydration-fix-phone.png" });
+
+    // Garde à effet observable : ROUGIT si le mismatch #305 revient (confirmé EMPIRIQUEMENT en
+    // revertant `useIsPhone` vers l'ancien `useState(getInitialIsPhone)` synchrone pendant le
+    // build → ce test rougit précisément au viewport téléphone avec le message React
+    // « A tree hydrated but some attributes of the server rendered HTML didn't match the client
+    // properties … » sur le `<main>` de `MapScreen` — cf. reçu de PR).
+    const hydrationMismatches = consoleErrors.filter((text) => hydrationMismatchPattern.test(text));
+    expect(hydrationMismatches).toEqual([]);
+  });
+
+  // ==========================================================================
   // Collection responsive reflow (story 8.2b, #266) — grille 3 colonnes sur téléphone
   // (WIREFRAMES §8, piège EXACT #127 : « 3 colonnes rendues 1-2 sur téléphone »). Profil
   // dédié `Nino` amorcé hors de la chaîne de progression de Léa (`seed-collection.ts` — la
