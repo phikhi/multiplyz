@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  type CSSProperties,
-  type Ref,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type CSSProperties, type Ref, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { strings } from "@/strings";
 import { currentMapAction } from "@/app/(app)/carte/actions";
