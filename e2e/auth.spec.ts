@@ -1842,6 +1842,37 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // légendaire, dernière de la liste — preuve que le fetch serveur a résolu la collection).
     await expect(page.getByText(COLLECTION_CREATURES[4].nameDefault)).toBeVisible();
 
+    // ---------- Art de créature RÉEL consommé depuis art_ref (story R2.1, #361) ----------
+    // La 1ʳᵉ créature (`art_ref` rendable `socle/creature/cloudfox.png`) rend un VRAI <img> CHARGÉ —
+    // preuve NON-PERMISSIVE (#239) que l'écran consomme `art_ref` ET que l'asset réel est servi
+    // (naturalWidth>0 = vrais pixels décodés, pas un simple sélecteur qui matcherait un <img> cassé).
+    // #180 : l'art réel de la créature ATTEINT l'enfant à l'écran (une créature ; set complet = R3.1).
+    const realCreatureImg = page.locator(
+      `[data-collection-card="${COLLECTION_CREATURES[0].id}"] ` +
+        `[data-asset="collection-creature"][data-asset-state="rendered"]`,
+    );
+    await expect(realCreatureImg).toBeVisible();
+    await expect
+      .poll(async () =>
+        realCreatureImg.evaluate(
+          (el) => el instanceof HTMLImageElement && el.complete && el.naturalWidth > 0,
+        ),
+      )
+      .toBe(true);
+    // Une créature SANS art réel (`placeholder://…`) rend le repli emoji (état par défaut, R3.1) —
+    // prouve la BRANCHE placeholder observable côté E2E (les deux chemins de `<AssetImage>` vécus).
+    await expect(
+      page.locator(
+        `[data-collection-card="${COLLECTION_CREATURES[1].id}"] ` +
+          `[data-asset="collection-creature"][data-asset-state="fallback"]`,
+      ),
+    ).toBeVisible();
+    // Capture dédiée R2.1 (vrai art créature en cellule 1, placeholders ailleurs) — pixel-look DoD.
+    await page.screenshot({
+      path: "docs/captures/361-collection-real-creature.png",
+      fullPage: true,
+    });
+
     /**
      * Géométrie RENDUE (jamais un `data-*`/une classe seule, #127) des 5 cartes de créature :
      * compte de lignes/colonnes DISTINCTES (tops/lefts uniques des `[data-collection-card]`),

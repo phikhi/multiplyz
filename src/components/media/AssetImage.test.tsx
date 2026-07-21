@@ -80,3 +80,52 @@ describe("AssetImage — renderer guardé partagé (story R2.2, #360)", () => {
     expect(document.querySelector("img")).toBeNull();
   });
 });
+
+describe("AssetImage — mode décoratif (story R2.1, #361 — art dont l'ancêtre porte déjà le nom)", () => {
+  function renderDecorative(assetRef: string | null) {
+    return render(
+      <AssetImage
+        assetRef={assetRef}
+        alt={ALT}
+        width="var(--collection-placeholder-size)"
+        dataAsset="creature-test"
+        fallback={FALLBACK}
+        decorative
+      />,
+    );
+  }
+
+  // ▶▶ décoratif + rendable → <img alt=""> ◀◀ : rend le VRAI art (garde renderable→img, chemin
+  // format-réel #189) MAIS sans nom accessible propre (alt="" → l'<img> est décoratif/ignoré des
+  // lecteurs d'écran) : le nom est porté par l'ANCÊTRE labellé (carte/légendaire, prouvé côté écran).
+  // ROUGIT si l'art décoratif ré-annonçait `alt={alt}` (double annonce) OU si la garde renderable
+  // sautait (repli à la place de l'<img>).
+  it('décoratif + ref RENDABLE → <img> réel avec alt="" (aucune double annonce), src validée', () => {
+    renderDecorative("socle/creature/cloudfox.png");
+    const img = document.querySelector<HTMLImageElement>('[data-asset="creature-test"]');
+    expect(img?.tagName).toBe("IMG");
+    expect(img).toHaveAttribute("src", "/generated/socle/creature/cloudfox.png");
+    expect(img).toHaveAttribute("alt", "");
+    expect(img).toHaveAttribute("data-asset-state", "rendered");
+    // alt="" ⇒ jamais annoncé sous le nom du sujet (pas de double annonce avec l'ancêtre).
+    expect(screen.queryByRole("img", { name: ALT })).not.toBeInTheDocument();
+  });
+
+  // ▶▶ décoratif + placeholder → repli aria-hidden SANS role/aria-label ◀◀ : même a11y que l'ancien
+  // placeholder emoji `aria-hidden` que le swap remplace (aucune double annonce avec l'ancêtre).
+  // ROUGIT si la garde renderable sautait (un <img src="placeholder://…"> apparaîtrait) OU si le
+  // repli décoratif ré-exposait `role="img"`+`aria-label`.
+  it("décoratif + ref NON RENDABLE (placeholder://) → repli aria-hidden sans role/aria-label", () => {
+    renderDecorative("placeholder://legendary/0");
+    const fallback = document.querySelector<HTMLElement>('[data-asset="creature-test"]');
+    expect(fallback?.tagName).toBe("SPAN");
+    expect(fallback).toHaveAttribute("data-asset-state", "fallback");
+    expect(fallback).toHaveAttribute("aria-hidden", "true");
+    expect(fallback).not.toHaveAttribute("role");
+    expect(fallback).not.toHaveAttribute("aria-label");
+    expect(screen.getByTestId("fallback")).toBeInTheDocument();
+    // Décoratif : aucun élément annoncé (ni sous le nom du sujet) et aucune <img> vers un placeholder.
+    expect(screen.queryByRole("img", { name: ALT })).not.toBeInTheDocument();
+    expect(document.querySelector("img")).toBeNull();
+  });
+});

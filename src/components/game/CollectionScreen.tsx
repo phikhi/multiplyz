@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { strings } from "@/strings";
 import { collectionAction, renameCharacterAction } from "@/app/(app)/collection/actions";
+import { AssetImage } from "@/components/media/AssetImage";
 import type { CollectionEntry } from "@/lib/game/collection";
 import type { Rarity } from "@/lib/db/schema";
 
@@ -34,7 +35,7 @@ const RARITY_GLYPH: Record<Rarity, string> = {
   legendary: "★",
 };
 
-/** Emoji décoratif de la silhouette placeholder (art réel branché par l'épic #6). */
+/** Emoji décoratif du repli quand la créature n'a pas encore d'art réel (`placeholder://`, R3.1). */
 const PLACEHOLDER_EMOJI = "🐾";
 /** Emoji décoratif du bouton renommer (doublé du libellé texte « Renommer »). */
 const RENAME_EMOJI = "✏️";
@@ -65,7 +66,11 @@ function cardAccessibleName(entry: CollectionEntry): string {
   });
 }
 
-/** Silhouette placeholder d'une créature (art réel branché par l'épic #6). */
+/**
+ * Silhouette **repli** (emoji) quand la créature n'a pas encore d'art réel rendable (`art_ref` =
+ * `placeholder://…`, R3.1). Sert de `fallback` à `<AssetImage>` : quand `art_ref` est rendable
+ * (`socle/creature/…`, story R2.1 #361), l'image réelle est rendue à la place (cf. `CreatureCard`).
+ */
 function CreaturePlaceholder() {
   return (
     <span
@@ -268,7 +273,21 @@ function CreatureCard({
         textAlign: "center",
       }}
     >
-      <CreaturePlaceholder />
+      {/* Illustration de la créature (story R2.1, #361) : consomme `entry.artRef` via le renderer
+          guardé partagé `<AssetImage>` (réutilise `isRenderableAssetRef`/`assetPublicUrl`, R2.2).
+          `art_ref` rendable (`socle/creature/…`) → VRAI art ; `placeholder://…` (état par défaut,
+          set complet = R3.1) → repli emoji. **Décoratif** : la carte `<li aria-label>` porte déjà le
+          nom accessible (nom + rareté) → l'art est un doublon a11y (même a11y que l'ancien
+          placeholder `aria-hidden`). EN FLUX (pas de position absolue) → même slot que le
+          placeholder, géométrie de grille 3-col inchangée (WIREFRAMES §8). */}
+      <AssetImage
+        assetRef={entry.artRef}
+        alt={entry.displayName}
+        decorative
+        width="var(--collection-placeholder-size)"
+        dataAsset="collection-creature"
+        fallback={<CreaturePlaceholder />}
+      />
       <span
         data-collection-name=""
         style={{

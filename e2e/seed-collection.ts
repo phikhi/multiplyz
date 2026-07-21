@@ -26,6 +26,7 @@ import Database from "better-sqlite3";
 import { hash } from "@node-rs/argon2";
 import { resolveDatabasePath } from "../src/lib/db/config";
 import { nameKey } from "../src/lib/auth/validation";
+import { DEMO_CREATURE_ART_REF } from "../src/config/creatures";
 
 /** Prénom du profil dédié à la collection E2E (unique dans le foyer E2E). */
 export const COLLECTION_PROFILE_NAME = "Nino";
@@ -42,15 +43,25 @@ interface SeededOwnedCreature {
   readonly nameDefault: string;
   readonly rarity: "common" | "rare" | "legendary";
   readonly story: string;
+  /**
+   * Ref d'art **rendable** (`socle/creature/…`) → l'écran Collection rend cette créature en VRAI
+   * art (story R2.1, #361). Absent ⇒ `placeholder://…` (état par défaut, repli emoji). UNE seule
+   * créature réelle amorcée (observabilité #180) ; le set complet arrive à R3.1.
+   */
+  readonly artRef?: string;
 }
 
 /** 5 créatures (3 communes + 1 rare + 1 légendaire) : row1=3, row2=2 sous la grille 3-colonnes. */
 export const COLLECTION_CREATURES: readonly SeededOwnedCreature[] = [
   {
+    // Créature de démo R2.1 (#361) : VRAI art (le renard des brumes du spike, `art_ref` rendable) —
+    // prouve que l'écran Collection consomme `art_ref` et rend un vrai <img> (les 4 autres restent
+    // en placeholder emoji). Le renommage est possible ; ici nom/histoire d'origine de la démo.
     id: "e2e:collection:1",
-    nameDefault: "Griffonne",
+    nameDefault: "Nuagou",
     rarity: "common",
-    story: "Une petite curieuse.",
+    story: "Un renard des brumes, doux comme un nuage.",
+    artRef: DEMO_CREATURE_ART_REF,
   },
   { id: "e2e:collection:2", nameDefault: "Bulline", rarity: "common", story: "Adore les bulles." },
   {
@@ -130,7 +141,8 @@ export async function seedCollection(): Promise<number> {
         // better-sqlite3 (raw SQL, sans le mode `boolean` de Drizzle) ne bind QUE
         // number/string/bigint/buffer/null — jamais un booléen JS brut : 0/1 explicite.
         creature.rarity === "legendary" ? 0 : 1, // légendaire hors œufs (ECONOMY §4.2)
-        `placeholder://e2e/collection/${index}`,
+        // Créature de démo R2.1 (#361) : `art_ref` rendable → vrai art ; les autres → placeholder.
+        creature.artRef ?? `placeholder://e2e/collection/${index}`,
         creature.story,
       );
       const key = `${profileId}:${creature.id}`;

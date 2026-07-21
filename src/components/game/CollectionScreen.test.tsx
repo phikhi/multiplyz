@@ -147,6 +147,65 @@ describe("CollectionScreen — affichage (WIREFRAMES §5)", () => {
 });
 
 /**
+ * Consommation de `entry.artRef` via le renderer guardé partagé `<AssetImage>` (story R2.1, #361) :
+ * un `art_ref` **rendable** (`socle/creature/…`) rend le VRAI art de la créature (`<img>`), un
+ * `placeholder://…` (état par défaut, set complet = R3.1) retombe sur le placeholder emoji. La
+ * garde de sécurité (`isRenderableAssetRef`) reste portée par `<AssetImage>` (réutilisée, jamais
+ * réinventée). L'art est **décoratif** (la carte `<li aria-label>` porte déjà le nom accessible).
+ */
+describe("CollectionScreen — art de créature consommé depuis artRef (story R2.1, #361)", () => {
+  const RENDERABLE_REF = "socle/creature/cloudfox.png";
+
+  // ▶▶ MUTATION-PROUVÉ : renderable → VRAI <img> (chemin format-réel #189) ◀◀. Ce test ROUGIT si la
+  // carte cessait de consommer `entry.artRef` (retour au placeholder en dur) OU si la garde
+  // `isRenderableAssetRef` de `<AssetImage>` sautait (le src deviendrait le ref brut / un fetch
+  // non validé). Effet observable distinct : la présence de l'<img> à la src publique validée.
+  it("art_ref RENDABLE ⇒ rend le VRAI art de la créature (<img> à la src publique validée)", async () => {
+    await renderReady([entry({ displayName: "Nuagou", artRef: RENDERABLE_REF })]);
+    const art = document.querySelector<HTMLImageElement>('[data-asset="collection-creature"]');
+    expect(art?.tagName).toBe("IMG");
+    expect(art).toHaveAttribute("src", "/generated/socle/creature/cloudfox.png");
+    expect(art).toHaveAttribute("data-asset-state", "rendered");
+    // Le vrai art REMPLACE le placeholder emoji pour cette carte (plus de silhouette de repli).
+    expect(document.querySelector("[data-collection-placeholder]")).toBeNull();
+    // Le nom reste porté par la carte `<li aria-label>` (art décoratif, pas de double annonce).
+    const label = strings.collection.cardLabel
+      .replace("{nom}", "Nuagou")
+      .replace("{rareté}", strings.collection.rarity.legendary);
+    expect(screen.getByLabelText(label)).toBeInTheDocument();
+  });
+
+  // ▶▶ MUTATION-PROUVÉ : placeholder:// → repli emoji, JAMAIS d'<img> ◀◀. Ce test ROUGIT si la garde
+  // `isRenderableAssetRef` sautait (un `<img src="placeholder://…">` fetché apparaîtrait, le
+  // placeholder disparaîtrait). C'est l'état observable AUJOURD'HUI pour les créatures sans art réel.
+  it("art_ref placeholder:// (état par défaut) ⇒ placeholder emoji, JAMAIS d'<img>", async () => {
+    await renderReady([entry({ artRef: "placeholder://legendary/0" })]);
+    const fallback = document.querySelector<HTMLElement>('[data-asset="collection-creature"]');
+    expect(fallback?.tagName).toBe("SPAN");
+    expect(fallback).toHaveAttribute("data-asset-state", "fallback");
+    // La silhouette placeholder emoji est rendue, aucun <img> fetché vers le placeholder.
+    expect(document.querySelector("[data-collection-placeholder]")).not.toBeNull();
+    expect(document.querySelector("img")).toBeNull();
+  });
+
+  // Mélange réaliste (l'état R2.1) : UNE créature en vrai art, les autres en placeholder — l'écran
+  // rend un <img> réel ET des placeholders côte à côte (aucune régression de la grille).
+  it("collection mixte : 1 art réel + 1 placeholder ⇒ un <img> réel ET un placeholder", async () => {
+    await renderReady([
+      entry({ characterId: "real", displayName: "Nuagou", artRef: RENDERABLE_REF }),
+      entry({ characterId: "ph", displayName: "Braisille", artRef: "placeholder://legendary/1" }),
+    ]);
+    const arts = [...document.querySelectorAll<HTMLElement>('[data-asset="collection-creature"]')];
+    expect(arts).toHaveLength(2);
+    const rendered = arts.filter((a) => a.getAttribute("data-asset-state") === "rendered");
+    const fallbacks = arts.filter((a) => a.getAttribute("data-asset-state") === "fallback");
+    expect(rendered).toHaveLength(1);
+    expect(fallbacks).toHaveLength(1);
+    expect(rendered[0].tagName).toBe("IMG");
+  });
+});
+
+/**
  * Grille **3 colonnes** sur téléphone (WIREFRAMES §8, blocker frontend). jsdom ne calcule
  * pas la mise en page grid, mais la garde à effet observable combine deux faits :
  * 1. le **token de configuration** `--collection-grid-columns` (source de vérité `tokens.css`)

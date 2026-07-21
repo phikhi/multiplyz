@@ -50,7 +50,7 @@ export interface ResultsScreenProps {
 const FILLED_STAR = "★";
 const EMPTY_STAR = "☆";
 const STAR_SLOTS: readonly StarCount[] = [1, 2, 3];
-/** Emoji décoratif de la silhouette placeholder de la légendaire (art réel = épic #6). */
+/** Emoji du repli de la légendaire quand elle n'a pas encore d'art réel (`placeholder://`, R3.1). */
 const LEGENDARY_EMOJI = "🐾";
 /** Repli no-fail de l'avatar Teddy si le sprite n'est pas servi (story R2.2, #360). */
 const TEDDY_FALLBACK = "🧸";
@@ -61,8 +61,9 @@ function fill(template: string, token: string, value: string): string {
 
 /**
  * **Carte de la légendaire** révélée à l'écran de résultats du boss (MAP §6, COPY §3
- * « déblocage créature »). Silhouette placeholder (art réel épic #6) + nom + histoire. Le
- * nom + l'annonce sont **doublés d'un texte** (jamais la seule icône/couleur, a11y). Tokens
+ * « déblocage créature »). Illustration (`legendary.artRef` via `<AssetImage>`, story R2.1 #361 —
+ * vrai art si rendable, repli emoji sinon) + nom + histoire. Le nom + l'annonce sont **doublés
+ * d'un texte** (jamais la seule icône/couleur, a11y). Tokens
  * `--collection-*` (texte fiable ≥4.5:1 sur le fond de carte, jamais `--color-star` sur fond
  * neutre — rétro #126). L'ensemble est un `role="img"` au nom accessible explicite.
  *
@@ -104,22 +105,37 @@ function LegendaryReveal({ legendary }: { readonly legendary: GrantedLegendary }
         borderRadius: "var(--border-radius-lg)",
       }}
     >
-      <span
-        aria-hidden="true"
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "var(--space-8)",
-          height: "var(--space-8)",
-          borderRadius: "var(--border-radius-full)",
-          backgroundColor: "var(--collection-placeholder-bg)",
-          color: "var(--collection-placeholder-glyph)",
-          fontSize: "var(--font-size-2xl)",
-        }}
-      >
-        {LEGENDARY_EMOJI}
-      </span>
+      {/* Illustration de la légendaire (story R2.1, #361) : consomme `legendary.artRef` via le
+          renderer guardé partagé `<AssetImage>`. `art_ref` rendable (`socle/creature/…`) → VRAI art ;
+          `placeholder://…` (état par défaut, art réel = R3.1) → repli emoji dans le médaillon.
+          **Décoratif** : le `<div role="img" aria-label>` parent porte déjà le nom accessible complet
+          (« Créature légendaire gagnée : {nom} 🌟 ») → l'art est un doublon a11y (même a11y que
+          l'ancien médaillon emoji `aria-hidden`). EN FLUX → même emplacement, aucune occlusion. */}
+      <AssetImage
+        assetRef={legendary.artRef}
+        alt={legendary.name}
+        decorative
+        width="var(--space-8)"
+        dataAsset="results-legendary-art"
+        fallback={
+          <span
+            aria-hidden="true"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "var(--space-8)",
+              height: "var(--space-8)",
+              borderRadius: "var(--border-radius-full)",
+              backgroundColor: "var(--collection-placeholder-bg)",
+              color: "var(--collection-placeholder-glyph)",
+              fontSize: "var(--font-size-2xl)",
+            }}
+          >
+            {LEGENDARY_EMOJI}
+          </span>
+        }
+      />
       <p
         aria-hidden="true"
         style={{
