@@ -72,6 +72,24 @@ async function enterPin(page: Page, pin: string) {
   }
 }
 
+/**
+ * Depuis `/carte` (juste après un login enfant, story R1.2 #336), tape le nœud **COURANT**
+ * (MAP §1, point de reprise) → atterrit sur `/jouer`. La carte est désormais RÉELLEMENT
+ * traversée par chaque parcours E2E qui a besoin de l'écran de jeu, **comme l'enfant** — jamais
+ * court-circuitée en test alors qu'elle l'était en production avant #336 (défaut A,
+ * `docs/playthroughs/R0-baseline.md` : « login → `/jouer` direct, la carte n'est jamais
+ * atteinte par le flux normal »). Sélecteur d'attribut `[data-map-node-status="current"]`
+ * (même patron que les évaluations `page.evaluate` déjà présentes dans ce fichier pour le nœud
+ * courant) — robuste au libellé exact (position/total/étoiles), jamais couplé à un texte figé.
+ */
+async function enterCurrentLevelFromMap(page: Page) {
+  await page.waitForLoadState("networkidle");
+  const currentNode = page.locator('[data-map-node-status="current"]').first();
+  await expect(currentNode).toBeVisible();
+  await currentNode.click();
+  await expect(page).toHaveURL(/\/jouer$/);
+}
+
 // ============================================================================
 // Écran de jeu nu (#64) — helpers de jeu (diagnostic + niveau, ENGINE §3/§4/§9)
 // ============================================================================
@@ -392,16 +410,27 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.screenshot({ path: "docs/captures/31-selecteur.png", fullPage: true });
   });
 
-  test("profil + bon PIN → session + redirection vers le jeu (capture)", async ({ page }) => {
+  test("profil + bon PIN → session + redirection vers la carte (hub, story R1.2 #336), puis tap du nœud courant → jeu (capture)", async ({
+    page,
+  }) => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234"); // auto-soumission au 4ᵉ chiffre
 
-    await expect(page).toHaveURL(/\/jouer$/);
-    // Profil fraîchement créé (base E2E wipée à froid) → diagnostic de départ (§3),
-    // jamais de score affiché (ENGINE §3).
+    // Défaut A corrigé (R1.2, #336) : le login atterrit désormais RÉELLEMENT sur `/carte` (le
+    // hub, WIREFRAMES §2/§10, PRODUCT §1.3) — jamais `/jouer` en direct. Avant #336, l'enfant
+    // n'atteignait JAMAIS la carte/Teddy/les mondes en flux normal (checklist
+    // `docs/playthroughs/R0-baseline.md` §« carte réellement atteinte par le flux normal » = NON).
+    await expect(page).toHaveURL(/\/carte$/);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.screenshot({ path: "docs/captures/336-login-carte.png", fullPage: true });
+
+    // Tap du nœud COURANT (MAP §1, point de reprise, WIREFRAMES §2) → atterrit sur `/jouer`.
+    // Profil fraîchement créé (base E2E wipée à froid) → diagnostic de départ (§3), jamais de
+    // score affiché (ENGINE §3).
+    await enterCurrentLevelFromMap(page);
     await expect(
       page.getByRole("heading", { level: 1, name: strings.play.diagnostic.intro }),
     ).toBeVisible();
@@ -417,10 +446,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     test.setTimeout(120_000);
     // Reconnexion (nouveau contexte de test, cookie absent) — profil encore vierge
     // (le diagnostic ne s'est pas encore joué) → même écran d'intro que précédemment.
+    // Login → `/carte` (#336) → tap du nœud courant → `/jouer` (flux réel, jamais court-circuité).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
+    await enterCurrentLevelFromMap(page);
     await expect(
       page.getByRole("heading", { level: 1, name: strings.play.diagnostic.intro }),
     ).toBeVisible();
@@ -558,7 +589,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.screenshot({ path: "docs/captures/64-question-niveau.png", fullPage: true });
   });
 
-  test("niveau normal → feedback no-fail, bonne réponse montrée, re-essai (capture)", async ({
+  test("niveau normal → feedback no-fail, bonne réponse montrée, re-essai, Continuer retourne au hub carte (story R1.2 #336) (capture)", async ({
     page,
   }) => {
     // Rejoue jusqu'à ~10 questions (ENGINE §4) → plus long qu'une navigation simple.
@@ -574,10 +605,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     });
     // Reconnexion : profil désormais amorcé (diagnostic joué au test précédent) →
     // enchaîne directement sur un niveau normal (pas de re-diagnostic, ENGINE §3).
+    // Login → `/carte` (#336) → tap du nœud courant → `/jouer` (flux réel, jamais court-circuité).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
+    await enterCurrentLevelFromMap(page);
     await expect(page.getByRole("progressbar")).toBeVisible();
 
     // Répond volontairement FAUX (QCM : 1er distracteur ≠ bonne réponse ; pavé :
@@ -681,6 +714,20 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // réelles (next-dev-loop indisponible < Next 16.3, #24 → supplée par E2E, même patron que le
     // reste de ce fichier).
     expect(soundRequestUrls.length).toBeGreaterThan(0);
+
+    // Défaut B corrigé (R1.2, #336, docs/playthroughs/R0-baseline.md) : « Continuer » ramène
+    // RÉELLEMENT au hub carte — jamais un rebouclage direct sur un nouveau niveau (observé en
+    // LIVE au baseline sur ~8 cycles consécutifs, l'URL ne changeait jamais de `/jouer`).
+    // L'enfant revit désormais la carte/le monde/Teddy à chaque cycle (PRODUCT §1.3, valeur
+    // centrale de l'épic R1 #180). `finishLevelAction` a déjà persisté la progression/le crédit
+    // AVANT ce clic (déclenché à la dernière question, cf. `PlayScreen.tsx`) : ce clic ne teste
+    // QUE la navigation client, jamais l'état serveur.
+    await page.getByRole("button", { name: strings.play.results.continue }).click();
+    await expect(page).toHaveURL(/\/carte$/);
+    await page.screenshot({
+      path: "docs/captures/336-resultats-continuer-carte.png",
+      fullPage: true,
+    });
   });
 
   test("écran de jeu → reflow responsive 3 tailles (QCM 2×2, barre d'action bas de pouce, story 8.1 #254, captures)", async ({
@@ -690,10 +737,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // dépend de l'état de progression laissé par le test précédent) — géométrie uniquement,
     // au plus quelques réponses passe-plat pour atteindre une question QCM.
     test.setTimeout(60_000);
+    // Login → `/carte` (#336) → tap du nœud courant → `/jouer` (flux réel, jamais court-circuité).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
+    await enterCurrentLevelFromMap(page);
     await expect(page.getByRole("progressbar")).toBeVisible();
 
     // Robustesse (ENGINE §7, interleaving non déterministe) : la 1re question d'un niveau est
@@ -933,10 +982,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // laissée pour le test « carte du monde » suivant (même prudence que le test « reflow
     // responsive » ci-dessus).
     const sq = strings.play.soundQuickMute;
+    // Login → `/carte` (#336) → tap du nœud courant → `/jouer` (flux réel, jamais court-circuité).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
+    await enterCurrentLevelFromMap(page);
     await expect(page.getByRole("progressbar")).toBeVisible();
 
     const group = page.getByRole("group", { name: sq.legend });
@@ -1012,16 +1063,17 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // nœud 0 est désormais **COMPLÉTÉ** (une ligne `progress` existe), le nœud 1 devient
     // **COURANT** (déblocage linéaire, MAP §1). C'est la boucle jouer→résultats→carte
     // complète, vérifiée en conditions réelles (next-dev-loop indispo < Next 16.3, #24).
+    // Login → `/carte` DIRECTEMENT (défaut A corrigé, story R1.2 #336) — avant #336, ce test
+    // devait naviguer manuellement vers `/carte` pour contourner le bug (login→`/jouer` direct).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
 
     // Story #189/#190 : les chemins assets réels (`background/tiles/teddy !== null`) sont réveillés
     // AU BOOT du serveur (`e2e/seed-world-assets.ts` dans la commande webServer) — le socle[0] pointe
     // des fixtures PNG committées, donc `resolveWorld(0)` sert des assets réels → scrim + tint (#189)
     // ET bande de décor + avatar Teddy per-monde (#190) exercés ci-dessous.
-    await page.goto("/carte");
     await page.waitForLoadState("networkidle");
     // Auto-scroll vers le nœud courant au montage (story #268) : `/carte` ancre désormais la
     // page sur le nœud COURANT au chargement (comportement VOULU, testé dédié plus bas via le
@@ -1362,11 +1414,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // par le test précédent) : cette garde vérifie que le REFLOW (padding de <main> sous
     // --bp-phone, story 8.2) ne casse RIEN — ni la géométrie (#123), ni la non-occlusion
     // Teddy/médaillon/trait déjà prouvée (#170/#190), à AUCUNE des 3 largeurs.
+    // Login → `/carte` DIRECTEMENT (défaut A corrigé, story R1.2 #336).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
-    await page.goto("/carte");
+    await expect(page).toHaveURL(/\/carte$/);
     await page.waitForLoadState("networkidle");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
 
@@ -1758,11 +1810,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   });
 
   test("déconnexion → session révoquée, /jouer redirige de nouveau", async ({ page }) => {
-    // Connexion.
+    // Connexion → `/carte` (défaut A corrigé, story R1.2 #336). Le bouton « Changer de joueur »
+    // (`LogoutButton`) est présent sur la carte au même titre que sur `/jouer` (`strings.play.logout`).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
 
     // Déconnexion (fix flaky #88, cause-racine) : le clic déclenche l'action serveur
     // (révocation + effacement cookie, `logoutChild` — déjà awaited et donc DÉJÀ
@@ -2239,11 +2292,11 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   });
 
   test("SÉCU : une session ENFANT ne peut pas ouvrir /parent (redirigée)", async ({ page }) => {
-    // Connexion enfant → session kind=child.
+    // Connexion enfant → session kind=child (atterrit sur `/carte`, story R1.2 #336).
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click();
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/);
 
     // Le garde de /parent filtre kind==='parent' → une session enfant est redirigée au sélecteur.
     await page.goto("/parent");
@@ -2388,7 +2441,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.goto("/");
     await page.getByRole("button", { name: profileLabel }).click(); // Léa
     await enterPin(page, "1234");
-    await expect(page).toHaveURL(/\/jouer$/);
+    await expect(page).toHaveURL(/\/carte$/); // story R1.2 #336
 
     // Le garde de groupe `(espace)` filtre kind==='parent' → une session enfant est redirigée.
     await page.goto("/parent/profils");
@@ -2422,8 +2475,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.getByRole("button", { name: selectorLabel("Zoélie") }).click();
     await enterPin(page, "2222"); // auto-soumission au 4ᵉ → échec générique, pavé réinitialisé
     await expect(page.getByText(strings.login.error)).toBeVisible();
-    await enterPin(page, "3333"); // nouveau code → session enfant → jeu
-    await expect(page).toHaveURL(/\/jouer$/);
+    await enterPin(page, "3333"); // nouveau code → session enfant → carte (hub, story R1.2 #336)
+    await expect(page).toHaveURL(/\/carte$/);
   });
 
   test("supprimer un frère/sœur = purge + session révoquée (cascade)", async ({ page }) => {

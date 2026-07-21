@@ -209,8 +209,11 @@ export function ProfileSelector({ profiles }: ProfileSelectorProps) {
     try {
       const result = await loginAction(profile.id, value);
       if (result.ok) {
-        // Session posée : on rejoint le jeu (garde de route validera le cookie).
-        router.push("/jouer");
+        // Session posée : on rejoint la carte (hub, WIREFRAMES §2/§10, PRODUCT §1.3, story
+        // R1.2 #336) — jamais `/jouer` en direct (garde de route validera le cookie). Avant
+        // #336, le login atterrissait sur `/jouer` sans jamais passer par la carte/Teddy/les
+        // mondes en flux normal (défaut A, `docs/playthroughs/R0-baseline.md`).
+        router.push("/carte");
         router.refresh();
         return;
       }

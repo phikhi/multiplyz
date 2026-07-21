@@ -20,7 +20,13 @@ import { makeFact } from "@/lib/engine/facts";
 import type { LevelQuestion } from "@/lib/engine/service";
 import { mockPhone } from "@/lib/responsive/test-support/mock-phone";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+// `routerMocks` PARTAGÉ (vi.hoisted, même patron que `soundMocks` ci-dessous) — `useRouter()` est
+// appelé depuis PLUSIEURS sites (`PlayScreenInner` §336 + `LogoutButton`) ; une factory qui
+// recréerait `{ push: vi.fn(), refresh: vi.fn() }` À CHAQUE appel donnerait un espion DIFFÉRENT à
+// chaque composant, rendant `expect(push).toHaveBeenCalledWith(...)` invérifiable côté test. Une
+// SEULE paire d'espions, réutilisée par tous les appelants.
+const routerMocks = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => routerMocks }));
 vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 vi.mock("@/app/(app)/jouer/actions", () => ({
   diagnosticPlanAction: vi.fn(),
@@ -666,7 +672,7 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
     expect(screen.queryByText(/pièce/u)).not.toBeInTheDocument();
   });
 
-  it("continuer depuis les résultats recharge un niveau (ou re-diagnostique)", async () => {
+  it("continuer depuis les résultats → retour à la carte (hub, story R1.2 #336), JAMAIS un rechargement direct de niveau", async () => {
     const fact68 = makeFact("mult", 6, 8);
     startLevelMock.mockResolvedValue({
       level: { questions: [question("mult_6x8")] },
@@ -690,13 +696,16 @@ describe("PlayScreen — fin de niveau et étoiles (ENGINE §5)", () => {
       ).toBeInTheDocument(),
     );
 
-    startLevelMock.mockResolvedValue({
-      level: { questions: [question("add_3+8")] },
-      starThresholds: STAR_THRESHOLDS,
-      locked: false,
-    });
+    // Défaut B corrigé (R1.2, #336, docs/playthroughs/R0-baseline.md) : avant #336, « Continuer »
+    // appelait `retryLoadLevel()` → `startLevelAction` était rappelée DIRECTEMENT (bouclage
+    // /jouer→/jouer, jamais la carte, observé en LIVE sur ~8 cycles). Le compteur d'appels
+    // `startLevelAction` figé AVANT le clic + INCHANGÉ après est la preuve à effet observable que
+    // le chemin de rechargement direct n'est PLUS emprunté (mutation-preuve : réintroduire
+    // `retryLoadLevel()` dans `handleResultsContinue` fait immédiatement rougir cette assertion).
+    const startLevelCallsBeforeContinue = startLevelMock.mock.calls.length;
     fireEvent.click(screen.getByRole("button", { name: strings.play.results.continue }));
-    await waitFor(() => expect(screen.getByText("3 + 8 = ?")).toBeInTheDocument());
+    expect(routerMocks.push).toHaveBeenCalledWith("/carte");
+    expect(startLevelMock.mock.calls.length).toBe(startLevelCallsBeforeContinue);
   });
 });
 

@@ -52,7 +52,7 @@ describe("ProfileSelector — sélection + connexion", () => {
     expect(screen.getByRole("heading", { level: 1, name: pinTitle("Léa") })).toBeInTheDocument();
   });
 
-  it("PIN complet + succès → session posée, redirection vers le jeu", async () => {
+  it("PIN complet + succès → session posée, redirection vers la carte (hub, story R1.2 #336)", async () => {
     loginActionMock.mockResolvedValue({ ok: true });
     render(<ProfileSelector profiles={PROFILES} />);
 
@@ -60,7 +60,10 @@ describe("ProfileSelector — sélection + connexion", () => {
     pressDigits("1234");
 
     await waitFor(() => expect(loginActionMock).toHaveBeenCalledWith(1, "1234"));
-    expect(push).toHaveBeenCalledWith("/jouer");
+    // Défaut A corrigé (#336, docs/playthroughs/R0-baseline.md) : atterrit sur `/carte` (le hub,
+    // WIREFRAMES §2/§10) — jamais `/jouer` en direct.
+    expect(push).toHaveBeenCalledWith("/carte");
+    expect(push).not.toHaveBeenCalledWith("/jouer");
     expect(refresh).toHaveBeenCalledOnce();
   });
 
@@ -130,8 +133,9 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
     await waitFor(() => expect(loginParentActionMock).toHaveBeenCalledWith("9876"));
     expect(push).toHaveBeenCalledWith("/parent");
     expect(refresh).toHaveBeenCalledOnce();
-    // Ne redirige JAMAIS vers le jeu enfant depuis le flux parent (séparation).
+    // Ne redirige JAMAIS vers le hub/jeu enfant depuis le flux parent (séparation).
     expect(push).not.toHaveBeenCalledWith("/jouer");
+    expect(push).not.toHaveBeenCalledWith("/carte");
   });
 
   it("PIN parent faux → message générique neutre + pavé réinitialisé, pas de redirection", async () => {
