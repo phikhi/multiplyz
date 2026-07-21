@@ -749,10 +749,20 @@ describe("PlayScreen — responsive (story 8.1 #254, WIREFRAMES §8)", () => {
       });
       render(<PlayScreen />);
       await waitFor(() => expect(screen.getByText("6 × 8 = ?")).toBeInTheDocument());
+      // `waitFor` (pas une assertion immédiate) : `PlayingGame` (et son `useIsPhone`) ne monte
+      // qu'APRÈS la résolution de `fetchLevel` (même render que le texte ci-dessus) — depuis le
+      // fix #305 (déterminisme d'hydratation), `isPhone` démarre TOUJOURS à `false` et ne se
+      // resynchronise à la vraie valeur (`true` ici, mocké) que dans l'effet de montage de
+      // `useIsPhone`, un effet PASSIF flushé par le scheduler après le commit — pas
+      // nécessairement synchrone avec la disparition du texte de la question que `waitFor`
+      // ci-dessus observe (même famille de course que l'auto-scroll #268, rétro CI #332/#230).
       // Garde à effet observable : si la réserve d'espace saute (retirée/mutée), le contenu
-      // jouable ne serait plus protégé de l'occlusion par la barre fixe (#170/#190).
-      expect(screen.getByRole("main").style.paddingBottom).toBe(
-        "calc(var(--space-6) + var(--play-action-bar-height))",
+      // jouable ne serait plus protégé de l'occlusion par la barre fixe (#170/#190) — `waitFor`
+      // reste rouge (timeout) dans ce cas, vert dès que l'effet flush sinon.
+      await waitFor(() =>
+        expect(screen.getByRole("main").style.paddingBottom).toBe(
+          "calc(var(--space-6) + var(--play-action-bar-height))",
+        ),
       );
     } finally {
       restore();

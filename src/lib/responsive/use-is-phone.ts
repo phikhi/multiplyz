@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Fondation responsive — écran de jeu (story 8.1 #254, WIREFRAMES §8). Un SEUL breakpoint
@@ -43,36 +43,67 @@ export function phoneMediaQuery(): string {
 }
 
 /**
- * Valeur initiale de `useIsPhone` — exportée séparément (comme `getInitialTheme` de
- * `ThemeToggle.tsx`) pour rester testable en isolation (SSR, `window` absent) sans dépendre de
- * la machinerie `useState`/React.
+ * Valeur « réelle » d'`isPhone`, lue depuis `window.matchMedia` — exportée séparément (comme
+ * `getInitialTheme` de `ThemeToggle.tsx`) pour rester testable en isolation (SSR, `window`
+ * absent) sans dépendre de la machinerie React. Sert de `getSnapshot` CLIENT à
+ * `useSyncExternalStore` ci-dessous (fix #305) : jamais appelée côté SSR par React (le 3ᵉ
+ * argument `getServerSnapshot` couvre ce cas), donc jamais de branche `typeof window` à
+ * l'intérieur — seul le repli explicite ci-dessous documente le cas SSR pour les appels directs
+ * (tests en isolation).
  */
 export function getInitialIsPhone(): boolean {
   return typeof window === "undefined" ? false : window.matchMedia(phoneMediaQuery()).matches;
 }
 
 /**
- * `true` sous le breakpoint téléphone (`--bp-phone`). Consommé uniquement par l'écran de jeu
- * (`QuestionCard`/`FeedbackPanel`/`ActionBar`/`PlayScreen`), qui ne rend **jamais** côté SSR
- * (`PlayScreen` démarre toujours en `{kind:"loading"}` — le fetch du niveau est client-only,
- * `fetchLevel` s'exécute après montage). Lire `window` dans l'état initial ne provoque donc
- * AUCUNE désynchro d'hydratation : il n'existe aucun rendu serveur de ces composants à comparer
- * (cf. `PlayScreen.tsx`, commentaire du `key` distinct par état).
+ * S'abonne aux changements RÉELS du breakpoint téléphone (redimensionnement/rotation) — le
+ * `subscribe` de `useSyncExternalStore`. React ne l'appelle **jamais** côté SSR (uniquement
+ * après l'hydratation, côté client), donc `window` y existe toujours.
+ */
+function subscribe(onStoreChange: () => void): () => void {
+  const mql = window.matchMedia(phoneMediaQuery());
+  mql.addEventListener("change", onStoreChange);
+  return () => mql.removeEventListener("change", onStoreChange);
+}
+
+/**
+ * Snapshot SSR — TOUJOURS `false` (jamais une lecture de `window`, absent côté serveur). C'est
+ * la valeur que React utilise pour le rendu serveur ET pour le 1ᵉʳ rendu client à l'hydratation
+ * (cf. JSDoc `useIsPhone`) : les deux sont ainsi **identiques par construction**.
+ */
+function getServerSnapshot(): boolean {
+  return false;
+}
+
+/**
+ * `true` sous le breakpoint téléphone (`--bp-phone`). Consommé par l'écran de jeu
+ * (`QuestionCard`/`FeedbackPanel`/`ActionBar`/`PlayScreen`) ET par l'écran carte (`MapScreen`).
+ *
+ * **Déterminisme SSR = 1ᵉʳ rendu client (fix #305, rétro « hydration mismatch React sur
+ * /carte »)** : implémenté via `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)`
+ * — le patron REACT OFFICIEL pour une valeur externe lue depuis `window`, indisponible côté SSR
+ * (cf. https://react.dev/reference/react/useSyncExternalStore#adding-support-for-server-rendering).
+ * `getServerSnapshot` fournit la valeur utilisée pour le rendu serveur **ET** pour le 1ᵉʳ rendu
+ * client à l'hydratation (`false`, TOUJOURS) — HTML serveur et 1ᵉʳ commit client sont donc
+ * **identiques par construction**, quel que soit le consommateur. React re-synchronise ensuite
+ * silencieusement vers la vraie valeur (`getSnapshot`) juste après le commit, sans jamais
+ * comparer/avertir d'un mismatch — ce mécanisme est **intégré à React lui-même** (pas un
+ * `useState`+`useEffect` maison), donc immun à la fois au bug #305 et au lint
+ * `react-hooks/set-state-in-effect`.
+ *
+ * Avant ce fix, l'état initial appelait `getInitialIsPhone()` (lecture SYNCHRONE de
+ * `window.matchMedia`) directement dans l'initialiseur paresseux d'un `useState`. Cette lecture
+ * s'exécutait AUSSI lors du 1ᵉʳ rendu CLIENT (l'hydratation) — un contexte où `window` existe
+ * déjà, contrairement au SSR. Dès que le viewport réel passait sous `--bp-phone`, la valeur y
+ * divergeait de celle du SSR (`false`) : pour un flag consommé dans un style rendu par
+ * `MapScreen` **dans tous ses états** (y compris `loading`, lui-même SSR'd — contrairement à
+ * `QuestionCard`/`ActionBar`/`PlayScreen`, qui ne montent jamais avant la fin d'un fetch
+ * client-only et n'exposaient donc aucun rendu SSR à comparer), ceci produisait un mismatch
+ * d'hydratation React 100 % reproductible sur `/carte` sous ce breakpoint. L'ancienne hypothèse
+ * documentée ici (« aucun rendu SSR à comparer ») décrivait un invariant *propre à chaque
+ * appelant*, pas une garantie du hook — donc pas sûre pour un futur/autre consommateur. Ce fix
+ * rend `useIsPhone` sûr PAR CONSTRUCTION, sans dépendre de cette hypothèse fragile.
  */
 export function useIsPhone(): boolean {
-  const [isPhone, setIsPhone] = useState(getInitialIsPhone);
-
-  // Pas de re-sync synchrone ici (`setState` direct en corps d'effet = anti-patron React,
-  // `react-hooks/set-state-in-effect`) : `getInitialIsPhone` lit déjà `matchMedia` au 1er rendu
-  // (même tick que le montage, aucune staleness réelle à corriger) — l'effet se contente de
-  // s'ABONNER aux changements FUTURS (redimensionnement réel après montage), seul rôle légitime
-  // d'un effet ici (« subscribe for updates from an external system »).
-  useEffect(() => {
-    const mql = window.matchMedia(phoneMediaQuery());
-    const handler = (event: MediaQueryListEvent) => setIsPhone(event.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
-
-  return isPhone;
+  return useSyncExternalStore(subscribe, getInitialIsPhone, getServerSnapshot);
 }
