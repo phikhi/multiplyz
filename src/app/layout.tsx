@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { BRAND_NAME } from "@/config/brand";
-import { PWA_THEME_COLOR } from "@/config/pwa";
+import { appleStartupImages, PWA_THEME_COLOR } from "@/config/pwa";
 import { LOCALE, strings } from "@/strings";
 import { getDb } from "@/lib/db";
 import { householdExists } from "@/lib/auth/household";
@@ -38,14 +38,21 @@ export const metadata: Metadata = {
   title: BRAND_NAME,
   description: strings.meta.description,
   icons: {
-    // Apple touch icon (iPad/iPhone home screen)
-    apple: "/icon-192.png",
+    // Apple touch icon (iPad/iPhone home screen) — PNG RÉEL à l'effigie de Teddy (180×180,
+    // story R2.3 #362) : REMPLACE l'ancien placeholder /icon-192.png. Fond opaque violet (iOS
+    // n'aime pas la transparence).
+    apple: "/apple-touch-icon.png",
   },
-  other: {
-    // PWA hints pour iOS / Safari
-    "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-status-bar-style": "default",
-    "apple-mobile-web-app-title": BRAND_NAME,
+  // PWA iOS/Safari via `appleWebApp` (Next génère les meta `apple-mobile-web-app-*`) : remplace
+  // les entrées `other` manuelles + ajoute les écrans de démarrage (`apple-touch-startup-image`).
+  // iOS n'auto-génère PAS de splash → une image par device (liste ⚙️ `APPLE_SPLASH_DEVICES` de
+  // config/pwa.ts, source unique partagée avec `scripts/gen-app-icons.ts`). Chaque URL pointe un
+  // PNG committé réel (Teddy centré sur fond `PWA_BG_COLOR`), vérifié par `pwa-assets.test.ts`.
+  appleWebApp: {
+    capable: true,
+    title: BRAND_NAME,
+    statusBarStyle: "default",
+    startupImage: appleStartupImages().map(({ url, media }) => ({ url, media })),
   },
 };
 
