@@ -14,6 +14,7 @@
 import { resolveDatabasePath } from "../src/lib/db/config";
 import { seedRealWorldFixture } from "./lib/seed-real-world-fixture";
 import { seedTeddyExpressionSprites } from "./lib/seed-teddy-sprites";
+import { seedCreatureSprites } from "./lib/seed-creature-sprites";
 
 seedRealWorldFixture({
   databasePath: resolveDatabasePath(),
@@ -28,3 +29,8 @@ seedRealWorldFixture({
 // `/generated/socle/teddy/<expr>.png` pour que Teddy soit VISIBLE (vrai art) en dev sur
 // l'accueil / le feedback / les résultats (pas seulement la carte).
 seedTeddyExpressionSprites("seed-dev-teddy-sprites");
+
+// Illustration de la créature de démo (story R2.1, #361) — servie à
+// `/generated/socle/creature/cloudfox.png` (parité avec l'E2E). La collection dev ne se peuple
+// qu'au boss (grants réels = R3.1) ; l'asset est ici prêt pour ce consommateur (cf. seed).
+seedCreatureSprites("seed-dev-creature-sprites");

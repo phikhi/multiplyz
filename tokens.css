@@ -534,8 +534,9 @@
      description change, jamais la géométrie de grille. */
   --collection-card-description-font-size: var(--font-size-base);
   --collection-card-description-line-clamp: 2;
-  /* Silhouette placeholder dimensionnée pour tenir dans une carte de grille 3-colonnes
-     à 320px (art réel épic #6). --space-7 (48px) < largeur de contenu de carte au pire cas. */
+  /* Slot d'illustration de créature (le VRAI art `<AssetImage>` R2.1 #361 OU le repli placeholder
+     emoji) dimensionné pour tenir dans une carte de grille 3-colonnes à 320px. --space-7 (48px) <
+     largeur de contenu de carte au pire cas → géométrie 3-col inchangée quel que soit l'art. */
   --collection-placeholder-size: var(--space-7);
   /* Padding horizontal de l'écran collection : resserré pour maximiser la largeur de grille
      sur téléphone (3 colonnes, WIREFRAMES §8) sans jamais de scroll horizontal. */

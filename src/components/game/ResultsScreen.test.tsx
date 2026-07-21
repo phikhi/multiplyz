@@ -223,6 +223,39 @@ describe("ResultsScreen — révélation de la légendaire du boss (story 5.6, M
     expect(screen.getByText("Braisille")).toBeInTheDocument();
     expect(screen.queryByText(FAKE_LEGENDARY.story)).not.toBeInTheDocument();
   });
+
+  // ▶▶ MUTATION-PROUVÉ : art_ref RENDABLE de la légendaire → VRAI <img> (chemin format-réel #189) ◀◀.
+  // Consomme `legendary.artRef` via `<AssetImage>` (story R2.1, #361). ROUGIT si la révélation
+  // cessait de consommer `artRef` (repli en dur) OU si la garde `isRenderableAssetRef` sautait.
+  it("légendaire avec art RENDABLE ⇒ vrai <img> rendu (consomme legendary.artRef)", () => {
+    render(
+      <ResultsScreen
+        stars={1}
+        coins={60}
+        legendary={{ ...FAKE_LEGENDARY, artRef: "socle/creature/cloudfox.png" }}
+        onContinue={vi.fn()}
+      />,
+    );
+    const art = document.querySelector<HTMLImageElement>('[data-asset="results-legendary-art"]');
+    expect(art?.tagName).toBe("IMG");
+    expect(art).toHaveAttribute("src", "/generated/socle/creature/cloudfox.png");
+    expect(art).toHaveAttribute("data-asset-state", "rendered");
+    // Le nom accessible reste porté par le wrapper `role="img"` (art décoratif, pas de double annonce).
+    const label = strings.play.results.legendaryLabel.replace("{nom}", "Braisille");
+    expect(screen.getByRole("img", { name: label })).toBeInTheDocument();
+  });
+
+  // ▶▶ MUTATION-PROUVÉ : art_ref placeholder:// → repli emoji, JAMAIS d'<img> ◀◀. État observable
+  // AUJOURD'HUI (art réel de la légendaire = R3.1). ROUGIT si la garde sautait (un <img fetché vers
+  // le placeholder apparaîtrait).
+  it("légendaire avec art placeholder:// (défaut) ⇒ repli emoji, JAMAIS d'<img>", () => {
+    render(<ResultsScreen stars={1} coins={60} legendary={FAKE_LEGENDARY} onContinue={vi.fn()} />);
+    const art = document.querySelector<HTMLElement>('[data-asset="results-legendary-art"]');
+    expect(art?.tagName).toBe("SPAN");
+    expect(art).toHaveAttribute("data-asset-state", "fallback");
+    // Aucun <img> DANS la carte légendaire (scopé : Teddy est un <img> légitime hors de cette carte).
+    expect(document.querySelector("[data-results-legendary] img")).toBeNull();
+  });
 });
 
 /**

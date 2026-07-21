@@ -21,6 +21,7 @@
 import { resolveDatabasePath } from "../src/lib/db/config";
 import { seedRealWorldFixture } from "../scripts/lib/seed-real-world-fixture";
 import { seedTeddyExpressionSprites } from "../scripts/lib/seed-teddy-sprites";
+import { seedCreatureSprites } from "../scripts/lib/seed-creature-sprites";
 
 seedRealWorldFixture({
   databasePath: resolveDatabasePath(),
@@ -34,3 +35,8 @@ seedRealWorldFixture({
 // pour que Teddy soit rendu (VRAI art) en E2E sur l'accueil / le feedback / les résultats, sans
 // dépendre des assets gitignorés (`public/generated/` absent en CI). Même contexte cwd que le serveur.
 seedTeddyExpressionSprites("seed-world-assets-teddy");
+
+// Illustration de la créature de démo (story R2.1, #361) — servie à
+// `/generated/socle/creature/cloudfox.png`, consommée par la possession `art_ref` du profil `Nino`
+// (`seed-collection.ts`) → l'écran Collection rend une créature en VRAI art (les autres en placeholder).
+seedCreatureSprites("seed-world-assets-creature");

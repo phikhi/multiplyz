@@ -21,7 +21,11 @@ import { assetPublicUrl, isRenderableAssetRef } from "@/lib/game/world-theme";
  * **A11y (#239/#125)** : `alt` vient des **strings centralisées** (jamais un texte en dur) et est
  * **réellement consommé** — attribut `alt` sur l'`<img>`, `aria-label` sur le repli (asserté). `alt`
  * décrit l'expression/émotion de Teddy (voix de Teddy) : c'est du **contenu** ici (l'écran gagne en
- * chaleur), pas un décor muet — d'où un alt signifiant plutôt qu'`alt=""`.
+ * chaleur), pas un décor muet — d'où un alt signifiant plutôt qu'`alt=""`. **Exception `decorative`
+ * (story R2.1, #361)** : quand un ANCÊTRE porte déjà le nom accessible de l'illustration (carte de
+ * créature `<li aria-label>`, révélation légendaire `<div role="img">`), l'art devient **décoratif**
+ * (`alt=""` + repli `aria-hidden`, sans `role`/`aria-label`) pour éviter la double annonce — même
+ * a11y que l'ancien placeholder emoji `aria-hidden` que le swap remplace (cf. prop `decorative`).
  *
  * **Hydratation (#305)** : l'état initial (serveur + 1er rendu client) rend TOUJOURS l'`<img>`
  * (`errored=false`) — aucune branche dépendante de `window`/`useSyncExternalStore` → **aucun**
@@ -44,9 +48,26 @@ export interface AssetImageProps {
   readonly width: string;
   /** Marqueur de sélection stable (tests/E2E) — posé sur l'`<img>` ET sur le repli (`data-asset`). */
   readonly dataAsset: string;
+  /**
+   * **Décoratif** (défaut `false`) — quand un ANCÊTRE porte déjà le nom accessible de l'illustration
+   * (carte de créature `<li aria-label>`, révélation de la légendaire `<div role="img">`), l'art est
+   * un **doublon a11y** : le rendre décoratif (`alt=""` sur l'`<img>`, `aria-hidden` + PAS de
+   * `role`/`aria-label` sur le repli) évite la double annonce — c'est la même a11y que l'ancien
+   * placeholder emoji `aria-hidden`, préservée par le swap. Teddy (contenu, aucun ancêtre labellé)
+   * garde le défaut `false` → `alt` consommé (#239/#125). `alt` documente alors le SUJET (nom de la
+   * créature) mais n'est PAS rendu comme nom accessible (l'ancêtre le porte, prouvé côté écran).
+   */
+  readonly decorative?: boolean;
 }
 
-export function AssetImage({ assetRef, alt, fallback, width, dataAsset }: AssetImageProps) {
+export function AssetImage({
+  assetRef,
+  alt,
+  fallback,
+  width,
+  dataAsset,
+  decorative = false,
+}: AssetImageProps) {
   const [errored, setErrored] = useState(false);
   const onError = useCallback(() => setErrored(true), []);
 
@@ -61,10 +82,11 @@ export function AssetImage({ assetRef, alt, fallback, width, dataAsset }: AssetI
       width,
       lineHeight: 1,
     };
+    // Décoratif : `aria-hidden` + aucun `role`/`aria-label` (l'ancêtre labellé porte le nom).
+    // Sinon : `role="img"` + `aria-label={alt}` (repli au MÊME nom accessible que l'image, #239).
     return (
       <span
-        role="img"
-        aria-label={alt}
+        {...(decorative ? { "aria-hidden": true } : { role: "img", "aria-label": alt })}
         data-asset={dataAsset}
         data-asset-state="fallback"
         style={fallbackStyle}
@@ -88,7 +110,9 @@ export function AssetImage({ assetRef, alt, fallback, width, dataAsset }: AssetI
     // eslint-disable-next-line @next/next/no-img-element -- cf. justification ci-dessus (alt + onError + repli)
     <img
       src={assetPublicUrl(assetRef)}
-      alt={alt}
+      // Décoratif → `alt=""` (l'ancêtre labellé porte le nom, pas de double annonce) ; sinon `alt`
+      // consommé (contenu, #239). Un `<img alt="">` est ignoré des lecteurs d'écran (décoratif).
+      alt={decorative ? "" : alt}
       data-asset={dataAsset}
       data-asset-state="rendered"
       onError={onError}
