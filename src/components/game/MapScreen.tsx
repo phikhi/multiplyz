@@ -144,6 +144,23 @@ const EMPTY_STAR = "☆";
 const STAR_SLOTS: readonly MapStars[] = [1, 2, 3];
 
 /**
+ * **Couche du `<li>` du nœud COURANT dans le chemin (fix occlusion #343, classe #170/#190)**.
+ * Chaque `<li>` porte un `transform` (décalage serpentin `translateX`) → chacun est un **stacking
+ * context** distinct ; les `<li>`s sœurs se peignent donc dans l'**ordre DOM**, et le `<li>` AMONT
+ * (le SUIVANT dans le DOM — rendu visuellement au-DESSUS en `column-reverse`) peint TOUTE sa
+ * sous-arborescence — **y compris SON connecteur** (`NodeConnector`, tracé dans la gouttière qui
+ * chevauche l'avatar Teddy flottant du nœud courant) — **par-dessus** le `<li>` courant. Le `zIndex:3`
+ * de `CurrentNodeTeddy` ne classe Teddy qu'À L'INTÉRIEUR du stacking context du li courant : il ne
+ * franchit PAS la frontière du stacking context de la sœur amont → le trait recouvre le visage de
+ * Teddy (défaut #343, playtest). Élever le `<li>` COURANT au-dessus de ses sœurs (`z-index` positif)
+ * fait repeindre tout son sous-arbre — Teddy inclus — AU-DESSUS du connecteur amont. **Contenu par
+ * `isolation:isolate` sur le `<ol>`** → cette couche ne compétitionne JAMAIS avec le shell persistant
+ * ni aucune chrome de page (anti-relocalisation #278). Non-occlusion prouvée par une garde E2E de
+ * PAINT-ORDER en vrai navigateur (`auth.spec.ts`, jamais un raisonnement géométrique — rétro #190).
+ */
+const CURRENT_NODE_LAYER = 1;
+
+/**
  * Style de texte partagé des titres `h1` de l'écran (chargement / erreur / indispo / carte prête) —
  * tokens only (jamais de valeur en dur). Couleur `--color-text-primary` : lisible sur le fond de
  * page neutre (`bg-bg`) ET sur le scrim `--world-surface` du titre thématisé (contraste ≥4.5:1
@@ -603,6 +620,11 @@ function NodePath({
         gap: "var(--map-node-gap)",
         width: "100%",
         maxWidth: "var(--max-width-play)",
+        // Confine les couches des `<li>` (fix #343, cf. `CURRENT_NODE_LAYER`) DANS le chemin : le
+        // `<li>` courant élevé ne compétitionne jamais avec le shell persistant / la chrome de page
+        // (anti-relocalisation d'occlusion #278). `isolation:isolate` crée un stacking context sans
+        // exiger de `position`/`z-index` sur le `<ol>` lui-même.
+        isolation: "isolate",
       }}
     >
       {map.nodes.map((node, renderIndex) => {
@@ -619,6 +641,10 @@ function NodePath({
               // Décalage horizontal serpentin depuis la position normalisée (5.2) —
               // affichage seul, aucune influence sur la géométrie sous-jacente.
               transform: `translateX(${horizontalOffsetPercent(node.position.x)}%)`,
+              // Nœud COURANT élevé au-dessus des `<li>`s sœurs (fix occlusion #343) → son avatar Teddy
+              // se repeint AU-DESSUS du connecteur du nœud amont (cf. `CURRENT_NODE_LAYER`). Les autres
+              // nœuds gardent `z-index:auto` (ordre DOM) — géométrie/positions inchangées (#123).
+              zIndex: node.status === "current" ? CURRENT_NODE_LAYER : undefined,
             }}
           >
             {previous !== undefined && (

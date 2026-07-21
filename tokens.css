@@ -180,10 +180,11 @@
      --map-node-star-filled et --collection-rarity-glyph plus bas) : jamais posés en
      `color` sur le CHIFFRE du solde (`--color-text-primary` fiable, ResultsScreen.tsx même
      règle) ni sur l'emoji (🪙/✨ = police emoji couleur native, `color` CSS sans effet dessus).
-     Consommation SÛRE = un lavis DÉCORATIF dilué (même technique que --world-bg-tint,
-     `color-mix` 10 %, fix #184/#199) derrière chaque pastille de solde — redondant avec
-     l'emoji (jamais la SEULE info), donc hors du réquisit WCAG 1.4.11 « objet graphique
-     requis ». Formule dupliquée ici volontairement (couplage #184 : `color-mix` référençant
+     Consommation SÛRE = un lavis DÉCORATIF dilué (`--topbar-*-tint` ci-dessous, `color-mix`
+     12 % — même TECHNIQUE que --world-bg-tint #184/#199, dont le ratio propre est 10 % ; les
+     deux ne sont PAS couplés en valeur, cf. JSDoc `AppShell.tsx`) derrière chaque pastille de
+     solde — redondant avec l'emoji (jamais la SEULE info), donc hors du réquisit WCAG 1.4.11
+     « objet graphique requis ». Formule dupliquée ici volontairement (couplage #184 : `color-mix` référençant
      une var `:root` re-résout correctement SEULEMENT si aucun descendant ne surcharge cette
      var en inline — non le cas ici, `--topbar-*` n'est jamais surchargé par élément). */
   --topbar-coin-tint:  color-mix(in srgb, var(--topbar-coin) 12%, var(--topbar-bg));
