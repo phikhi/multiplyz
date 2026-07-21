@@ -111,6 +111,21 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
     ).toBeInTheDocument();
   });
 
+  // Teddy en chair et en os accueille l'enfant (story R2.2, #360, ART §2) — sprite `content`.
+  it("Teddy accueille sur l'écran de sélection (sprite `content`, alt consommé)", () => {
+    render(<ProfileSelector profiles={PROFILES} />);
+    const teddy = screen.getByRole("img", { name: strings.login.teddyAlt });
+    expect(teddy.tagName).toBe("IMG");
+    expect(teddy).toHaveAttribute("src", "/generated/socle/teddy/content.png");
+    expect(teddy).toHaveAttribute("data-asset", "teddy-home");
+  });
+
+  it("Teddy d'accueil ABSENT du pavé PIN parent (registre neutre, pas la voix enfant)", () => {
+    render(<ProfileSelector profiles={PROFILES} />);
+    fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
+    expect(screen.queryByRole("img", { name: strings.login.teddyAlt })).not.toBeInTheDocument();
+  });
+
   it("l'entrée « 🔒 Parent » (nom accessible neutre) ouvre le pavé PIN parent", () => {
     render(<ProfileSelector profiles={PROFILES} />);
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));

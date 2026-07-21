@@ -69,6 +69,32 @@ describe("ResultsScreen — jamais d'échec (ENGINE §5/§9)", () => {
   });
 });
 
+describe("ResultsScreen — Teddy célèbre (story R2.2, #360, ART §2)", () => {
+  // Effet observable du MAPPING étoiles→expression : `acclame` (bras levés) à 3 étoiles,
+  // `content` (fierté) sinon. ROUGIT si la condition `stars === 3` est mutée.
+  it("3 étoiles → Teddy `acclame` (t'acclame), alt consommé", () => {
+    render(<ResultsScreen stars={3} coins={30} onContinue={vi.fn()} />);
+    const teddy = screen.getByRole("img", { name: strings.play.results.teddyAltCheer });
+    expect(teddy.tagName).toBe("IMG");
+    expect(teddy).toHaveAttribute("src", "/generated/socle/teddy/acclame.png");
+    expect(teddy).toHaveAttribute("data-asset", "teddy-results");
+  });
+
+  // No-fail (ENGINE §5) : même à 0 étoile, Teddy est FIER (`content`), JAMAIS triste. Garde le
+  // choix d'expression contre une régression qui mettrait un visage déçu sur un petit score.
+  it.each([0, 1, 2] as StarCount[])(
+    "%i étoile(s) → Teddy `content` (fier), jamais triste",
+    (stars) => {
+      render(<ResultsScreen stars={stars} coins={10} onContinue={vi.fn()} />);
+      const teddy = screen.getByRole("img", { name: strings.play.results.teddyAltProud });
+      expect(teddy.tagName).toBe("IMG");
+      expect(teddy).toHaveAttribute("src", "/generated/socle/teddy/content.png");
+      // Jamais le sprite `acclame` (réservé au 3 étoiles) ni un sprite triste.
+      expect(teddy.getAttribute("src")).not.toContain("oups");
+    },
+  );
+});
+
 describe("ResultsScreen — pièces gagnées (ECONOMY §4.1, story #126)", () => {
   // GARDE « pièces affichées + doublées d'un libellé texte » (a11y daltonisme) : le nombre de
   // pièces est visible ET porté par un nom accessible (`role="img"`), jamais la seule icône 🪙.

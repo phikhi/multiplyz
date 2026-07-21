@@ -420,6 +420,23 @@
      qui doit varier ensemble, pas la taille seule. */
   --map-node-teddy-size:  calc(var(--space-6) + var(--space-2)); /* 40px — avatar Teddy sur le nœud courant */
 
+  /* ---------- TEDDY DANS LA BOUCLE DE JEU (story R2.2, #360, ART §2/§8) ----------
+     Tailles de l'avatar Teddy `<AssetImage>` rendu **EN FLUX** (jamais superposé/absolu,
+     donc non-occlusion STRUCTURELLE — rétro #278b : un enfant en flux réserve un espace
+     réel et pousse le contenu, il ne peut PAS occulter par construction, contrairement au
+     `CurrentNodeTeddy` absolu de la carte qui exige la garde géométrie #170). L'image porte
+     une largeur token, la hauteur suit le ratio intrinsèque du sprite (portrait 262×359).
+     Sprite transparent sur fond neutre : aucun contraste texte à garantir (l'illustration
+     n'est pas un glyphe, hors #104/#226). */
+  --teddy-hero-size:      var(--space-8);  /*  64px de LARGE → ~88px de haut (sprite portrait) —
+                                               Teddy d'accueil (ProfileSelector). Volontairement
+                                               compact : l'accueil empile déjà marque + titre +
+                                               liste de profils + entrée « 🔒 Parent » ; un hero
+                                               trop grand pousse l'entrée parent hors de l'écran
+                                               (garde E2E de non-occlusion/in-viewport, #170/#190). */
+  --teddy-feedback-size:  var(--space-8);  /*  64px — Teddy du feedback en niveau */
+  --teddy-results-size:   var(--space-9);  /*  96px — Teddy de l'écran de résultats */
+
   /* étoiles de l'écran de RÉSULTATS (fin de niveau, story #126/5.5) — même piège
      que --map-node-star-* ci-dessus : --color-star/--color-star-empty sont des
      accents décoratifs qui échouent le contraste sur le fond de page neutre
