@@ -39,7 +39,8 @@ export const metadata: Metadata = {
   description: strings.meta.description,
   icons: {
     // Apple touch icon (iPad/iPhone home screen) — PNG RÉEL à l'effigie de Teddy (180×180,
-    // story R2.3 #362), plus le placeholder. Fond opaque violet (iOS n'aime pas la transparence).
+    // story R2.3 #362) : REMPLACE l'ancien placeholder /icon-192.png. Fond opaque violet (iOS
+    // n'aime pas la transparence).
     apple: "/apple-touch-icon.png",
   },
   // PWA iOS/Safari via `appleWebApp` (Next génère les meta `apple-mobile-web-app-*`) : remplace

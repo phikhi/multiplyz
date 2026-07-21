@@ -53,8 +53,10 @@ const FUZZ = 40;
 
 /**
  * ⚙️ Fractions de contenu (part de la toile occupée par la bbox de Teddy, centré). Calibrables.
- * `MASKABLE` ≤ ~0.66 garantit que les extrémités de Teddy (pattes/oreilles, à r≈0.33·taille du
- * centre) restent DANS le cercle de sécurité maskable (rayon 0.40·taille) → jamais rognées.
+ * `MASKABLE` ≤ ~0.66 garantit que les extrémités de Teddy (pattes/oreilles) restent DANS le cercle
+ * de sécurité maskable (rayon 0.40·taille) : rayon max du sujet MESURÉ ≈ 0.365·taille
+ * (0.73·demi-taille) ≤ 0.40 → jamais rognées. Borne verrouillée par `pwa-assets.test.ts`
+ * (rayon sujet ≤ 0.80·demi-taille).
  */
 const ANY_CONTENT = 0.86;
 const MASKABLE_CONTENT = 0.66;
