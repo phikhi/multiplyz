@@ -4,21 +4,25 @@
 // flood-fill DEPUIS LES BORDS (`floodFillTransparency`, jamais un white-key global qui mangerait
 // le torse/museau crème de Teddy — cf. commentaire de tête du module).
 //
-// Hors `src/` (pas de coverage, même patron que `scripts/db-migrate.ts`) — outil de build ponctuel,
-// rejouable si la source `teddy-source.jpg` change (nouvelle photo/génération du monde emprunté,
-// cf. `BORROWED_SLOT` dans `scripts/lib/seed-real-world-fixture.ts`). `sharp` (devDependency) sert
-// UNIQUEMENT ici : décodage JPEG → buffer RGB brut, ré-encodage RGBA → PNG.
+// **Séparation logique/I-O** (patron `scripts/db-migrate.ts` ↔ `src/lib/db/migrate.ts`) : la logique
+// PURE de détourage vit dans `src/lib/image/flood-fill-transparency.ts` (dans le scope coverage 100 %,
+// testée à effet observable) ; ce CLI n'est que le wiring I/O `sharp` (hors coverage, comme
+// `db-migrate.ts`) — décodage JPEG → buffer RGB brut, ré-encodage RGBA → PNG. Outil de build ponctuel,
+// rejouable si la source `teddy-source.jpg` change (nouvelle photo/génération du monde emprunté, cf.
+// `BORROWED_SLOT` dans `scripts/lib/seed-real-world-fixture.ts`). `sharp` (devDependency, aligné sur
+// la version transitive de Next) sert UNIQUEMENT ici + dans le test d'intégrité du fixture.
 //
 // Usage : `pnpm exec tsx scripts/regen-teddy-cutout.ts`
 import sharp from "sharp";
-import { floodFillTransparency } from "./lib/flood-fill-transparency";
+import { floodFillTransparency } from "../src/lib/image/flood-fill-transparency";
 
 const SOURCE = "test-fixtures/world/socle-sample/teddy-source.jpg";
 const OUTPUT = "test-fixtures/world/socle-sample/teddy.png";
 // Calibré empiriquement (rétro build #338) : le fond JPEG bruite jusqu'à ~14 de distance de son
 // point moyen (253,253,253) ; la fourrure crème la plus proche du blanc (torse/coussinets) en est
-// à ~80. Fuzz=40 laisse une marge large des deux côtés — vérifié qu'il ne mange aucune fourrure en
-// comparant les pixels de fond détectés à fuzz=25/40/60/100 (delta < 0.5 % du total, pas de saut).
+// à ~80. Fuzz=40 laisse une marge large des deux côtés — la surface de fond détectée ne bouge que de
+// ~0.56 % entre fuzz 25 et 100 (pas de « falaise » d'ingestion de fourrure ; prouvé par le test
+// `interior light island` de `flood-fill-transparency.test.ts`, pas seulement mesuré).
 const FUZZ = 40;
 
 async function main(): Promise<void> {

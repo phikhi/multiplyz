@@ -4,8 +4,15 @@
  * les zones claires **internes** au sujet (ex. le torse/museau crème de Teddy, ART.md §2 « Steiff
  * 80s », CLAUDE.md : « golden-mohair… CREAM/white torso »).
  *
+ * **Logique PURE** (aucun I/O) — vit sous `src/lib/` (dans le scope du gate coverage 100 %, comme
+ * `src/lib/db/migrate.ts`) tandis que le wiring I/O (`sharp` : décode JPEG → buffer, encode PNG)
+ * vit dans le CLI `scripts/regen-teddy-cutout.ts` (hors coverage, patron `scripts/db-migrate.ts`).
+ * Le **cœur préservation-fourrure** (#329) est ainsi couvert par un test à effet observable qui
+ * ROUGIT si l'algorithme régresse en white-key global (cf. `flood-fill-transparency.test.ts`).
+ *
  * Algorithme (magic-wand « contiguous », 4-connexe) :
- * 1. Référence de fond = moyenne des pixels du **périmètre** de l'image (tolère le bruit JPEG).
+ * 1. Référence de fond = moyenne des pixels du **périmètre** de l'image (tolère le bruit JPEG),
+ *    chaque pixel de bord compté **une seule fois** (coins inclus, cf. FIX #338-review).
  * 2. BFS depuis CHAQUE pixel du périmètre : un pixel voisin rejoint le fond seulement s'il est à
  *    une distance euclidienne RGB ≤ `fuzz` de cette référence — donc seule la région de fond
  *    **connectée au bord** devient transparente ; toute zone claire interne (non connectée au
@@ -15,9 +22,10 @@
  *    résolution de rendu réelle (avatar carte ~40px, `--map-node-teddy-size`), l'aliasing pixel du
  *    cutout dur n'est pas perceptible.
  *
- * Pure (aucun I/O) — `fuzz` en distance euclidienne RGB (0..~441). Calibré à 40 pour Teddy socle
- * (marge large : le fond JPEG bruite jusqu'à ~14 de son point moyen, la fourrure crème la plus
- * proche du blanc en est à ~80 — cf. rétro build #338).
+ * `fuzz` en distance euclidienne RGB (0..~441). Calibré à 40 pour Teddy socle (le fond JPEG bruite
+ * jusqu'à ~14 de son point moyen, la fourrure crème la plus proche du blanc en est à ~80 — cf. rétro
+ * build #338 : la surface de fond détectée ne bouge que de ~0.56 % entre fuzz 25 et 100, prouvant
+ * l'absence de « falaise » d'ingestion de fourrure).
  */
 
 export interface FloodFillInput {
@@ -48,7 +56,10 @@ export function floodFillTransparency({
   }
 
   // Référence de fond = moyenne de TOUS les pixels du périmètre (tolère le bruit de compression JPEG
-  // sans dépendre d'un seul coin, qui pourrait être un pixel de bruit atypique).
+  // sans dépendre d'un seul coin, qui pourrait être un pixel de bruit atypique). Chaque pixel de
+  // bord est compté **une seule fois** : les lignes haut/bas balaient toute la largeur (coins
+  // inclus) ; les colonnes gauche/droite ne balaient que l'INTÉRIEUR vertical (`y ∈ [1, height-2]`)
+  // pour ne pas re-compter les 4 coins (FIX #338-review : le double-comptage biaisait la moyenne).
   let sumR = 0;
   let sumG = 0;
   let sumB = 0;
@@ -62,7 +73,7 @@ export function floodFillTransparency({
       perimeterCount++;
     }
   }
-  for (let y = 0; y < height; y++) {
+  for (let y = 1; y < height - 1; y++) {
     for (const x of [0, width - 1]) {
       const [r, g, b] = colorAt(x, y);
       sumR += r;

@@ -62,8 +62,10 @@ export interface StageADeps {
    * **Détourage** : retire le matte plein (fond blanc, ADR 0008) → octets à fond transparent.
    * **Injecté obligatoirement** en `post-cutout` (défaut : lève, cf. `defaultCutout`). Appelé
    * **seulement** en `post-cutout` (jamais en `full-card`). Le calibrage pixel du seuil de matte
-   * = ⚙️ de playtest → l'implémentation (ex. `sharp`) est fournie à l'exécution owner, pas figée
-   * dans une dépendance native ici (story = outil + mécanisme, pas la génération réelle).
+   * = ⚙️ de playtest → l'implémentation **runtime** (ex. `sharp`) est fournie à l'exécution owner,
+   * pas câblée dans le runtime ici (story = outil + mécanisme, pas la génération réelle). NB #338 :
+   * `sharp` est committé en devDependency pour l'outil de détourage du **fixture** seulement — cf.
+   * la note de réconciliation sur `defaultCutout` (le runtime, lui, ne change pas).
    */
   cutout: (bytes: Buffer, matteColor: string) => Promise<Buffer>;
   /** Config Stage A (défaut : config centrale). Injectée en test (stratégie réglable). */
@@ -95,9 +97,15 @@ export async function applyBackgroundStrategy(
 /**
  * Détourage **par défaut** = **non configuré** : lève avec un message d'action. En
  * `post-cutout`, l'owner injecte une vraie implémentation (ex. `sharp` avec flood-remove du
- * matte, calibré au playtest — ⚙️) au moment de lancer l'outil. On **ne fige pas** une
- * dépendance native ici : la story livre l'outil + le mécanisme, pas la génération réelle.
- * Ce défaut n'est **jamais** atteint en `full-card` (aucun détourage).
+ * matte, calibré au playtest — ⚙️) au moment de lancer l'outil. Ce défaut n'est **jamais**
+ * atteint en `full-card` (aucun détourage).
+ *
+ * **Note de réconciliation (#338)** : `sharp` est désormais committé en **devDependency**, mais
+ * UNIQUEMENT pour l'outil de détourage du **fixture** (`scripts/regen-teddy-cutout.ts` +
+ * `src/lib/image/flood-fill-transparency.ts`, réutilisable pour la régénération owner-gate des 6
+ * assets Teddy de PRODUCTION, #329/#181). Le **runtime** Stage A ne change PAS : `cutout` reste
+ * **injecté** et `defaultCutout` **lève toujours** (aucun `sharp` câblé dans le runtime de l'app) —
+ * la story livre l'outil + le mécanisme, pas la génération réelle en runtime.
  */
 export function defaultCutout(): Promise<Buffer> {
   return Promise.reject(
