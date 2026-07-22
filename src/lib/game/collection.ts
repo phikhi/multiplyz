@@ -292,9 +292,19 @@ export function loadCollection(db: DbHandle, profileId: number): CollectionEntry
 /**
  * **Une créature possédée** (fiche détail, story R3.2 #379, WIREFRAMES §5b) — même
  * enrichissement que `loadCollection` (catalogue + possession), pour **une seule** créature.
- * Garde de **propriété** (même patron que `renameCharacter`, PRODUCT §2.3) : `null` si la
- * créature n'est **pas possédée par CE profil** (id inconnu, faute de frappe dans l'URL, ou
- * possédée par un AUTRE profil) — jamais de fuite de la créature d'un autre profil.
+ * Isolation par **profil** : `null` si la créature n'est **pas possédée par CE profil** (id
+ * inconnu, faute de frappe dans l'URL, ou possédée par un AUTRE profil) — jamais de fuite de
+ * la créature d'un autre profil.
+ *
+ * **L'isolation cross-profil est portée par la CLÉ ENCODÉE** `collectionKey(profileId, …)` =
+ * `"${profileId}:${characterId}"` (la PK encode déjà le profil) — c'est la garde réellement
+ * testée (mutation-prouvée par « autre profil ⇒ null », `collection.test.ts`). Le prédicat
+ * additionnel `eq(collection.profileId, profileId)` est **belt-and-suspenders REDONDANT** avec
+ * cette clé (défense en profondeur, cohérence avec `renameCharacter` qui porte le même couple),
+ * **PAS** une garde indépendamment testée : le retirer laisse tous les tests verts (la clé pinne
+ * déjà l'isolation) — ne jamais le créditer comme mutation-prouvé (règle #143/#206). On le
+ * garde par cohérence/lisibilité avec `renameCharacter`, jamais on ne le retire de ce seul
+ * site d'appel.
  */
 export function loadCollectionEntry(
   db: DbHandle,
@@ -310,6 +320,9 @@ export function loadCollectionEntry(
       count: collection.count,
     })
     .from(collection)
+    // `eq(collection.id, key)` PINNE l'isolation profil (la clé encode `profileId`). Le
+    // `eq(collection.profileId, profileId)` est redondant belt-and-suspenders (cf. JSDoc + patron
+    // `renameCharacter`), jamais crédité comme garde indépendante (#143/#206).
     .where(and(eq(collection.id, key), eq(collection.profileId, profileId)))
     .limit(1)
     .get();
