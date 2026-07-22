@@ -75,16 +75,21 @@ export interface FinishLevelInput {
 /**
  * **Légendaire garantie** d'un monde présentée à l'UI (écran résultats du boss, MAP §6).
  * Sous-ensemble d'affichage du descripteur catalogue (`legendaryForWorld`) — nom + histoire
- * + rareté + réf d'art placeholder (l'art réel arrive à l'épic #6).
+ * + rareté + réf d'art **RÉELLE** de la légendaire (illustration committée, story R3.1 #378) ;
+ * un `placeholder://…` ne subsiste que **hors socle** (repli no-fail côté UI, jamais bloquant).
  */
 export interface GrantedLegendary {
   /** Clé de catalogue (`legendary:<world>`). */
   readonly characterId: string;
   /** Nom par défaut (déterministe, MAP §6) — renommable ensuite dans la collection. */
   readonly name: string;
-  /** Ligne d'histoire (placeholder épic #6). */
+  /** Ligne d'histoire déterministe de la légendaire (MAP §6, banques centralisées). */
   readonly story: string;
-  /** Réf d'art placeholder (`placeholder://…`) — silhouette/emoji de repli côté UI. */
+  /**
+   * Réf d'art **RÉELLE** de la légendaire (`socle/creature/legendary_world_<i>.png`, art committé
+   * R3.1 #378) → vrai art dans le médaillon de révélation. Un `placeholder://…` (hors socle) retombe
+   * sur la silhouette/emoji de repli côté UI (`<AssetImage>` no-fail).
+   */
   readonly artRef: string;
 }
 

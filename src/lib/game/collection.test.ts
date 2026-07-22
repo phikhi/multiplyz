@@ -3,12 +3,12 @@ import { eq } from "drizzle-orm";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { characters, collection, collectionKey, profiles } from "@/lib/db/schema";
+import { isRenderableAssetRef } from "@/lib/game/world-theme";
 import { strings } from "@/strings";
 import {
   ensureCharacterInTx,
   grantLegendaryInTx,
   isInEggPool,
-  legendaryArtRef,
   legendaryCharacterId,
   legendaryForWorld,
   legendarySpeciesKey,
@@ -53,7 +53,10 @@ describe("clés déterministes de la légendaire (MAP §6)", () => {
     expect(legendaryCharacterId(0)).toBe("legendary:0");
     expect(legendaryCharacterId(7)).toBe("legendary:7");
     expect(legendarySpeciesKey(3)).toBe("legendary_world_3");
-    expect(legendaryArtRef(2)).toBe("placeholder://legendary/2");
+    // Art RÉEL (story R3.1, #378) : réf relative rendable `socle/creature/legendary_world_<i>.png`
+    // (l'art committé du run payant, plus de `placeholder://…`) — dérivée du world_index.
+    expect(legendaryForWorld(2).artRef).toBe("socle/creature/legendary_world_2.png");
+    expect(isRenderableAssetRef(legendaryForWorld(2).artRef)).toBe(true);
   });
 
   it("mondes différents ⇒ ids différents (une légendaire par monde)", () => {
@@ -82,7 +85,7 @@ describe("legendaryForWorld (descripteur déterministe, MAP §6)", () => {
       nameDefault: strings.collection.legendaryNames[0],
       rarity: "legendary",
       inEggPool: false,
-      artRef: "placeholder://legendary/0",
+      artRef: "socle/creature/legendary_world_0.png",
       story: strings.collection.legendaryStories[0],
     });
   });
