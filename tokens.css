@@ -562,8 +562,13 @@
      --collection-card-bg/border/text/text-muted/rarity-glyph/placeholder-* ci-dessus (même
      langage visuel de carte de créature, déjà ≥4.5:1 prouvé — aucun doublon de token). Le SEUL
      token propre à cet écran est la taille de l'art : le payoff EN GRAND (#180, note R3.1 « fiche
-     montre l'art en grand ») — nettement au-dessus de --collection-placeholder-size (48px, grille). */
-  --creature-detail-art-size: var(--space-10); /* 128px */
+     montre l'art en grand » + review R3.2 Frontend/Game-design : la créature DOIT DOMINER la carte,
+     c'est le moment-révélation, jamais une vignette timide). ⚙️ calibrable (playtest enfant) :
+     `min(13.5rem, 62vw)` ≈ 216px sur desktop/tablette (la créature domine la carte ≤34rem), et
+     scale-DOWN sur téléphone étroit (62vw = 232px @375px → plafonné à 216px ; 198px @320px) pour
+     ne JAMAIS déborder la carte bornée à --max-width-play sur petit écran. Nettement au-dessus de
+     --collection-placeholder-size (48px, vignette de grille). */
+  --creature-detail-art-size: min(13.5rem, 62vw);
 
   /* ---------- RESPONSIVE — BREAKPOINT ÉCRAN DE JEU (story 8.1 #254, WIREFRAMES §8) ----------
      UN SEUL breakpoint numérique consommé par cette story : --bp-phone (téléphone vs

@@ -97,4 +97,22 @@ describe("CreatureDetailPage — route /collection/[id] (story R3.2 #379)", () =
     await CreatureDetailPage({ params: paramsFor("legendary%3A0") });
     expect(entryMock).toHaveBeenCalledWith(FAKE_DB, 42, "legendary:0");
   });
+
+  // ▶▶ MUTATION-PROUVÉ (review R3.2 Security+Backend) : un `%` MAL FORMÉ ne LÈVE JAMAIS ◀◀. Un id
+  // indécodable (`%`, `%zz`) fait lever `URIError` à `decodeURIComponent` → sans le try/catch, un
+  // raw 500 (page d'erreur brute) contredirait la posture no-fail. On assert le repli DOUX (redirect
+  // vers la grille, JAMAIS un throw ni un accès DB). Ce test ROUGIT si le try/catch est retiré (la
+  // page rejetterait alors avec URIError au lieu de rediriger).
+  it.each(["%", "%zz", "%E0%A4%A"])(
+    "id percent-escape MAL FORMÉ (%s) → redirige vers la grille, jamais un URIError/500 (no-fail)",
+    async (malformed) => {
+      profileIdMock.mockResolvedValue(42);
+      // Ne REJETTE jamais (repli doux `return null` après redirect) — un URIError non capturé
+      // rejetterait ici et ferait rougir ce test.
+      await expect(CreatureDetailPage({ params: paramsFor(malformed) })).resolves.toBeNull();
+      expect(redirectMock).toHaveBeenCalledWith("/collection");
+      // Jamais atteint la DB ni la session avec un id indécodable (court-circuit avant).
+      expect(entryMock).not.toHaveBeenCalled();
+    },
+  );
 });

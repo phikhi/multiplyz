@@ -36,7 +36,19 @@ export default async function CreatureDetailPage({
   // décodé ici aurait fait chercher un id littéralement `"e2e%3Acollection%3A5"`, introuvable →
   // faux-négatif silencieux (redirect vers la grille, jamais un plantage, donc invisible sans
   // test E2E réel). `decodeURIComponent` restaure le `characterId` réel avant la lecture.
-  const characterId = decodeURIComponent(id);
+  //
+  // **No-fail (review R3.2 Security+Backend)** : un `%` mal formé dans l'URL (`/collection/%`,
+  // `/collection/%zz`) fait LEVER `URIError` à `decodeURIComponent` → sans ce try/catch, un raw
+  // 500 (page d'erreur brute) contredirait la posture no-fail de cette route. On traite un id
+  // indécodable comme une créature introuvable → redirect vers la grille (même repli doux que
+  // `entry === null` ci-dessous), jamais une erreur exposée à l'enfant.
+  let characterId: string;
+  try {
+    characterId = decodeURIComponent(id);
+  } catch {
+    redirect("/collection");
+    return null; // inatteignable en prod (`redirect` lève) ; garde le contrôle de flux testable
+  }
   const profileId = await getCurrentChildProfileId();
   if (profileId === null) {
     redirect("/");

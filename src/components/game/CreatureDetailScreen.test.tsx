@@ -100,11 +100,14 @@ describe("CreatureDetailScreen — art EN GRAND (#180, story R3.1 note « fiche 
     expect(document.querySelector("img")).toBeNull();
   });
 
-  it("le token --creature-detail-art-size existe et est nettement plus grand que la vignette collection (--collection-placeholder-size)", () => {
+  it("le token --creature-detail-art-size domine (min(13.5rem, 62vw), responsive-capped) et n'est pas la vignette de grille", () => {
     const detailSize = rawTokenValue(themeBlock("light"), "--creature-detail-art-size");
     const collectionSize = rawTokenValue(themeBlock("light"), "--collection-placeholder-size");
-    expect(detailSize).toBe("var(--space-10)");
-    // --space-10 (128px) > --space-7 (48px) : l'art de la fiche est le payoff EN GRAND.
+    // Payoff EN GRAND (review R3.2 Frontend/Game-design) : 13.5rem ≈ 216px domine la carte ≤34rem
+    // sur desktop, `62vw` scale-DOWN sur téléphone étroit → jamais de débordement (jsdom ne calcule
+    // pas `min()` : l'effet RENDU réel est prouvé par la garde E2E `artBox.width >= 180`).
+    expect(detailSize).toBe("min(13.5rem, 62vw)");
+    // Nettement au-dessus de la vignette de grille (--space-7, 48px) : jamais la même taille.
     expect(detailSize).not.toBe(collectionSize);
   });
 });
@@ -133,6 +136,20 @@ describe("CreatureDetailScreen — stade d'évolution (affichage seul, ECONOMY �
     render(<CreatureDetailScreen entry={entry({ stage: 2, maxStage: 3 })} />);
     const pip2 = document.querySelector('[data-creature-stage-pip="2"]');
     expect(pip2?.textContent).toContain("[ado]");
+  });
+
+  // ▶▶ MUTATION-PROUVÉ (QA #60 survivor) : le pip du stade ACTUEL rend le glyphe PLEIN ● ◀◀.
+  // Le glyphe vient de `locked ? 🔒 : s <= stage ? ● : ○`. Pour le pip courant (`s === stage`,
+  // non verrouillé), `s <= stage` est vrai → ●. Muter la BORNE `s <= stage` → `s < stage` fait
+  // retomber CE pip sur ○ (creux) alors que le stade est bien atteint — un défaut visuel qu'aucun
+  // autre test n'attrape (les tests « atteint pas-actuel » n'exercent que `s < stage`, vrai sous
+  // les deux bornes). Ce test ROUGIT précisément sous cette mutation (fixture stage=2 : pip2 =
+  // ● sous `<=`, ○ sous `<`).
+  it("stade ACTUEL (s === stage) rend le glyphe PLEIN ●, JAMAIS le creux ○ (borne s<=stage)", () => {
+    render(<CreatureDetailScreen entry={entry({ stage: 2, maxStage: 3 })} />);
+    const pip2 = document.querySelector('[data-creature-stage-pip="2"]');
+    expect(pip2?.textContent).toContain("●");
+    expect(pip2?.textContent).not.toContain("○");
   });
 
   it("stade HORS DE PORTÉE (> maxStage) porte le glyphe 🔒 + suffixe visible « (pas encore) »", () => {

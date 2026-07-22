@@ -2139,8 +2139,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
       .toBe(true);
     const artBox = await art.boundingBox();
     expect(artBox).not.toBeNull();
-    // EN GRAND : nettement au-dessus des 48px de vignette collection (--collection-placeholder-size).
-    expect(artBox!.width).toBeGreaterThan(80);
+    // EN GRAND — le payoff DOMINE la carte (review R3.2 Frontend/Game-design) : un simple plancher
+    // « > vignette de grille » (>80px) resterait vert sur un rendu timide. On assert la taille RÉELLE
+    // rendue au viewport desktop par défaut (1280px) : `min(13.5rem, 62vw)` = 13.5rem = 216px → seuil
+    // ≥180px qui ROUGIT si le token retombe à `--space-10` (128px) ou plus petit. Empirique (#190) :
+    // le rendu vrai-navigateur, jamais un raisonnement de layout.
+    expect(artBox!.width).toBeGreaterThanOrEqual(180);
 
     // ---------- Stade d'évolution (affichage seul, roadmap statique bébé▸ado▸adulte) ----------
     await expect(page.locator("[data-creature-stage]")).toBeVisible();

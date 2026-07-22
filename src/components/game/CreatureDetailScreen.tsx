@@ -177,6 +177,11 @@ export function CreatureDetailScreen({ entry: initialEntry }: { readonly entry: 
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        // `justifyContent: center` → le mou vertical (fiche courte, art dominant) se répartit
+        // au-dessus ET au-dessous de la carte, jamais un vide qui « poole » en bas d'écran (review
+        // R3.2 Frontend : sinon ~36% du viewport vide en bas = « inachevé/timide »). Le lien retour
+        // reste EN FLUX au sommet de la colonne centrée (jamais recouvert, non-occlusion structurelle).
+        justifyContent: "center",
         gap: "var(--space-4)",
         padding: "var(--collection-page-padding)",
       }}
