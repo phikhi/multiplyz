@@ -35,11 +35,13 @@ describe("config créatures — refs d'illustration (story R2.1, #361)", () => {
 });
 
 describe("COMMITTED_CREATURE_SPECIES — registre de seed (story R3.1, #378)", () => {
-  it("Phase 1 (câblage, 0 dépense) : contient EXACTEMENT la démo cloudfox — défaut inerte (#180)", () => {
-    // Le défaut committé ne seede QUE l'art réel qui existe (cloudfox). Ce test rougit si un
-    // speciesKey socle est appendé PRÉMATURÉMENT (avant que son vrai PNG soit committé) → régression
-    // du seed (copie d'un fichier absent). Le flip Phase 2 (#377) met à jour ce test EN MÊME temps.
-    expect(COMMITTED_CREATURE_SPECIES).toEqual([DEMO_CREATURE_SPECIES]);
+  it("Phase 2 (#377, art committé) : démo cloudfox EN TÊTE + 41 espèces socle, sans doublon", () => {
+    // La démo `cloudfox` reste la 1ʳᵉ entrée (non dérivée d'un slot) ; suivent les 41 créatures socle
+    // réelles (35 œufs + 6 légendaires). Le VERROU dérivation↔registre (aucun oubli/orphelin) vit en
+    // `creature-catalog.test.ts` (`COMMITTED_CREATURE_SPECIES == [cloudfox, ...socle dérivé]`).
+    expect(COMMITTED_CREATURE_SPECIES[0]).toBe(DEMO_CREATURE_SPECIES);
+    expect(COMMITTED_CREATURE_SPECIES).toHaveLength(42); // 1 démo + 41 socle.
+    expect(new Set(COMMITTED_CREATURE_SPECIES).size).toBe(COMMITTED_CREATURE_SPECIES.length);
   });
 
   it("chaque espèce committée a une ref RENDABLE (isRenderableAssetRef ✓ — contrat de seed #189)", () => {

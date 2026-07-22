@@ -2,22 +2,17 @@ import "server-only";
 import { CREATURE_ASSET_DIR } from "@/config/creatures";
 import type { AppDatabase } from "@/lib/db";
 import { characters } from "@/lib/db/schema";
-import { legendaryForWorld } from "@/lib/game/collection";
 import { isRenderableAssetRef } from "@/lib/game/world-theme";
-import { strings } from "@/strings";
 import {
   buildCreaturePrompt,
-  creatureCharacterId,
   creatureRefImages,
-  creatureSpeciesKey,
-  deriveCreatureSplit,
   pickFromBank,
   resolveDeps,
   WorldGenError,
   type GeneratedCreature,
-  type GeneratedRarity,
   type GenerateWorldDeps,
 } from "./generate-world";
+import { deriveSocleCreatures } from "./creature-catalog";
 import { regenerateSocleContent, socleSeed, SOCLE_WORLD_COUNT } from "./socle";
 
 /**
@@ -140,68 +135,46 @@ export async function generateSocleCreatures(
 
   // Thème dérivé du seed du slot — IDENTIQUE à buildSocle (reproductibilité §7). Aucun master requis.
   const { theme } = regenerateSocleContent(socleSeed(slot));
-  // Le socle slot est servi à la position de carte `slot` (resolveWorld modulo) → world_index = slot.
-  const worldIndex = slot;
+  const conceptBase = slot % theme.creatureConcepts.length;
 
-  const split = deriveCreatureSplit(worldIndex);
-  const nameBase = worldIndex % strings.worldgen.creatureNames.length;
-  const storyBase = worldIndex % strings.worldgen.creatureStories.length;
-  const conceptBase = worldIndex % theme.creatureConcepts.length;
+  // Descripteurs = **source UNIQUE** `deriveSocleCreatures` (id/species/rareté/nom/histoire +
+  // `world_index`), IDENTIQUES au catalogue seedé (`seedSocleCreatures`) — anti-drift #164 : le
+  // catalogue GÉNÉRÉ et le catalogue SEEDÉ sont, par construction, les mêmes. Ici on ne (re)génère
+  // que les **octets d'art** (le seul non-déterministe) ; l'art réel est câblé via `writeAsset`.
+  const catalog = deriveSocleCreatures(slot);
 
-  // ── Œufs : communes puis rares (ordre stable), art réel via {base_style} TEXTE (jamais le master) ──
-  const eggCreatures: GeneratedCreature[] = [];
-  const eggPoolCount = split.commons + split.rares;
-  for (let s = 0; s < eggPoolCount; s += 1) {
-    const rarity: GeneratedRarity = s < split.commons ? "common" : "rare";
-    const speciesKey = creatureSpeciesKey(worldIndex, s);
-    const concept = pickFromBank(theme.creatureConcepts, conceptBase, s);
+  const generated: GeneratedCreature[] = [];
+  for (let i = 0; i < catalog.length; i += 1) {
+    const c = catalog[i];
+    // Concept du prompt : la légendaire (dernière, hors œufs) porte le concept DÉDIÉ ; les œufs
+    // piochent la banque du thème (sélection déterministe identique à `generateWorld`). Créature =
+    // {base_style} en TEXTE (+ bible optionnelle), JAMAIS le master (une créature n'est pas Teddy).
+    const concept =
+      c.rarity === "legendary"
+        ? theme.legendaryConcept
+        : pickFromBank(theme.creatureConcepts, conceptBase, i);
     const prompt = buildCreaturePrompt(config, concept, theme.accent);
     const bytes = await deps.generate({ prompt, ...creatureRefImages(deps.creatureStyleBible) });
-    const artRef = await writeAsset(slot, creatureAssetName(speciesKey), bytes);
+    const artRef = await writeAsset(slot, creatureAssetName(c.speciesKey), bytes);
     assertRenderableRef(artRef);
-    eggCreatures.push({
-      id: creatureCharacterId(worldIndex, s),
-      speciesKey,
-      nameDefault: pickFromBank(strings.worldgen.creatureNames, nameBase, s),
-      rarity,
-      inEggPool: true, // communes + rares = pool d'œufs (ECONOMY §4.2).
+    generated.push({
+      id: c.id,
+      speciesKey: c.speciesKey,
+      nameDefault: c.nameDefault,
+      rarity: c.rarity,
+      inEggPool: c.inEggPool,
       artRef,
-      story: pickFromBank(strings.worldgen.creatureStories, storyBase, s),
+      story: c.story,
     });
   }
 
-  // ── Légendaire (boss only, hors œufs) : concept DÉDIÉ, MÊME id/species que le boss (legendaryForWorld) ──
-  const legendary = legendaryForWorld(worldIndex);
-  const legendaryPrompt = buildCreaturePrompt(config, theme.legendaryConcept, theme.accent);
-  const legendaryBytes = await deps.generate({
-    prompt: legendaryPrompt,
-    ...creatureRefImages(deps.creatureStyleBible),
-  });
-  const legendaryArtRef = await writeAsset(
-    slot,
-    creatureAssetName(legendary.speciesKey),
-    legendaryBytes,
-  );
-  assertRenderableRef(legendaryArtRef);
-  const legendaryCreature: GeneratedCreature = {
-    id: legendary.id,
-    speciesKey: legendary.speciesKey,
-    nameDefault: legendary.nameDefault,
-    rarity: legendary.rarity, // "legendary"
-    inEggPool: legendary.inEggPool, // false (boss only).
-    artRef: legendaryArtRef,
-    story: legendary.story,
-  };
-
-  const all = [...eggCreatures, legendaryCreature];
-
   // ── Persistance atomique : câble l'art RÉEL dans characters (upsert par PK, idempotent) ──
   db.transaction((tx) => {
-    for (const c of all) {
+    for (const c of generated) {
       tx.insert(characters)
         .values({
           id: c.id,
-          worldIndex,
+          worldIndex: slot,
           speciesKey: c.speciesKey,
           nameDefault: c.nameDefault,
           rarity: c.rarity,
@@ -218,5 +191,5 @@ export async function generateSocleCreatures(
     }
   });
 
-  return all;
+  return generated;
 }

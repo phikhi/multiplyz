@@ -10,11 +10,12 @@
  * garde de sécurité partagée `isRenderableAssetRef` (`world-theme.ts`) que Teddy et les assets
  * per-monde (namespace `socle/`, aucune modification de la garde).
  *
- * **Honnêteté #180 (déclaré ≠ vécu)** : R2.1 ne CÂBLE que la consommation de `art_ref` + amorce
- * **UNE** vraie créature (`DEMO_CREATURE`, le renard des brumes du spike, dé-échantillonné +
- * détouré, `test-fixtures/creature/cloudfox.png`) pour rendre l'écran OBSERVABLE avec du vrai art.
- * Le **SET COMPLET** de créatures réelles (5 légendaires + communes/rares) = **R3.1** (pipeline de
- * génération). Les refs DB des autres créatures restent `placeholder://…` → repli emoji.
+ * **#180 (déclaré = vécu, story R3.1 #378)** : R2.1 a amorcé **UNE** vraie créature (`DEMO_CREATURE`,
+ * le renard des brumes du spike) ; **R3.1** a livré le **SET COMPLET** — les **41 créatures réelles**
+ * des 6 mondes socle (communes+rares + **6 légendaires**, run payant #377 signé game-design ADR 0009)
+ * committées en `test-fixtures/creature/<species>.png`, listées dans `COMMITTED_CREATURE_SPECIES`. La
+ * légendaire de chaque monde porte désormais son art réel (`legendaryForWorld`, `collection.ts`) →
+ * atteignable au boss. Le **tirage d'œuf** des communes/rares reste R4 (art committé, non tiré).
  */
 
 /**
@@ -30,7 +31,7 @@ export const CREATURE_ASSET_DIR = "socle/creature";
  * Ref rendable (`isRenderableAssetRef` ✓) de l'illustration d'une espèce de créature. Pure. Ne
  * construit JAMAIS une URL : renvoie le **ref relatif** que `<AssetImage>` re-valide puis résout
  * via `assetPublicUrl` — la sécurité du rendu reste portée par la garde partagée, jamais contournée.
- * Le pipeline R3.1 posera ces refs en base ; ici on ne l'utilise que pour la créature de démo.
+ * Consommé par `deriveSocleCreatures`/`legendaryForWorld` (art réel des créatures socle) + le seed.
  */
 export function creatureArtRef(species: string): string {
   return `${CREATURE_ASSET_DIR}/${species}.png`;
@@ -57,16 +58,65 @@ export const DEMO_CREATURE_ART_REF = creatureArtRef(DEMO_CREATURE_SPECIES);
  * `test-fixtures/creature/<species>.png`) → le seed d'asset (`seedCreatureSprites`) copie **chacune**
  * vers son chemin rendable `public/generated/socle/creature/<species>.png` (dev + E2E).
  *
- * **Phase 1 (R3.1, câblage — 0 dépense)** : contient **UNIQUEMENT** la créature de démo `cloudfox`
- * (la seule dont un vrai PNG est committé aujourd'hui). Le mécanisme de génération du set complet
- * (`generateSocleCreatures`) est câblé + testé, mais son **défaut committé reste inerte** : aucun
- * autre art réel n'existe encore → les autres créatures restent `placeholder://…` (repli emoji
- * no-fail de `<AssetImage>`), **0 régression CI** (honnêteté #180 : déclaré ≠ vécu).
+ * **Phase 2 (run payant owner-supervisé, #377 — FAIT, game-design signé ADR 0009)** : les **41
+ * créatures réelles** des 6 mondes socle (communes+rares+légendaire, `deriveCreatureSplit`) ont été
+ * générées puis **committées** dé-échantillonnées (`test-fixtures/creature/<species>.png`, 256² RGBA,
+ * même traitement que `cloudfox`). Leurs `speciesKey` sont **appendés** ci-dessous (données) → le
+ * seed (`seedCreatureSprites`) les recopie vers `public/generated/socle/creature/` au démarrage
+ * dev/E2E. Source unique (anti-drift #164) : le nom de fichier se DÉRIVE de l'espèce.
  *
- * **Phase 2 (run payant owner-supervisé, #377)** : une fois les vrais PNG des 6 mondes socle
- * générés (`scripts/gen-socle-creatures.local.ts`) puis **committés**, on **flip** ce registre en
- * **appendant** leurs `speciesKey` (une modification de **données**, une ligne) → le seed les rend
- * observables sans toucher au mécanisme. Source unique (anti-drift #164) : le seed dérive le nom de
- * fichier de chaque espèce, jamais un chemin dupliqué.
+ * **Cohérence dérivation↔art (garde #180/#189)** : cette liste doit correspondre **exactement** aux
+ * créatures que `deriveSocleCreatures` (`creature-catalog.ts`) dérive des 6 slots socle — un test
+ * (`socle == registre`) rougit si l'une diverge (une espèce sans PNG committé, ou un PNG orphelin).
  */
-export const COMMITTED_CREATURE_SPECIES: readonly string[] = [DEMO_CREATURE_SPECIES];
+export const COMMITTED_CREATURE_SPECIES: readonly string[] = [
+  // Créature de démo R2.1 (#361) — le renard des brumes du spike (non dérivée d'un slot socle).
+  DEMO_CREATURE_SPECIES,
+  // Monde socle 0 : 6 œufs (communes+rares) + 1 légendaire
+  "creature_world_0_0",
+  "creature_world_0_1",
+  "creature_world_0_2",
+  "creature_world_0_3",
+  "creature_world_0_4",
+  "creature_world_0_5",
+  "legendary_world_0",
+  // Monde socle 1 : 5 œufs (communes+rares) + 1 légendaire
+  "creature_world_1_0",
+  "creature_world_1_1",
+  "creature_world_1_2",
+  "creature_world_1_3",
+  "creature_world_1_4",
+  "legendary_world_1",
+  // Monde socle 2 : 6 œufs (communes+rares) + 1 légendaire
+  "creature_world_2_0",
+  "creature_world_2_1",
+  "creature_world_2_2",
+  "creature_world_2_3",
+  "creature_world_2_4",
+  "creature_world_2_5",
+  "legendary_world_2",
+  // Monde socle 3 : 6 œufs (communes+rares) + 1 légendaire
+  "creature_world_3_0",
+  "creature_world_3_1",
+  "creature_world_3_2",
+  "creature_world_3_3",
+  "creature_world_3_4",
+  "creature_world_3_5",
+  "legendary_world_3",
+  // Monde socle 4 : 5 œufs (communes+rares) + 1 légendaire
+  "creature_world_4_0",
+  "creature_world_4_1",
+  "creature_world_4_2",
+  "creature_world_4_3",
+  "creature_world_4_4",
+  "legendary_world_4",
+  // Monde socle 5 : 7 œufs (communes+rares) + 1 légendaire
+  "creature_world_5_0",
+  "creature_world_5_1",
+  "creature_world_5_2",
+  "creature_world_5_3",
+  "creature_world_5_4",
+  "creature_world_5_5",
+  "creature_world_5_6",
+  "legendary_world_5",
+];

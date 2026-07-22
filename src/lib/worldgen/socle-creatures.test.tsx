@@ -16,6 +16,7 @@ import {
   WorldGenError,
 } from "./generate-world";
 import * as referenceAssets from "./reference-assets";
+import { deriveSocleCreatures } from "./creature-catalog";
 import { regenerateSocleContent, socleSeed, SOCLE_WORLD_COUNT } from "./socle";
 import { defaultSocleCreatureWriteAsset, generateSocleCreatures } from "./socle-creatures";
 
@@ -171,6 +172,35 @@ describe("generateSocleCreatures — reproductibilité (§7) + idempotence", () 
     // Le thème dérive du seed du slot (identique à buildSocle) → son concept légendaire est prompté.
     const theme = regenerateSocleContent(socleSeed(5)).theme;
     expect(calls.some((c) => c.prompt.includes(theme.legendaryConcept.concept))).toBe(true);
+  });
+
+  it("MÊME dérivation que le catalogue seedé (#164) : descripteurs == deriveSocleCreatures(slot)", async () => {
+    // generateSocleCreatures et deriveSocleCreatures partagent la source unique → mêmes id/species/
+    // rareté/nom/histoire (seul l'art diffère : octets générés vs réf committée). Rougit si l'un des
+    // deux re-forke la dérivation (drift #164 catalogue-généré ↔ catalogue-seedé).
+    const slot = 3;
+    const generated = await generateSocleCreatures(db, slot, {
+      generate: recordingGenerate().generate,
+    });
+    const derived = deriveSocleCreatures(slot);
+    const strip = (c: {
+      id: string;
+      speciesKey: string;
+      nameDefault: string;
+      rarity: string;
+      inEggPool: boolean;
+      story: string;
+    }) => ({
+      id: c.id,
+      speciesKey: c.speciesKey,
+      nameDefault: c.nameDefault,
+      rarity: c.rarity,
+      inEggPool: c.inEggPool,
+      story: c.story,
+    });
+    expect(generated.map(strip)).toEqual(derived.map(strip));
+    // L'art aussi coïncide : le writeAsset par défaut renvoie exactement creatureArtRef(species).
+    expect(generated.map((c) => c.artRef)).toEqual(derived.map((c) => c.artRef));
   });
 
   it("idempotent : re-run n'ajoute aucune ligne (upsert par PK), art inchangé", async () => {

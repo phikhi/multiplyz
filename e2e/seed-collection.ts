@@ -26,7 +26,7 @@ import Database from "better-sqlite3";
 import { hash } from "@node-rs/argon2";
 import { resolveDatabasePath } from "../src/lib/db/config";
 import { nameKey } from "../src/lib/auth/validation";
-import { DEMO_CREATURE_ART_REF } from "../src/config/creatures";
+import { creatureArtRef, DEMO_CREATURE_ART_REF } from "../src/config/creatures";
 
 /** Prénom du profil dédié à la collection E2E (unique dans le foyer E2E). */
 export const COLLECTION_PROFILE_NAME = "Nino";
@@ -45,8 +45,9 @@ interface SeededOwnedCreature {
   readonly story: string;
   /**
    * Ref d'art **rendable** (`socle/creature/…`) → l'écran Collection rend cette créature en VRAI
-   * art (story R2.1, #361). Absent ⇒ `placeholder://…` (état par défaut, repli emoji). UNE seule
-   * créature réelle amorcée (observabilité #180) ; le set complet arrive à R3.1.
+   * art. Absent ⇒ `placeholder://…` (état par défaut, repli emoji). Story R3.1 (#378) : **4/5 en
+   * VRAI art socle** (démo cloudfox + 3 créatures socle réelles du run payant), **1 laissée en
+   * placeholder** pour continuer d'exercer la branche repli de `<AssetImage>` (garde E2E fallback).
    */
   readonly artRef?: string;
 }
@@ -54,33 +55,39 @@ interface SeededOwnedCreature {
 /** 5 créatures (3 communes + 1 rare + 1 légendaire) : row1=3, row2=2 sous la grille 3-colonnes. */
 export const COLLECTION_CREATURES: readonly SeededOwnedCreature[] = [
   {
-    // Créature de démo R2.1 (#361) : VRAI art (le renard des brumes du spike, `art_ref` rendable) —
-    // prouve que l'écran Collection consomme `art_ref` et rend un vrai <img> (les 4 autres restent
-    // en placeholder emoji). Le renommage est possible ; ici nom/histoire d'origine de la démo.
+    // Créature de démo R2.1 (#361) : VRAI art (le renard des brumes du spike, `art_ref` rendable).
     id: "e2e:collection:1",
     nameDefault: "Nuagou",
     rarity: "common",
     story: "Un renard des brumes, doux comme un nuage.",
     artRef: DEMO_CREATURE_ART_REF,
   },
+  // Laissée EN PLACEHOLDER (repli emoji) : exerce la branche fallback de `<AssetImage>` en E2E
+  // (la garde `data-asset-state="fallback"` de auth.spec cible cette carte) — mix voulu (#170).
   { id: "e2e:collection:2", nameDefault: "Bulline", rarity: "common", story: "Adore les bulles." },
   {
+    // VRAI art socle (run payant R3.1, game-design signé ADR 0009) : commune du monde 0.
     id: "e2e:collection:3",
     nameDefault: "Feuillette",
     rarity: "common",
     story: "Douce comme une feuille.",
+    artRef: creatureArtRef("creature_world_0_0"),
   },
   {
+    // VRAI art socle : créature du monde 3.
     id: "e2e:collection:4",
     nameDefault: "Cristalline",
     rarity: "rare",
     story: "Brille au soleil.",
+    artRef: creatureArtRef("creature_world_3_0"),
   },
   {
+    // VRAI art socle : une LÉGENDAIRE réelle (le gardien des glaces, monde 2) — l'art du boss.
     id: "e2e:collection:5",
     nameDefault: "Astréa",
     rarity: "legendary",
     story: "La gardienne des étoiles.",
+    artRef: creatureArtRef("legendary_world_2"),
   },
 ];
 
@@ -141,7 +148,7 @@ export async function seedCollection(): Promise<number> {
         // better-sqlite3 (raw SQL, sans le mode `boolean` de Drizzle) ne bind QUE
         // number/string/bigint/buffer/null — jamais un booléen JS brut : 0/1 explicite.
         creature.rarity === "legendary" ? 0 : 1, // légendaire hors œufs (ECONOMY §4.2)
-        // Créature de démo R2.1 (#361) : `art_ref` rendable → vrai art ; les autres → placeholder.
+        // `art_ref` rendable (4/5 : démo + 3 socle réels) → vrai art ; sinon placeholder (1/5, repli).
         creature.artRef ?? `placeholder://e2e/collection/${index}`,
         creature.story,
       );
