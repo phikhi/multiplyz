@@ -51,3 +51,22 @@ export const DEMO_CREATURE_SPECIES = "cloudfox";
  * ref des deux côtés.
  */
 export const DEMO_CREATURE_ART_REF = creatureArtRef(DEMO_CREATURE_SPECIES);
+
+/**
+ * **Registre des espèces de créatures dont une illustration RÉELLE est committée** (non-gitignorée,
+ * `test-fixtures/creature/<species>.png`) → le seed d'asset (`seedCreatureSprites`) copie **chacune**
+ * vers son chemin rendable `public/generated/socle/creature/<species>.png` (dev + E2E).
+ *
+ * **Phase 1 (R3.1, câblage — 0 dépense)** : contient **UNIQUEMENT** la créature de démo `cloudfox`
+ * (la seule dont un vrai PNG est committé aujourd'hui). Le mécanisme de génération du set complet
+ * (`generateSocleCreatures`) est câblé + testé, mais son **défaut committé reste inerte** : aucun
+ * autre art réel n'existe encore → les autres créatures restent `placeholder://…` (repli emoji
+ * no-fail de `<AssetImage>`), **0 régression CI** (honnêteté #180 : déclaré ≠ vécu).
+ *
+ * **Phase 2 (run payant owner-supervisé, #377)** : une fois les vrais PNG des 6 mondes socle
+ * générés (`scripts/gen-socle-creatures.local.ts`) puis **committés**, on **flip** ce registre en
+ * **appendant** leurs `speciesKey` (une modification de **données**, une ligne) → le seed les rend
+ * observables sans toucher au mécanisme. Source unique (anti-drift #164) : le seed dérive le nom de
+ * fichier de chaque espèce, jamais un chemin dupliqué.
+ */
+export const COMMITTED_CREATURE_SPECIES: readonly string[] = [DEMO_CREATURE_SPECIES];

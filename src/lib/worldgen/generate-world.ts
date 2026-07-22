@@ -270,9 +270,10 @@ export function buildTeddyPrompt(config: WorldGenConfig, theme: CuratedTheme): s
 /**
  * Assemble le prompt d'une **créature** (gabarit creature ART §5) : `{base_style}` résolu +
  * concept + traits + palette du monde. **Aucune référence au master Teddy** dans le prompt (une
- * créature n'est pas Teddy — ADR 0009).
+ * créature n'est pas Teddy — ADR 0009). **Exporté** : réutilisé tel quel par le chemin
+ * créature-seule du socle (`socle-creatures.ts`, R3.1) — même gabarit ART, aucune divergence.
  */
-function buildCreaturePrompt(
+export function buildCreaturePrompt(
   config: WorldGenConfig,
   concept: CreatureConcept,
   accent: string,
@@ -291,8 +292,11 @@ function buildCreaturePrompt(
  * `{base_style}` en TEXTE (mécanisme contractuel). **Ne renvoie JAMAIS le master Teddy** : le
  * générateur ne passe que la bible ici (une créature n'est pas Teddy). Renvoie `undefined` (pas
  * `[]`) quand la bible est vide → le client image omet le champ `refImages`.
+ *
+ * **Exporté** : réutilisé par le chemin créature-seule du socle (`socle-creatures.ts`, R3.1) —
+ * même règle d'ancrage (bible optionnelle, JAMAIS le master : une créature n'est pas Teddy).
  */
-function creatureRefImages(
+export function creatureRefImages(
   bible: readonly ImageRef[],
 ): { refImages: readonly ImageRef[] } | object {
   return bible.length > 0 ? { refImages: bible } : {};
@@ -308,8 +312,12 @@ export function creatureSpeciesKey(worldIndex: number, slot: number): string {
   return `creature_world_${worldIndex}_${slot}`;
 }
 
-/** Pioche un élément d'une banque **sans réutilisation** dans le monde (index dérivé + offset slot). */
-function pickFromBank<T>(bank: readonly T[], seedBase: number, slot: number): T {
+/**
+ * Pioche un élément d'une banque **sans réutilisation** dans le monde (index dérivé + offset slot).
+ * **Exporté** : réutilisé par le chemin créature-seule du socle (`socle-creatures.ts`, R3.1) → la
+ * sélection déterministe de concepts/noms/histoires reste **identique** à `generateWorld`.
+ */
+export function pickFromBank<T>(bank: readonly T[], seedBase: number, slot: number): T {
   return bank[(seedBase + slot) % bank.length];
 }
 
