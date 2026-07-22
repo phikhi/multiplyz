@@ -452,6 +452,12 @@ describe("strings (i18n FR)", () => {
     expect(strings.play.results.legendaryTitle.length).toBeGreaterThan(0);
   });
 
+  // Citation LITTÉRALE COPY §3 « Déblocage créature / œuf » (story #387, CLAUDE.md #164 : le
+  // commentaire du code affirme cette citation exacte — vérifiée ici mot pour mot).
+  it("beat Teddy du boss reveal = citation exacte COPY §3 « Déblocage créature / œuf »", () => {
+    expect(strings.play.results.legendaryTeddyBeat).toBe("Oooh, un nouvel ami ! Viens voir 👀");
+  });
+
   it("shell = solde pièces/éclats singulier n≤1 (règle FR CLAUDE.md #239, story R1.1 #337)", () => {
     expect(strings.shell.balanceCoins).toContain("{n}");
     expect(strings.shell.balanceCoinsPlural).toContain("{n}");

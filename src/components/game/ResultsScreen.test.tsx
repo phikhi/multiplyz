@@ -204,6 +204,13 @@ describe("ResultsScreen — révélation de la légendaire du boss (story 5.6, M
     expect(screen.getByText(FAKE_LEGENDARY.story)).toBeInTheDocument();
   });
 
+  // GARDE beat Teddy 1ʳᵉ personne (story #387) : consomme la string centralisée, jamais un texte
+  // en dur — rougit si le beat cesse d'être rendu sur la carte.
+  it("boss ⇒ affiche le beat Teddy 1ʳᵉ personne (story #387, COPY §3)", () => {
+    render(<ResultsScreen stars={1} coins={60} legendary={FAKE_LEGENDARY} onContinue={vi.fn()} />);
+    expect(screen.getByText(strings.play.results.legendaryTeddyBeat)).toBeInTheDocument();
+  });
+
   // GARDE « niveau non-boss ⇒ AUCUNE légendaire » (contraste, effet observable) : sans légendaire,
   // aucune carte n'est rendue.
   it("niveau non-boss (legendary null par défaut) ⇒ AUCUNE carte légendaire", () => {

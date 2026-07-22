@@ -106,17 +106,39 @@ function LegendaryReveal({ legendary }: { readonly legendary: GrantedLegendary }
         borderRadius: "var(--border-radius-lg)",
       }}
     >
+      {/* Beat Teddy 1ʳᵉ personne (story #387, game-design : la carte était « un peu clinique ») —
+          citation LITTÉRALE COPY §3 « Déblocage créature / œuf ». `aria-hidden` comme les autres
+          lignes de cette carte : le nom accessible du bloc entier reste porté par le `role="img"`
+          parent (`legendaryLabel`), cette réplique est un ajout de TON purement visuel, pas un
+          doublon de contenu a11y. */}
+      <p
+        aria-hidden="true"
+        style={{
+          margin: 0,
+          fontFamily: "var(--font-family-body)",
+          fontSize: "var(--font-size-sm)",
+          fontWeight: "var(--font-weight-bold)",
+          color: "var(--collection-text-muted)",
+        }}
+      >
+        {strings.play.results.legendaryTeddyBeat}
+      </p>
       {/* Illustration de la légendaire (story R2.1, #361) : consomme `legendary.artRef` via le
           renderer guardé partagé `<AssetImage>`. `art_ref` rendable (`socle/creature/…`) → VRAI art ;
           `placeholder://…` (état par défaut, art réel = R3.1) → repli emoji dans le médaillon.
           **Décoratif** : le `<div role="img" aria-label>` parent porte déjà le nom accessible complet
           (« Créature légendaire gagnée : {nom} 🌟 ») → l'art est un doublon a11y (même a11y que
-          l'ancien médaillon emoji `aria-hidden`). EN FLUX → même emplacement, aucune occlusion. */}
+          l'ancien médaillon emoji `aria-hidden`). EN FLUX → même emplacement, aucune occlusion.
+          **Taille EN GRAND** (story #387, discovered review #386, extension R3.2 #379/#170/#180) :
+          `--results-legendary-art-size` (~128-144px, tokens.css) — le boss reveal est LE moment
+          d'art le plus dramatique (légendaire unique, 1×/monde), plus grand que Teddy
+          (`--teddy-results-size` 96px), jamais `--space-8` (64px, ancienne taille — le plus petit
+          élément de l'écran, cf. rétro tokens.css). */}
       <AssetImage
         assetRef={legendary.artRef}
         alt={legendary.name}
         decorative
-        width="var(--space-8)"
+        width="var(--results-legendary-art-size)"
         dataAsset="results-legendary-art"
         fallback={
           <span
@@ -125,8 +147,8 @@ function LegendaryReveal({ legendary }: { readonly legendary: GrantedLegendary }
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: "var(--space-8)",
-              height: "var(--space-8)",
+              width: "var(--results-legendary-art-size)",
+              height: "var(--results-legendary-art-size)",
               borderRadius: "var(--border-radius-full)",
               backgroundColor: "var(--collection-placeholder-bg)",
               color: "var(--collection-placeholder-glyph)",
