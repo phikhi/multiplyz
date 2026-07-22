@@ -18,7 +18,7 @@ import {
   type GeneratedRarity,
   type GenerateWorldDeps,
 } from "./generate-world";
-import { regenerateSocleContent, socleSeed } from "./socle";
+import { regenerateSocleContent, socleSeed, SOCLE_WORLD_COUNT } from "./socle";
 
 /**
  * **Génération réelle des CRÉATURES d'un monde du socle** (story R3.1, #378, épic R3 #319) —
@@ -120,6 +120,18 @@ export async function generateSocleCreatures(
   slot: number,
   overrides?: Partial<GenerateWorldDeps>,
 ): Promise<GeneratedCreature[]> {
+  // ── Garde de borne du slot (Backend #380 review) : le socle n'a que SOCLE_WORLD_COUNT mondes,
+  // servis par `resolveWorld` à la position `slot % SOCLE_WORLD_COUNT`. Un `slot` hors [0, N)
+  // persisterait des lignes `characters` (world_index=slot) à une position de carte que le
+  // résolveur ne sert JAMAIS avec CE thème (thème = `slot % N` → divergence). On lève LOUD AVANT
+  // toute génération/écriture (jamais de dépense ni de ligne fantôme). Mutation-preuve : retirer
+  // cette garde rend vert le test `slot ≥ SOCLE_WORLD_COUNT → rejet + characters vide`. ──
+  if (!Number.isInteger(slot) || slot < 0 || slot >= SOCLE_WORLD_COUNT) {
+    throw new WorldGenError(
+      `slot socle invalide (${slot}) : attendu un entier dans [0, ${SOCLE_WORLD_COUNT}) ` +
+        `(le socle n'a que ${SOCLE_WORLD_COUNT} mondes ; resolveWorld sert socle[slot % ${SOCLE_WORLD_COUNT}]).`,
+    );
+  }
   const deps = resolveDeps(overrides);
   const { config } = deps;
   // writeAsset créature-socle : défaut **créature-scopé** (`socle/creature/<species>.png`), pas le

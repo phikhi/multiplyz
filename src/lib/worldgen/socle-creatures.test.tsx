@@ -16,7 +16,7 @@ import {
   WorldGenError,
 } from "./generate-world";
 import * as referenceAssets from "./reference-assets";
-import { regenerateSocleContent, socleSeed } from "./socle";
+import { regenerateSocleContent, socleSeed, SOCLE_WORLD_COUNT } from "./socle";
 import { defaultSocleCreatureWriteAsset, generateSocleCreatures } from "./socle-creatures";
 
 /**
@@ -173,7 +173,7 @@ describe("generateSocleCreatures — reproductibilité (§7) + idempotence", () 
     expect(calls.some((c) => c.prompt.includes(theme.legendaryConcept.concept))).toBe(true);
   });
 
-  it("idempotent : re-run REMPLACE l'art (upsert par PK), aucune ligne dupliquée", async () => {
+  it("idempotent : re-run n'ajoute aucune ligne (upsert par PK), art inchangé", async () => {
     const slot = 0;
     const c1 = await generateSocleCreatures(db, slot, { generate: recordingGenerate().generate });
     const count1 = db.select().from(characters).all().length;
@@ -181,6 +181,25 @@ describe("generateSocleCreatures — reproductibilité (§7) + idempotence", () 
     expect(db.select().from(characters).all()).toHaveLength(count1); // pas de doublon.
     expect(c2.map((c) => c.id)).toEqual(c1.map((c) => c.id));
     expect(c2.map((c) => c.artRef)).toEqual(c1.map((c) => c.artRef));
+  });
+});
+
+describe("generateSocleCreatures — garde de borne du slot (Backend #380)", () => {
+  it("slot === SOCLE_WORLD_COUNT → rejet LOUD + characters reste VIDE (rien généré/persisté)", async () => {
+    // Mutation-preuve NOMMÉE de la garde : sans elle, slot=6 génère un thème valide (6 % 6 = 0)
+    // et PERSISTE des lignes à une position que resolveWorld ne sert jamais avec ce thème.
+    const { generate } = recordingGenerate();
+    await expect(
+      generateSocleCreatures(db, SOCLE_WORLD_COUNT, { generate }),
+    ).rejects.toBeInstanceOf(WorldGenError);
+    expect(db.select().from(characters).all()).toHaveLength(0); // aucune ligne fantôme.
+    expect(generate).not.toHaveBeenCalled(); // garde AVANT toute génération (0 dépense).
+  });
+
+  it("slot négatif ou non entier → rejet LOUD (bornes basse + intégrité)", async () => {
+    await expect(generateSocleCreatures(db, -1)).rejects.toBeInstanceOf(WorldGenError);
+    await expect(generateSocleCreatures(db, 1.5)).rejects.toBeInstanceOf(WorldGenError);
+    expect(db.select().from(characters).all()).toHaveLength(0);
   });
 });
 
