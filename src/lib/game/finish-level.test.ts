@@ -1,9 +1,12 @@
+import { createElement } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
+import { render } from "@testing-library/react";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { characters, collection, collectionKey, ledger, profiles } from "@/lib/db/schema";
 import type { EconomyConfig, MapConfig } from "@/config/server-config";
+import { ResultsScreen } from "@/components/game/ResultsScreen";
 import { loadStars, recordStars } from "./progress";
 import { getUnlockedWorldCount } from "./unlock";
 import { loadWallet } from "./wallet";
@@ -559,5 +562,47 @@ describe("finishLevel — gardes de forme (payload public non fiable, #36)", () 
     expect(result.ok && result.stars).toBe(0);
     // Le niveau est bien complété (ligne progress présente) même à 0★.
     expect(loadStars(db, { profileId, worldIndex: 0, levelIndex: 0 })).toBe(0);
+  });
+});
+
+describe("finishLevel → ResultsScreen — chemin de révélation RÉEL bout-en-bout (story R3.3, #381)", () => {
+  // ▶▶ MUTATION-PROUVÉ SUR LE CHEMIN DE RÉVÉLATION (AC2 #381, garde #206) : ce test rend
+  // ENSEMBLE la sortie RÉELLE de `finishLevel` (jamais un objet `legendary` reconstruit à la
+  // main dans le test, contrairement à `ResultsScreen.test.tsx`) branchée dans
+  // `ResultsScreen`/`LegendaryReveal` — la VRAIE chaîne serveur → UI du reveal boss. ROUGIT si
+  // le chemin casse à N'IMPORTE quel maillon :
+  //  (a) `finishLevel`/`legendaryForWorld` régresse vers `placeholder://legendary/<i>` (au lieu
+  //      du vrai `socle/creature/legendary_world_<i>.png`, R3.1 #378) ;
+  //  (b) `LegendaryReveal` cesse de propager `legendary.artRef` à `<AssetImage assetRef=…>` ;
+  //  (c) `isRenderableAssetRef` rejette la forme `socle/creature/…`.
+  // Distinct de `collection.test.ts` (pin `legendaryForWorld` ISOLÉMENT, jamais le rendu) ET de
+  // `ResultsScreen.test.tsx` (pin le rendu à partir d'un `artRef` CHOISI À LA MAIN, jamais issu
+  // d'un vrai `finishLevel`) : ni l'un ni l'autre ne rougirait si SEUL le câblage de
+  // `finish-level.ts` (l'affectation `artRef: descriptor.artRef`) régressait vers un
+  // placeholder en dur — ce test-ci le couvre spécifiquement (src attendu en LITTÉRAL, jamais
+  // recalculé via `legendaryForWorld`/`result` dans l'assertion, pour ne pas retomber dans le
+  // piège tautologique #206).
+  it("BOSS battu ⇒ la révélation rend un VRAI <img> (pas le placeholder), src exact", () => {
+    completeUpTo(0, BOSS);
+    const result = finish(0, BOSS, 3);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.legendary).not.toBeNull();
+    if (result.legendary === null) return;
+
+    render(
+      createElement(ResultsScreen, {
+        stars: result.stars,
+        coins: result.balance.coins,
+        legendary: result.legendary,
+        onContinue: () => {},
+      }),
+    );
+
+    const art = document.querySelector('[data-asset="results-legendary-art"]');
+    expect(art?.tagName).toBe("IMG");
+    expect(art).toHaveAttribute("data-asset-state", "rendered");
+    // Réf LITTÉRALE (monde 0 socle) — pas `placeholder://legendary/0`.
+    expect(art).toHaveAttribute("src", "/generated/socle/creature/legendary_world_0.png");
   });
 });
