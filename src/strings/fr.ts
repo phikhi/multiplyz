@@ -350,9 +350,14 @@ export const fr = {
        * Révélation de la **créature légendaire** gagnée au boss (story 5.6, MAP §6, COPY §3
        * « déblocage créature »). Voix de Teddy, intrépide/joyeuse. `legendaryTitle` = annonce
        * visible ; `legendaryLabel` = nom accessible complet (`{nom}` interpolé) — doublage a11y.
+       * `legendaryTeddyBeat` (story #387, game-design : la carte était « un peu clinique ») =
+       * réplique Teddy 1ʳᵉ personne, citation LITTÉRALE de COPY §3 « Déblocage créature / œuf ».
+       * Purement décorative (l'annonce a11y reste `legendaryLabel` seul, `aria-hidden` comme le
+       * reste de la carte — pas de doublon de nom accessible).
        */
       legendaryTitle: "Créature légendaire !",
       legendaryLabel: "Créature légendaire gagnée : {nom} 🌟",
+      legendaryTeddyBeat: "Oooh, un nouvel ami ! Viens voir 👀",
       continue: "Continuer",
       /**
        * Nom accessible de Teddy sur les résultats (story R2.2, #360). Deux variantes selon la

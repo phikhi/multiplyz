@@ -447,6 +447,22 @@
   --results-star-filled:  var(--color-text-primary);
   --results-star-empty:   var(--color-text-secondary);
 
+  /* Art de la légendaire au BOSS REVEAL (story #387, discovered en review #386, extension
+     R3.2 #379/#170/#180) : moment le PLUS dramatique du jeu (légendaire unique, 1×/monde,
+     gagnée au boss) — rendait à `--space-8` (64px), le PLUS PETIT élément de l'écran
+     résultats (< Teddy 96px `--teddy-results-size`, < 1/3 de la fiche créature 216px
+     `--creature-detail-art-size`). ⚙️ calibrable (playtest enfant) : `min(9rem, 40vw)`
+     ≈ 128-144px — décisivement > 64px, ≥ Teddy (96px), mais SANS le plein 216px de la
+     fiche (budget vertical résultats plus serré : titre + Teddy + étoiles + pièces + carte
+     légendaire + message + CTA doivent tous tenir, contrairement à la fiche qui n'a que
+     titre + art + stade/histoire + retour). Token DÉDIÉ, jamais `--space-8` (une valeur
+     d'espacement réutilisée comme taille d'art masque un ⚙️ de magnitude visuelle sous un
+     nom générique — CLAUDE.md « paramètre nommé par une spec »). Garde-MAGNITUDE E2E (pas
+     garde-plancher, rétro R3.2 #379 : `artBox.width >= 80` restait vert sur un rendu
+     sous-livré) : `auth.spec.ts` asserte `artBox.width >= 110`, rougit si ce token régresse
+     vers 64px. */
+  --results-legendary-art-size: min(9rem, 40vw);
+
   /* ---------- ESPACE PARENT — TABLEAU DE BORD (story 7.7, WIREFRAMES §7,
      PLAN §Espace parent) ----------
      Assemblage des agrégats read-only 7.2/7.4 (justesse/rapidité/maîtrise/à-revoir/

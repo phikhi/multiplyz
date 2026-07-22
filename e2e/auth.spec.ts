@@ -3305,6 +3305,12 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
   // — jamais rejouer les niveaux normaux qui précèdent (lent, hors-scope : le sujet est la
   // révélation). Session injectée directement (comme Milo/Nino/Timéo) — surface disjointe des
   // autres profils `describe.serial`, zéro couplage inter-tests.
+  //
+  // Story #387 (discovered en review #386, extension R3.2 #379) réutilise ce MÊME test pour
+  // durcir la garde en garde-MAGNITUDE (pas seulement présence/format) : l'art légendaire
+  // rendait à `--space-8` (64px, le plus petit élément de l'écran résultats) — désormais
+  // `--results-legendary-art-size` (~128-144px, tokens.css). Seuil `artBox.width >= 110` rougit
+  // si le token régresse, + non-occlusion étendue au CTA « Continuer ».
   // ==========================================================================
   test("boss battu → révélation de la légendaire avec le VRAI art (pas le placeholder, story R3.3 #381, capture)", async ({
     page,
@@ -3389,6 +3395,33 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     expect(geometry).not.toBeNull();
     expect(geometry!.artTop).toBeGreaterThanOrEqual(geometry!.headingBottom);
 
+    // ---------- Magnitude du payoff (story #387, extension R3.2 #379 « garde-plancher ≠
+    // garde-magnitude ») ----------
+    // L'art légendaire au boss reveal est LE moment d'art le plus dramatique du jeu (légendaire
+    // unique, 1×/monde) — `--results-legendary-art-size` (tokens.css, ~128-144px) doit
+    // DÉCISIVEMENT dépasser l'ancienne taille `--space-8` (64px, le plus petit élément de l'écran
+    // résultats avant #387). Un plancher trop bas (ex. `>= 80`, cf. rétro R3.2 #379 : ce seuil
+    // restait vert sur un rendu sous-livré 128px face à un rejet game-design à 216px) ne rougirait
+    // PAS si le token régressait vers `--teddy-results-size` (96px) ; `>= 110` rougit dès que le
+    // token repasse sous ~110px (régression vers 64-96px).
+    const artBox = await art.boundingBox();
+    expect(artBox).not.toBeNull();
+    expect(artBox!.width).toBeGreaterThanOrEqual(110);
+
+    // Budget vertical des résultats TENU malgré l'agrandissement (titre + Teddy + étoiles + pièces
+    // + carte légendaire agrandie + message + CTA, cf. tokens.css « budget résultats plus serré
+    // que la fiche créature ») : le CTA « Continuer » reste rendu et non recouvert par la carte
+    // légendaire élargie (élément SUIVANT en flux, JSDoc `LegendaryReveal` — non-occlusion
+    // structurelle, mais vérifiée en géométrie RENDUE réelle, jamais raisonnée, rétro #190).
+    const continueButton = page.getByRole("button", { name: strings.play.results.continue });
+    await expect(continueButton).toBeVisible();
+    const cardBox = await legendaryCard.boundingBox();
+    const continueBox = await continueButton.boundingBox();
+    expect(cardBox).not.toBeNull();
+    expect(continueBox).not.toBeNull();
+    expect(continueBox!.y).toBeGreaterThanOrEqual(cardBox!.y + cardBox!.height);
+
     await page.screenshot({ path: "docs/captures/381-boss-reveal.png", fullPage: true });
+    await page.screenshot({ path: "docs/captures/387-boss-reveal-agrandi.png", fullPage: true });
   });
 });
