@@ -9,8 +9,8 @@ import { SOCLE_WORLD_COUNT } from "./socle";
  * **Dérivation déterministe du CATALOGUE de créatures** (story R3.1, #378, épic R3 #319) — module
  * **PUR** (aucun `server-only`, aucun client image) : c'est la source unique de la répartition
  * rareté/monde/nom/histoire des créatures d'un monde (ECONOMY §5, WORLDGEN §4.3). Extrait de
- * `generate-world.ts` (server-only) pour être **importable par le chemin de migration** (`runMigrations`)
- * et par les seeds `tsx` — même patron pur/server-only que `socle.ts` (pur) ↔ `socle-assets.ts` (I/O).
+ * `generate-world.ts` (server-only) pour être **importable HORS du chemin server-only** (migration,
+ * seeds `tsx`, R4) — même patron pur/server-only que `socle.ts` (pur) ↔ `socle-assets.ts` (I/O).
  *
  * **Pourquoi pur** : seuls les **octets d'art** d'une créature sont non-déterministes (produits par
  * le run payant Gemini, désormais committés en `test-fixtures/creature/<species>.png`). **TOUT le
@@ -156,9 +156,13 @@ export function socleCreatureSpeciesKeys(): string[] {
  * même garde que `seedSocleWorlds`/`ensureCharacterInTx`). **Composé avec le boss** : mêmes clés
  * (`creatureCharacterId`/`legendaryForWorld`) → un grant ultérieur ne duplique rien.
  *
- * **Reachability R3 (game-design)** : les légendaires sont atteignables au boss (art réel via
- * `legendaryForWorld`) ; les communes/rares sont **catalog-présentes** (in_egg_pool=true) mais le
- * **tirage d'œuf est R4** (aucun draw ici). Transaction = amorçage atomique.
+ * **Statut R3.1 (#378) — fondation, consommateur R4 (#155/#127)** : ce seed est **prêt** (committé +
+ * unit-testé) mais **n'est PAS encore appelé au runtime** — ni par `runMigrations`, ni ailleurs.
+ * Peupler `characters` avec les communes/rares **maintenant serait INVISIBLE** : le Pokédex
+ * (`loadCollection`) lit `collection` (possessions), pas le catalogue → une commune/rare non possédée
+ * ne s'affiche pas, et elle ne s'obtient qu'au **tirage d'œuf, qui arrive en R4**. R4 câblera
+ * l'invocation de ce seed **avec** le draw. En R3, seules les **légendaires** sont vécues (art réel
+ * via `legendaryForWorld` + boss, **sans** ce seed). Transaction = amorçage atomique (quand R4 l'appellera).
  */
 export function seedSocleCreatures(db: AppDatabase): void {
   db.transaction((tx) => {
