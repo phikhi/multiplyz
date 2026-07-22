@@ -11,6 +11,7 @@ import {
   ACCURACY_HISTORY_DAILY_RATIOS,
 } from "./seed-accuracy-history";
 import { CANARI_PROFILE_NAME, CANARI_PROFILE_PIN } from "./seed-canari";
+import { BOSS_PROGRESS_SESSION_TOKEN, BOSS_PROGRESS_COMPLETED_LEVELS } from "./seed-boss-progress";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -3288,5 +3289,106 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     // sur l'ENSEMBLE du parcours ci-dessus (écoute posée en tête de test, #305).
     const hydrationMismatches = consoleErrors.filter((text) => hydrationMismatchPattern.test(text));
     expect(hydrationMismatches).toEqual([]);
+  });
+
+  // ==========================================================================
+  // RÉVÉLATION DU BOSS — VRAI art légendaire (story R3.3, #381, MAP §6, ECONOMY §3.2/§3.3).
+  // #381 clôt le gap #180 identifié en review de PR #380 : `legendaryForWorld` (R3.1, #378) rend
+  // désormais l'art RÉEL committé (`socle/creature/legendary_world_<i>.png`), câblé par
+  // `finishLevel` → `GrantedLegendary.artRef` → `ResultsScreen`/`LegendaryReveal` — mais AUCUNE
+  // preuve à effet observable n'existait que cette chaîne complète produit un VRAI `<img>` (pas
+  // le placeholder) au moment DRAMATIQUE de la révélation (le canari #326 traverse `/résultats`
+  // mais joue délibérément un niveau NORMAL — cf. « SCOPE R1 » plus haut — jamais le boss).
+  //
+  // Profil DÉDIÉ (`Iris`, `seed-boss-progress.ts`) : `levelsPerWorld` (10) niveaux déjà complétés
+  // → le nœud COURANT est DIRECTEMENT le boss (dernier nœud, `bossIndex = levelsPerWorld`, MAP §6)
+  // — jamais rejouer les niveaux normaux qui précèdent (lent, hors-scope : le sujet est la
+  // révélation). Session injectée directement (comme Milo/Nino/Timéo) — surface disjointe des
+  // autres profils `describe.serial`, zéro couplage inter-tests.
+  // ==========================================================================
+  test("boss battu → révélation de la légendaire avec le VRAI art (pas le placeholder, story R3.3 #381, capture)", async ({
+    page,
+  }) => {
+    // Boss = `bossQuestionCount` ⚙️ (13 par défaut) > niveau normal (10, cf. canari) : marge large.
+    test.setTimeout(120_000);
+
+    const cookie = {
+      name: "mz_session",
+      value: BOSS_PROGRESS_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+    await page.goto("/carte");
+    await page.waitForLoadState("networkidle");
+
+    // Preuve que le nœud courant EST bien le boss (le seed a complété exactement
+    // `levelsPerWorld` niveaux) — jamais un autre nœud par coïncidence.
+    const currentNode = page.locator('[data-map-node-status="current"]').first();
+    await expect(currentNode).toBeVisible();
+    await expect(currentNode).toHaveAttribute(
+      "data-map-node",
+      String(BOSS_PROGRESS_COMPLETED_LEVELS),
+    );
+
+    await enterCurrentLevelFromMap(page);
+
+    // Joue le boss jusqu'au bout — no-fail (PRODUCT §2.2), réponses toujours justes (le sujet ici
+    // est la RÉVÉLATION, pas l'étayage de re-essai déjà couvert ailleurs). Boucle bornée
+    // généreusement (`bossQuestionCount` ⚙️ 13 par défaut, contre 10 pour un niveau normal).
+    for (let i = 0; i < 30; i++) {
+      const onResults = await page
+        .getByRole("heading", { level: 1, name: strings.play.results.title })
+        .isVisible()
+        .catch(() => false);
+      if (onResults) break;
+
+      const feedbackVisible = await feedbackStatus(page)
+        .isVisible()
+        .catch(() => false);
+      if (feedbackVisible) {
+        await page.getByRole("button", { name: strings.play.correct.next }).click();
+        continue;
+      }
+      await answerCorrectly(page);
+    }
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.play.results.title }),
+    ).toBeVisible();
+
+    // ---------- La révélation de la légendaire : VRAI art, pas le placeholder (#381) ----------
+    const legendaryCard = page.locator("[data-results-legendary]");
+    await expect(legendaryCard).toBeVisible();
+
+    const art = page.locator('[data-asset="results-legendary-art"]');
+    await expect(art).toBeVisible();
+    // VRAI <img> rendu (pas le repli emoji `data-asset-state="fallback"`) — assertion NON
+    // permissive (#239) : ref EXACTE attendue pour le monde 0 (le socle de secours partagé,
+    // « Forêt enchantée »), jamais un pattern générique qui laisserait passer un placeholder.
+    await expect(art).toHaveAttribute("data-asset-state", "rendered");
+    await expect(art).toHaveAttribute("src", "/generated/socle/creature/legendary_world_0.png");
+    // Réellement CHARGÉE (pas seulement un `<img>` pointant un fichier 404) — même garde que le
+    // Teddy des résultats du canari #326.
+    expect(await art.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+
+    // Non-occlusion (#170/#278b) : l'illustration est rendue EN FLUX (aucun `position:absolute`/
+    // `fixed`, cf. JSDoc `LegendaryReveal`/`AssetImage`) donc ne peut PAS recouvrir le titre hôte
+    // ni en être recouverte — vérifié en GÉOMÉTRIE RENDUE réelle (jamais raisonnée, rétro #190),
+    // pas seulement présumé « en flux donc sûr ».
+    const geometry = await page.evaluate(() => {
+      const heading = document.querySelector("h1");
+      const artEl = document.querySelector('[data-asset="results-legendary-art"]');
+      if (heading === null || artEl === null) return null;
+      return {
+        headingBottom: heading.getBoundingClientRect().bottom,
+        artTop: artEl.getBoundingClientRect().top,
+      };
+    });
+    expect(geometry).not.toBeNull();
+    expect(geometry!.artTop).toBeGreaterThanOrEqual(geometry!.headingBottom);
+
+    await page.screenshot({ path: "docs/captures/381-boss-reveal.png", fullPage: true });
   });
 });
