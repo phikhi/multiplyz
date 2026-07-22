@@ -95,8 +95,13 @@ function CreaturePlaceholder() {
   );
 }
 
-/** Badge de rareté : glyphe distinct + LABEL texte (doublage a11y, jamais couleur seule). */
-function RarityBadge({ rarity }: { readonly rarity: Rarity }) {
+/**
+ * Badge de rareté : glyphe distinct + LABEL texte (doublage a11y, jamais couleur seule).
+ * **Exporté** (réutilisé par la fiche créature, story R3.2 #379, WIREFRAMES §5b — même badge
+ * qu'en grille, cohérence visuelle inter-écrans plutôt que le comptage d'étoiles brut du
+ * wireframe lo-fi ; a11y/contraste déjà prouvés ci-dessous, jamais réinventés).
+ */
+export function RarityBadge({ rarity }: { readonly rarity: Rarity }) {
   return (
     <span
       data-collection-rarity={rarity}
@@ -116,8 +121,11 @@ function RarityBadge({ rarity }: { readonly rarity: Rarity }) {
   );
 }
 
-/** Formulaire inline de renommage (WIREFRAMES §5b). */
-function RenameForm({
+/**
+ * Formulaire inline de renommage (WIREFRAMES §5b). **Exporté** (réutilisé TEL QUEL par la fiche
+ * créature, story R3.2 #379 — même logique de renommage, aucune duplication).
+ */
+export function RenameForm({
   entry,
   onSaved,
   onCancel,
@@ -255,7 +263,6 @@ function CreatureCard({
   return (
     <li
       data-collection-card={entry.characterId}
-      aria-label={cardAccessibleName(entry)}
       style={{
         listStyle: "none",
         display: "flex",
@@ -273,56 +280,79 @@ function CreatureCard({
         textAlign: "center",
       }}
     >
-      {/* Illustration de la créature (story R2.1, #361) : consomme `entry.artRef` via le renderer
-          guardé partagé `<AssetImage>` (réutilise `isRenderableAssetRef`/`assetPublicUrl`, R2.2).
-          `art_ref` rendable (`socle/creature/…`) → VRAI art ; `placeholder://…` (état par défaut,
-          set complet = R3.1) → repli emoji. **Décoratif** : la carte `<li aria-label>` porte déjà le
-          nom accessible (nom + rareté) → l'art est un doublon a11y (même a11y que l'ancien
-          placeholder `aria-hidden`). EN FLUX (pas de position absolue) → même slot que le
-          placeholder, géométrie de grille 3-col inchangée (WIREFRAMES §8). */}
-      <AssetImage
-        assetRef={entry.artRef}
-        alt={entry.displayName}
-        decorative
-        width="var(--collection-placeholder-size)"
-        dataAsset="collection-creature"
-        fallback={<CreaturePlaceholder />}
-      />
-      <span
-        data-collection-name=""
+      {/* Navigation vers la fiche créature (story R3.2, #379, WIREFRAMES §5b) : tap sur la carte
+          → détail. Le `<Link>` porte le nom accessible (nom + rareté, doublage a11y) — il
+          remplace l'ancien `aria-label` du `<li>` (le `<li>` n'est pas nativement interactif ;
+          le lien, lui, est focalisable/annoncé au clavier, une amélioration a11y). EN FLUX (pas
+          de position absolue) → aucune garde d'occlusion requise par construction (#170/#278). */}
+      <Link
+        href={`/collection/${encodeURIComponent(entry.characterId)}`}
+        aria-label={cardAccessibleName(entry)}
+        className="mz-focusable"
         style={{
-          fontFamily: "var(--font-family-display)",
-          fontSize: "var(--font-size-md)",
-          fontWeight: "var(--font-weight-bold)",
-          color: "var(--collection-text)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "var(--space-2)",
+          width: "100%",
+          minWidth: 0,
+          textDecoration: "none",
+          color: "inherit",
+          borderRadius: "var(--border-radius-md)",
         }}
       >
-        {entry.displayName}
-      </span>
-      <RarityBadge rarity={entry.rarity} />
-      {entry.story !== "" && (
-        <p
-          data-collection-story=""
+        {/* Illustration de la créature (story R2.1, #361) : consomme `entry.artRef` via le
+            renderer guardé partagé `<AssetImage>` (réutilise `isRenderableAssetRef`/
+            `assetPublicUrl`, R2.2). `art_ref` rendable (`socle/creature/…`) → VRAI art ;
+            `placeholder://…` (état par défaut, set complet = R3.1) → repli emoji. **Décoratif** :
+            le `<Link>` ci-dessus porte déjà le nom accessible (nom + rareté) → l'art est un
+            doublon a11y (même a11y que l'ancien placeholder `aria-hidden`). EN FLUX (pas de
+            position absolue) → même slot que le placeholder, géométrie de grille 3-col
+            inchangée (WIREFRAMES §8). */}
+        <AssetImage
+          assetRef={entry.artRef}
+          alt={entry.displayName}
+          decorative
+          width="var(--collection-placeholder-size)"
+          dataAsset="collection-creature"
+          fallback={<CreaturePlaceholder />}
+        />
+        <span
+          data-collection-name=""
           style={{
-            margin: 0,
-            fontFamily: "var(--font-family-body)",
-            // Police un cran au-dessus (16px, `--font-size-sm` 14px cassait en mur de 3+
-            // lignes fragmentées à 375px — issue #272, playtest-⚙️ confirmé propriétaire).
-            fontSize: "var(--collection-card-description-font-size)",
-            color: "var(--collection-text-muted)",
-            // Troncature PROPRE 2 lignes (ellipsis) plutôt qu'un mur de texte fragmenté sur
-            // 3+ lignes irrégulières — token ⚙️ centralisé (jamais un nombre en dur), même
-            // patron que `--collection-grid-columns` consommé via `var()`.
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical",
-            WebkitLineClamp: "var(--collection-card-description-line-clamp)",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            fontFamily: "var(--font-family-display)",
+            fontSize: "var(--font-size-md)",
+            fontWeight: "var(--font-weight-bold)",
+            color: "var(--collection-text)",
           }}
         >
-          {entry.story}
-        </p>
-      )}
+          {entry.displayName}
+        </span>
+        <RarityBadge rarity={entry.rarity} />
+        {entry.story !== "" && (
+          <p
+            data-collection-story=""
+            style={{
+              margin: 0,
+              fontFamily: "var(--font-family-body)",
+              // Police un cran au-dessus (16px, `--font-size-sm` 14px cassait en mur de 3+
+              // lignes fragmentées à 375px — issue #272, playtest-⚙️ confirmé propriétaire).
+              fontSize: "var(--collection-card-description-font-size)",
+              color: "var(--collection-text-muted)",
+              // Troncature PROPRE 2 lignes (ellipsis) plutôt qu'un mur de texte fragmenté sur
+              // 3+ lignes irrégulières — token ⚙️ centralisé (jamais un nombre en dur), même
+              // patron que `--collection-grid-columns` consommé via `var()`.
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: "var(--collection-card-description-line-clamp)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+            }}
+          >
+            {entry.story}
+          </p>
+        )}
+      </Link>
       {isRenaming ? (
         <RenameForm entry={entry} onSaved={onSaved} onCancel={onCancel} />
       ) : (

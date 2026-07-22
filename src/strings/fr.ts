@@ -472,6 +472,32 @@ export const fr = {
     ],
   },
   /**
+   * **Fiche créature** (détail + histoire, story R3.2 #379, WIREFRAMES §5b) — accessible depuis
+   * une carte de la Collection. Écran **enfant** → le nom/la rareté/l'histoire/le renommage
+   * réutilisent DIRECTEMENT `strings.collection.*` (aucune duplication) ; ici uniquement les
+   * libellés PROPRES à cet écran : retour + stade d'évolution. Le stade est en **affichage
+   * seul** (la DÉPENSE d'évolution est R4.4, hors scope de cette story, cf. ECONOMY §4.4).
+   */
+  creatureDetail: {
+    /** Lien de retour vers la grille (glyphe ← aria-hidden, doublé de ce texte visible). */
+    back: "Retour à ta collection",
+    /** Histoire entre guillemets français (WIREFRAMES §5b « … »). `{histoire}` = `entry.story`. */
+    storyQuote: "« {histoire} »",
+    /** Préfixe du bloc stade d'évolution (WIREFRAMES §5b « Stade : … »). */
+    stagePrefix: "Stade",
+    /** Libellés des 3 stades (ECONOMY §2/§4.4 : 1=bébé / 2=ado / 3=adulte). */
+    stageBaby: "bébé",
+    stageTeen: "ado",
+    stageAdult: "adulte",
+    /** Suffixe VISIBLE doublant le stade ACTUEL (a11y daltonisme — jamais la couleur seule). */
+    stageCurrentSuffix: "actuel",
+    /**
+     * Suffixe VISIBLE doublant un stade hors de portée pour cette espèce (`maxStage`,
+     * ECONOMY §4.4 — la dépense d'évolution elle-même arrive en R4.4, affichage seul ici).
+     */
+    stageLockedSuffix: "pas encore",
+  },
+  /**
    * Récupération du code parent via code de secours (AUTH.md §5). Écran
    * **parent** → registre **neutre/vouvoiement** (COPY.md §5, pas la voix de
    * Teddy). Message d'échec du code **générique** (rate-limité, AUTH.md §4).

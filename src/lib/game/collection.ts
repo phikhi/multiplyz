@@ -64,6 +64,15 @@ export interface CollectionEntry {
   readonly stage: number;
   readonly count: number;
   readonly artRef: string;
+  /**
+   * Nombre de stades d'évolution possibles pour cette espèce (`characters.max_stage`, 1-3,
+   * ECONOMY §3.2/§4.4) — borne haute de `stage`. Aujourd'hui **toujours 1** (évolution
+   * différée, R4.4) : la fiche créature (WIREFRAMES §5b, story R3.2) l'utilise pour distinguer
+   * un stade **hors de portée** pour cette espèce (`> maxStage`, roadmap affichée mais
+   * verrouillée) d'un stade simplement pas encore atteint par le joueur — **affichage seul**,
+   * aucune dépense d'évolution ici (R4.4 câblera le bouton « Faire évoluer »).
+   */
+  readonly maxStage: number;
 }
 
 /**
@@ -245,6 +254,7 @@ export function loadCollection(db: DbHandle, profileId: number): CollectionEntry
         rarity: characters.rarity,
         story: characters.story,
         artRef: characters.artRef,
+        maxStage: characters.maxStage,
       })
       .from(characters)
       .where(eq(characters.id, row.characterId))
@@ -263,6 +273,7 @@ export function loadCollection(db: DbHandle, profileId: number): CollectionEntry
         rarity: cat.rarity,
         story: cat.story ?? "",
         stage: row.stage,
+        maxStage: cat.maxStage,
         count: row.count,
         artRef: cat.artRef,
       },
@@ -276,6 +287,62 @@ export function loadCollection(db: DbHandle, profileId: number): CollectionEntry
       a.entry.characterId.localeCompare(b.entry.characterId),
   );
   return sortable.map((item) => item.entry);
+}
+
+/**
+ * **Une créature possédée** (fiche détail, story R3.2 #379, WIREFRAMES §5b) — même
+ * enrichissement que `loadCollection` (catalogue + possession), pour **une seule** créature.
+ * Garde de **propriété** (même patron que `renameCharacter`, PRODUCT §2.3) : `null` si la
+ * créature n'est **pas possédée par CE profil** (id inconnu, faute de frappe dans l'URL, ou
+ * possédée par un AUTRE profil) — jamais de fuite de la créature d'un autre profil.
+ */
+export function loadCollectionEntry(
+  db: DbHandle,
+  profileId: number,
+  characterId: string,
+): CollectionEntry | null {
+  const key = collectionKey(profileId, characterId);
+  const owned = db
+    .select({
+      characterId: collection.characterId,
+      nickname: collection.nickname,
+      stage: collection.stage,
+      count: collection.count,
+    })
+    .from(collection)
+    .where(and(eq(collection.id, key), eq(collection.profileId, profileId)))
+    .limit(1)
+    .get();
+  if (owned === undefined) return null;
+
+  const cat = db
+    .select({
+      nameDefault: characters.nameDefault,
+      rarity: characters.rarity,
+      story: characters.story,
+      artRef: characters.artRef,
+      maxStage: characters.maxStage,
+    })
+    .from(characters)
+    .where(eq(characters.id, owned.characterId))
+    .limit(1)
+    .get();
+  // Garde de forme : possession sans catalogue (impossible via FK cascade) → traité comme absent.
+  /* v8 ignore next — inatteignable via FK cascade (le catalogue existe toujours) ; garde de forme */
+  if (cat === undefined) return null;
+
+  return {
+    characterId: owned.characterId,
+    displayName: owned.nickname ?? cat.nameDefault,
+    defaultName: cat.nameDefault,
+    nickname: owned.nickname,
+    rarity: cat.rarity,
+    story: cat.story ?? "",
+    stage: owned.stage,
+    maxStage: cat.maxStage,
+    count: owned.count,
+    artRef: cat.artRef,
+  };
 }
 
 /** Motif de refus d'un renommage (mappé vers une réponse neutre côté action). */

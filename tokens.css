@@ -557,6 +557,14 @@
   --collection-placeholder-bg:    var(--color-bg-tertiary);
   --collection-placeholder-glyph: var(--color-text-primary);
 
+  /* ---------- FICHE CRÉATURE (détail + histoire, story R3.2 #379, WIREFRAMES §5b) ----------
+     Écran dédié accessible depuis une carte de la Collection. Réutilise DIRECTEMENT les tokens
+     --collection-card-bg/border/text/text-muted/rarity-glyph/placeholder-* ci-dessus (même
+     langage visuel de carte de créature, déjà ≥4.5:1 prouvé — aucun doublon de token). Le SEUL
+     token propre à cet écran est la taille de l'art : le payoff EN GRAND (#180, note R3.1 « fiche
+     montre l'art en grand ») — nettement au-dessus de --collection-placeholder-size (48px, grille). */
+  --creature-detail-art-size: var(--space-10); /* 128px */
+
   /* ---------- RESPONSIVE — BREAKPOINT ÉCRAN DE JEU (story 8.1 #254, WIREFRAMES §8) ----------
      UN SEUL breakpoint numérique consommé par cette story : --bp-phone (téléphone vs
      tablette/desktop, qui restent GROUPÉS — WIREFRAMES §8 « tablette/desktop : disposition
