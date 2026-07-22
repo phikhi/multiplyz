@@ -179,19 +179,100 @@ export interface MapConfig {
 }
 
 /**
- * ⚙️ **Barème économique** (ECONOMY §4.1/§5) — taux de gain de pièces en fin de niveau.
- * **Config versionnée** (ECONOMY §3 note : « taux, prix, odds = fichier de config
- * versionné, pas en DB ») : ces valeurs se calibrent au playtest sans migration ni
- * écriture DB. Consommé par la couche gains (`game/reward.ts`, fonction pure) — jamais
- * de montant en dur dans le crédit (le portefeuille `game/wallet.ts` écrit ce qu'on lui
- * donne, ECONOMY §4.1 : « aucune logique de barème dans le portefeuille »).
+ * ⚙️ **Barème économique** (ECONOMY §4.1-§4.6/§5) — taux de **gain** (earn) ET de **dépense**
+ * (spend). **Config versionnée** (ECONOMY §3 note : « taux, prix, odds = fichier de config
+ * versionné, pas en DB ») : ces valeurs se calibrent au playtest sans migration ni écriture DB.
+ * Consommé par la couche gains (`game/reward.ts`, fonction pure) — jamais de montant en dur dans
+ * le crédit/débit (le portefeuille `game/wallet.ts` écrit ce qu'on lui donne, ECONOMY §4.1 :
+ * « aucune logique de barème dans le portefeuille »).
  *
- * **Périmètre 5.5** : gain de **fin de niveau** (base + bonus par étoile) + **bonus
- * trésor** (nœud trésor = « mini-défi court → pièces bonus », PRODUCT §2.1). **Périmètre
- * 5.6** : le **gros lot de pièces du boss** (`+50`, ECONOMY §5) s'ajoute au gain de niveau
- * standard sur un nœud **boss** (la **créature légendaire garantie** est gérée par la
- * couche collection, pas par le barème pièces).
+ * **Périmètre earn (5.5)** : gain de **fin de niveau** (base + bonus par étoile) + **bonus
+ * trésor** (nœud trésor = « mini-défi court → pièces bonus », PRODUCT §2.1). **Périmètre earn
+ * (5.6)** : le **gros lot de pièces du boss** (`+50`, ECONOMY §5) s'ajoute au gain de niveau
+ * standard sur un nœud **boss** (la **créature légendaire garantie** est gérée par la couche
+ * collection, pas par le barème pièces).
+ *
+ * **Périmètre spend (R4.1)** : le sous-bloc `spend` (`EconomySpendConfig`) est **POSÉ + VALIDÉ**
+ * ici (prix œuf/odds/pitié/doublon→éclats/boutique/évolution/cosmétiques/booster/coffre) ; il est
+ * **CONSOMMÉ en R4.2-R4.5** (#155/#127 : la fondation déclare le barème, elle ne dépense rien).
  */
+/**
+ * ⚙️ **Barème de DÉPENSE** (ECONOMY §4.2-§4.6/§5) — prix, odds, seuils et gains des flux de
+ * dépense (œufs, doublons→éclats, boutique, évolution, cosmétiques, booster, coffre quotidien).
+ *
+ * ⚠️ **État de consommation (honnête, #155/#127)** : ces ⚙️ sont **POSÉS + VALIDÉS** en R4.1
+ * (fondation) ; ils ne sont **PAS ENCORE CONSOMMÉS** — les flux qui les lisent vivent en
+ * **R4.2** (tirage d'œuf : `eggPriceCoins`/odds/pitié/doublon→éclats), **R4.3** (boutique éclats :
+ * `shopPrice*Shards`), **R4.4** (évolution : `evolutionStage*Shards`) et **R4.5** (cosmétiques :
+ * `cosmetic*PriceCoins` ; coffre quotidien : `dailyChest*` ; booster : `boosterCoinBonusPercent`).
+ * Décrire « barème de dépense posé + validé, consommé en R4.2-R4.5 », **jamais** « agit / dépense ».
+ *
+ * **Config versionnée** (ECONOMY §3 note : « taux, prix, odds = fichier de config versionné, pas
+ * en DB ») : calibrable au playtest sans migration. Aucun montant en dur dans la primitive de débit
+ * (`game/wallet.ts` écrit ce qu'on lui **donne** ; le barème vit ici).
+ */
+export interface EconomySpendConfig {
+  /** Prix d'un **œuf** en pièces 🪙 (ECONOMY §5, défaut `50`). Entier ≥ 1 (un œuf n'est jamais gratuit). */
+  eggPriceCoins: number;
+  /**
+   * **Odds** d'une créature **commune** au tirage d'œuf (ratio `]0,1]`, ECONOMY §4.2). Défaut `0.85`.
+   * Attendu ~complémentaire de `eggOddsRare` (les légendaires sont **exclues** des œufs, boss only),
+   * mais **calibrable indépendamment** (le tirage R4.2 **normalise** le couple + applique la pitié) —
+   * jamais cross-validé ici (#164 : honnêteté, `eggOddsCommon + eggOddsRare` n'est pas contraint = 1).
+   */
+  eggOddsCommon: number;
+  /** **Odds** d'une créature **rare** au tirage d'œuf (ratio `]0,1]`, ECONOMY §4.2). Défaut `0.15`. Cf. `eggOddsCommon`. */
+  eggOddsRare: number;
+  /**
+   * **Pitié anti-malchance** (ECONOMY §4.2) : après ce nombre de **doublons consécutifs**, le prochain
+   * tirage est **garanti nouveau** (si une nouveauté existe). Défaut `5`. Entier ≥ 1 (garde-fou
+   * complétude ECONOMY §1 — jamais bloqué par la malchance). Consommé par le tirage R4.2.
+   */
+  pityThreshold: number;
+  /**
+   * Éclats ✨ rendus par un **doublon commun** (ECONOMY §4.2/§5, défaut `10`). Entier **≥ 1** :
+   * un doublon est **toujours utile** (« jamais rien », garde-fou verrouillé ECONOMY §1) → une
+   * valeur `0`/négative retombe sur le défaut (contrairement au barème earn où `0` désactive une source).
+   */
+  duplicateShardsCommon: number;
+  /** Éclats ✨ rendus par un **doublon rare** (ECONOMY §4.2/§5, défaut `25`). Entier ≥ 1 (« jamais rien »). */
+  duplicateShardsRare: number;
+  /**
+   * Prix **boutique** d'une créature **commune** ciblée, en éclats ✨ (ECONOMY §4.3/§5, défaut `60`).
+   * Entier ≥ 1. Filet de sécurité de complétude (ECONOMY §1) — acheter une créature précise manquante.
+   */
+  shopPriceCommonShards: number;
+  /** Prix **boutique** d'une créature **rare** ciblée, en éclats ✨ (ECONOMY §4.3/§5, défaut `150`). Entier ≥ 1. */
+  shopPriceRareShards: number;
+  /** Coût d'**évolution** vers le **stade 2** (bébé→ado), en éclats ✨ (ECONOMY §4.4/§5, défaut `40`). Entier ≥ 1. */
+  evolutionStage2Shards: number;
+  /** Coût d'**évolution** vers le **stade 3** (ado→adulte), en éclats ✨ (ECONOMY §4.4/§5, défaut `100`). Entier ≥ 1. */
+  evolutionStage3Shards: number;
+  /**
+   * Borne **basse** ⚙️ du prix d'un **cosmétique** en pièces 🪙 (ECONOMY §4.5/§5 « 30-120 »). Défaut `30`.
+   * Entier ≥ 1. Encadre le `price_coins` du catalogue `cosmetics` (déco pure, aucun avantage de jeu).
+   */
+  cosmeticMinPriceCoins: number;
+  /** Borne **haute** ⚙️ du prix d'un **cosmétique** en pièces 🪙 (ECONOMY §4.5/§5 « 30-120 »). Défaut `120`. Entier ≥ 1. */
+  cosmeticMaxPriceCoins: number;
+  /**
+   * **Booster** poisson au miel 🐟🍯 : **bonus de pièces en %** sur 1 niveau (ECONOMY §4.6/§5, défaut `25`
+   * = +25 %). Entier **≥ 0** (`0` = booster désactivé, calibration légitime — l'effet « doux » est
+   * optionnel, ECONOMY §4.6). Booster **jamais pay-to-win** (aucun gain d'apprentissage).
+   */
+  boosterCoinBonusPercent: number;
+  /**
+   * Pièces 🪙 du **coffre quotidien** (ECONOMY §4.1/§5, défaut `20`). Entier ≥ 0 (`0` = coffre sans pièces,
+   * calibration légitime). Consommé par le coffre quotidien R4.5.
+   */
+  dailyChestCoins: number;
+  /**
+   * Quantité de **poisson au miel** 🐟🍯 offerte par le coffre quotidien (ECONOMY §4.1/§5 « 20 + 1 poisson »,
+   * défaut `1`). Entier ≥ 0 (`0` = pas de poisson ce jour). Ajouté à `inventory_items` (item `honey_fish`) par R4.5.
+   */
+  dailyChestHoneyFishQty: number;
+}
+
 export interface EconomyConfig {
   /** Pièces de **base** par niveau terminé (ECONOMY §5, défaut `10`). Entier ≥ 0. */
   levelBaseCoins: number;
@@ -212,6 +293,11 @@ export interface EconomyConfig {
    * garantie n'est **pas** un gain de pièces (couche collection, hors barème).
    */
   bossBonusCoins: number;
+  /**
+   * **Bloc DÉPENSE** ⚙️ (ECONOMY §4.2-§4.6/§5) — prix/odds/seuils/gains des flux de dépense.
+   * **POSÉ + VALIDÉ** ici (R4.1) ; **CONSOMMÉ** en R4.2-R4.5 (#155/#127). Cf. `EconomySpendConfig`.
+   */
+  spend: EconomySpendConfig;
 }
 
 /**
@@ -656,6 +742,31 @@ export const CONFIG_DEFAULTS = {
     treasureBonusCoins: 15,
     // Gros lot du boss (ECONOMY §5 « Bonus boss +50 », MAP §6).
     bossBonusCoins: 50,
+    // Barème de DÉPENSE (ECONOMY §5) — POSÉ + VALIDÉ ici (R4.1), CONSOMMÉ en R4.2-R4.5 (#155/#127).
+    spend: {
+      // Œuf : 50 pièces ; odds commune 0.85 / rare 0.15 (légendaires hors œufs) ; pitié après 5 doublons.
+      eggPriceCoins: 50,
+      eggOddsCommon: 0.85,
+      eggOddsRare: 0.15,
+      pityThreshold: 5,
+      // Doublon → éclats : commune 10 / rare 25 (« jamais rien », ECONOMY §1/§4.2).
+      duplicateShardsCommon: 10,
+      duplicateShardsRare: 25,
+      // Boutique éclats (filet de complétude) : commune 60 / rare 150.
+      shopPriceCommonShards: 60,
+      shopPriceRareShards: 150,
+      // Évolution (coût croissant par stade) : stade 2 = 40 ✨ / stade 3 = 100 ✨.
+      evolutionStage2Shards: 40,
+      evolutionStage3Shards: 100,
+      // Cosmétiques : fourchette 30-120 pièces (déco pure).
+      cosmeticMinPriceCoins: 30,
+      cosmeticMaxPriceCoins: 120,
+      // Booster poisson au miel : +25 % pièces sur 1 niveau (doux, optionnel, jamais pay-to-win).
+      boosterCoinBonusPercent: 25,
+      // Coffre quotidien : 20 pièces + 1 poisson au miel.
+      dailyChestCoins: 20,
+      dailyChestHoneyFishQty: 1,
+    },
   },
   worldgen: {
     // Plafond éco ~20 €/mois (WORLDGEN §2, ADR 0008 : ~45 mondes/mois sous plafond).
@@ -994,18 +1105,73 @@ export function loadMapConfig(env: Env): MapConfig {
  * barème vit ici + `game/reward.ts`). Barème **versionné** (fichier de config, pas en DB —
  * ECONOMY §3) pour un calibrage playtest sans migration.
  *
- * `parseNonNegativeInt` : un barème `0` est légitime (désactive une source de gain — ex.
- * `treasureBonusCoins = 0` fait retomber le trésor sur le gain de niveau standard), et une
- * valeur négative (aberrante pour un gain) retombe sur le défaut. Comme `loadMapConfig`,
- * sans validation de secrets : réglages purs, pas de clé.
+ * `parseNonNegativeInt` (barème **earn**) : un barème `0` est légitime (désactive une source de
+ * gain — ex. `treasureBonusCoins = 0` fait retomber le trésor sur le gain de niveau standard), et
+ * une valeur négative (aberrante pour un gain) retombe sur le défaut. Comme `loadMapConfig`, sans
+ * validation de secrets : réglages purs, pas de clé.
+ *
+ * **Bloc DÉPENSE (R4.1, POSÉ + VALIDÉ, consommé R4.2-R4.5 — #155/#127)** : choix de parseur par
+ * borne légitime — `parsePositiveInt` (≥ 1) pour les **prix/coûts/seuils** (un œuf/évolution/prix
+ * boutique/pitié `0` n'a pas de sens ; un doublon `0` éclat violerait « jamais rien » ECONOMY §1) ;
+ * `parseRatio` (`]0,1]`) pour les **odds** (une odds `0` sortirait le tier du pool = dégénéré) ;
+ * `parseNonNegativeInt` (≥ 0) pour le **booster %** et le **coffre** (`0` = composant désactivé,
+ * calibration légitime — même sémantique que le barème earn). Aucune valeur en dur : source unique.
  */
 export function loadEconomyConfig(env: Env): EconomyConfig {
   const d = CONFIG_DEFAULTS.economy;
+  const s = d.spend;
   return {
     levelBaseCoins: parseNonNegativeInt(env.ECONOMY_LEVEL_BASE_COINS, d.levelBaseCoins),
     starBonusCoins: parseNonNegativeInt(env.ECONOMY_STAR_BONUS_COINS, d.starBonusCoins),
     treasureBonusCoins: parseNonNegativeInt(env.ECONOMY_TREASURE_BONUS_COINS, d.treasureBonusCoins),
     bossBonusCoins: parseNonNegativeInt(env.ECONOMY_BOSS_BONUS_COINS, d.bossBonusCoins),
+    spend: {
+      eggPriceCoins: parsePositiveInt(env.ECONOMY_EGG_PRICE_COINS, s.eggPriceCoins),
+      eggOddsCommon: parseRatio(env.ECONOMY_EGG_ODDS_COMMON, s.eggOddsCommon),
+      eggOddsRare: parseRatio(env.ECONOMY_EGG_ODDS_RARE, s.eggOddsRare),
+      pityThreshold: parsePositiveInt(env.ECONOMY_PITY_THRESHOLD, s.pityThreshold),
+      duplicateShardsCommon: parsePositiveInt(
+        env.ECONOMY_DUPLICATE_SHARDS_COMMON,
+        s.duplicateShardsCommon,
+      ),
+      duplicateShardsRare: parsePositiveInt(
+        env.ECONOMY_DUPLICATE_SHARDS_RARE,
+        s.duplicateShardsRare,
+      ),
+      shopPriceCommonShards: parsePositiveInt(
+        env.ECONOMY_SHOP_PRICE_COMMON_SHARDS,
+        s.shopPriceCommonShards,
+      ),
+      shopPriceRareShards: parsePositiveInt(
+        env.ECONOMY_SHOP_PRICE_RARE_SHARDS,
+        s.shopPriceRareShards,
+      ),
+      evolutionStage2Shards: parsePositiveInt(
+        env.ECONOMY_EVOLUTION_STAGE2_SHARDS,
+        s.evolutionStage2Shards,
+      ),
+      evolutionStage3Shards: parsePositiveInt(
+        env.ECONOMY_EVOLUTION_STAGE3_SHARDS,
+        s.evolutionStage3Shards,
+      ),
+      cosmeticMinPriceCoins: parsePositiveInt(
+        env.ECONOMY_COSMETIC_MIN_PRICE_COINS,
+        s.cosmeticMinPriceCoins,
+      ),
+      cosmeticMaxPriceCoins: parsePositiveInt(
+        env.ECONOMY_COSMETIC_MAX_PRICE_COINS,
+        s.cosmeticMaxPriceCoins,
+      ),
+      boosterCoinBonusPercent: parseNonNegativeInt(
+        env.ECONOMY_BOOSTER_COIN_BONUS_PERCENT,
+        s.boosterCoinBonusPercent,
+      ),
+      dailyChestCoins: parseNonNegativeInt(env.ECONOMY_DAILY_CHEST_COINS, s.dailyChestCoins),
+      dailyChestHoneyFishQty: parseNonNegativeInt(
+        env.ECONOMY_DAILY_CHEST_HONEY_FISH_QTY,
+        s.dailyChestHoneyFishQty,
+      ),
+    },
   };
 }
 
@@ -1321,9 +1487,11 @@ export function getMapConfig(): MapConfig {
 }
 
 /**
- * Bloc **économie** de la config applicative (mémoïsé). Consommé par la couche gains de
- * fin de niveau (5.5, `game/reward.ts` + `game/finish-level.ts`) qui tourne DANS le
- * runtime Next. Source unique du barème ⚙️ (base/étoile/trésor).
+ * Bloc **économie** de la config applicative (mémoïsé). Consommé par la couche gains de fin de
+ * niveau (5.5, `game/reward.ts` + `game/finish-level.ts`). Le **sous-bloc `spend`** (barème de
+ * dépense R4.1) est **posé + validé** ici et **consommé en R4.2-R4.5** (#155/#127). Source unique
+ * du barème ⚙️ (earn : base/étoile/trésor/boss ; spend : œuf/odds/pitié/doublon/boutique/évolution/
+ * cosmétiques/booster/coffre).
  */
 export function getEconomyConfig(): EconomyConfig {
   return getConfig().economy;

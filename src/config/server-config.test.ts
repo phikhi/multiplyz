@@ -508,6 +508,120 @@ describe("loadEconomyConfig — surcharges ⚙️ par env", () => {
   });
 });
 
+describe("loadEconomyConfig — bloc DÉPENSE ⚙️ (ECONOMY §5, R4.1 posé+validé, consommé R4.2-R4.5)", () => {
+  it("applique les défauts du bloc spend quand l'environnement est vide", () => {
+    expect(loadEconomyConfig({}).spend).toEqual(CONFIG_DEFAULTS.economy.spend);
+  });
+
+  it("barème de dépense = valeurs de départ ECONOMY §5", () => {
+    const s = loadEconomyConfig({}).spend;
+    expect(s.eggPriceCoins).toBe(50);
+    expect(s.eggOddsCommon).toBe(0.85);
+    expect(s.eggOddsRare).toBe(0.15);
+    expect(s.pityThreshold).toBe(5);
+    expect(s.duplicateShardsCommon).toBe(10);
+    expect(s.duplicateShardsRare).toBe(25);
+    expect(s.shopPriceCommonShards).toBe(60);
+    expect(s.shopPriceRareShards).toBe(150);
+    expect(s.evolutionStage2Shards).toBe(40);
+    expect(s.evolutionStage3Shards).toBe(100);
+    expect(s.cosmeticMinPriceCoins).toBe(30);
+    expect(s.cosmeticMaxPriceCoins).toBe(120);
+    expect(s.boosterCoinBonusPercent).toBe(25);
+    expect(s.dailyChestCoins).toBe(20);
+    expect(s.dailyChestHoneyFishQty).toBe(1);
+  });
+
+  it("surcharge chaque ⚙️ du bloc spend par son env", () => {
+    const s = loadEconomyConfig({
+      ECONOMY_EGG_PRICE_COINS: "80",
+      ECONOMY_EGG_ODDS_COMMON: "0.9",
+      ECONOMY_EGG_ODDS_RARE: "0.1",
+      ECONOMY_PITY_THRESHOLD: "8",
+      ECONOMY_DUPLICATE_SHARDS_COMMON: "15",
+      ECONOMY_DUPLICATE_SHARDS_RARE: "40",
+      ECONOMY_SHOP_PRICE_COMMON_SHARDS: "80",
+      ECONOMY_SHOP_PRICE_RARE_SHARDS: "200",
+      ECONOMY_EVOLUTION_STAGE2_SHARDS: "50",
+      ECONOMY_EVOLUTION_STAGE3_SHARDS: "130",
+      ECONOMY_COSMETIC_MIN_PRICE_COINS: "20",
+      ECONOMY_COSMETIC_MAX_PRICE_COINS: "200",
+      ECONOMY_BOOSTER_COIN_BONUS_PERCENT: "50",
+      ECONOMY_DAILY_CHEST_COINS: "30",
+      ECONOMY_DAILY_CHEST_HONEY_FISH_QTY: "2",
+    }).spend;
+    expect(s).toEqual({
+      eggPriceCoins: 80,
+      eggOddsCommon: 0.9,
+      eggOddsRare: 0.1,
+      pityThreshold: 8,
+      duplicateShardsCommon: 15,
+      duplicateShardsRare: 40,
+      shopPriceCommonShards: 80,
+      shopPriceRareShards: 200,
+      evolutionStage2Shards: 50,
+      evolutionStage3Shards: 130,
+      cosmeticMinPriceCoins: 20,
+      cosmeticMaxPriceCoins: 200,
+      boosterCoinBonusPercent: 50,
+      dailyChestCoins: 30,
+      dailyChestHoneyFishQty: 2,
+    });
+  });
+
+  it("prix/coûts/seuils : 0/négatif/non numérique → défaut (parsePositiveInt, jamais gratuit / jamais 'rien')", () => {
+    const d = CONFIG_DEFAULTS.economy.spend;
+    // Un œuf gratuit (0) n'a pas de sens → défaut.
+    expect(loadEconomyConfig({ ECONOMY_EGG_PRICE_COINS: "0" }).spend.eggPriceCoins).toBe(
+      d.eggPriceCoins,
+    );
+    // Un doublon rendant 0 éclat violerait « jamais rien » (ECONOMY §1) → défaut.
+    expect(
+      loadEconomyConfig({ ECONOMY_DUPLICATE_SHARDS_COMMON: "0" }).spend.duplicateShardsCommon,
+    ).toBe(d.duplicateShardsCommon);
+    // Pitié 0 (dégénéré) → défaut ; coût d'évolution négatif → défaut.
+    expect(loadEconomyConfig({ ECONOMY_PITY_THRESHOLD: "0" }).spend.pityThreshold).toBe(
+      d.pityThreshold,
+    );
+    expect(
+      loadEconomyConfig({ ECONOMY_EVOLUTION_STAGE3_SHARDS: "-5" }).spend.evolutionStage3Shards,
+    ).toBe(d.evolutionStage3Shards);
+    expect(
+      loadEconomyConfig({ ECONOMY_SHOP_PRICE_RARE_SHARDS: "x" }).spend.shopPriceRareShards,
+    ).toBe(d.shopPriceRareShards);
+  });
+
+  it("odds : hors ]0,1] ou non numérique → défaut (parseRatio)", () => {
+    const d = CONFIG_DEFAULTS.economy.spend;
+    // > 1 (probabilité impossible) → défaut.
+    expect(loadEconomyConfig({ ECONOMY_EGG_ODDS_RARE: "1.5" }).spend.eggOddsRare).toBe(
+      d.eggOddsRare,
+    );
+    // 0 (tier hors pool, dégénéré → exclu par parseRatio) → défaut.
+    expect(loadEconomyConfig({ ECONOMY_EGG_ODDS_COMMON: "0" }).spend.eggOddsCommon).toBe(
+      d.eggOddsCommon,
+    );
+    // Non numérique → défaut.
+    expect(loadEconomyConfig({ ECONOMY_EGG_ODDS_RARE: "x" }).spend.eggOddsRare).toBe(d.eggOddsRare);
+  });
+
+  it("booster % et coffre : 0 accepté (désactivable), négatif → défaut (parseNonNegativeInt)", () => {
+    const d = CONFIG_DEFAULTS.economy.spend;
+    // 0 légitime (booster / composant de coffre désactivé).
+    expect(
+      loadEconomyConfig({ ECONOMY_BOOSTER_COIN_BONUS_PERCENT: "0" }).spend.boosterCoinBonusPercent,
+    ).toBe(0);
+    expect(loadEconomyConfig({ ECONOMY_DAILY_CHEST_COINS: "0" }).spend.dailyChestCoins).toBe(0);
+    expect(
+      loadEconomyConfig({ ECONOMY_DAILY_CHEST_HONEY_FISH_QTY: "0" }).spend.dailyChestHoneyFishQty,
+    ).toBe(0);
+    // Négatif (aberrant) → défaut.
+    expect(
+      loadEconomyConfig({ ECONOMY_BOOSTER_COIN_BONUS_PERCENT: "-9" }).spend.boosterCoinBonusPercent,
+    ).toBe(d.boosterCoinBonusPercent);
+  });
+});
+
 describe("loadConfig — bloc engine intégré", () => {
   it("expose le bloc engine dans la config applicative", () => {
     expect(loadConfig({ NODE_ENV: "development" }).engine).toEqual(CONFIG_DEFAULTS.engine);

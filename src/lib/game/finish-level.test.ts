@@ -5,7 +5,7 @@ import { render } from "@testing-library/react";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { characters, collection, collectionKey, ledger, profiles } from "@/lib/db/schema";
-import type { EconomyConfig, MapConfig } from "@/config/server-config";
+import { CONFIG_DEFAULTS, type EconomyConfig, type MapConfig } from "@/config/server-config";
 import { ResultsScreen } from "@/components/game/ResultsScreen";
 import { loadStars, recordStars } from "./progress";
 import { getUnlockedWorldCount } from "./unlock";
@@ -35,6 +35,8 @@ const ECONOMY: EconomyConfig = {
   starBonusCoins: 5,
   treasureBonusCoins: 15,
   bossBonusCoins: 50,
+  // Le crédit de fin de niveau ne lit que le barème earn ; spend (R4.1) = défauts pour le type.
+  spend: CONFIG_DEFAULTS.economy.spend,
 };
 
 function seedProfile(name: string): number {
@@ -189,6 +191,7 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
       starBonusCoins: 50,
       treasureBonusCoins: 0,
       bossBonusCoins: 0,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     const result = finish(0, 0, 2, NOW, richConfig);
     expect(result.ok && result.reward.total).toBe(200); // 100 + 2×50
@@ -203,6 +206,7 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
       starBonusCoins: 0,
       treasureBonusCoins: 0,
       bossBonusCoins: 0,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     const result = finish(0, 0, 0, NOW, zeroConfig);
     expect(result.ok).toBe(true);

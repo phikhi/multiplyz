@@ -137,7 +137,12 @@ describe("runMigrations", () => {
     // recalibrage 0014 : colonne `profiles.recalibration_requested` — pour que son `ADD COLUMN`
     // rejoue ; son 0015 : colonnes `household_settings.sound_enabled`/`music_enabled`/`volume` —
     // DROP TABLE household_settings ci-dessous suffit (0013 + 0015 rejouent tous deux sur la table
-    // recréée)).
+    // recréée) ; économie de dépense 0016 : cosmetics/cosmetics_owned/inventory_items/daily —
+    // `cosmetics_owned` référence `cosmetics` par FK, donc drop dans cet ordre.
+    seed.run(sql`DROP TABLE cosmetics_owned`);
+    seed.run(sql`DROP TABLE cosmetics`);
+    seed.run(sql`DROP TABLE inventory_items`);
+    seed.run(sql`DROP TABLE daily`);
     seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
@@ -204,9 +209,15 @@ describe("runMigrations", () => {
     // migration, ordinal 8 dans l'ordre chronologique — robuste à l'ajout ultérieur de
     // migrations, comme la régression #105). La dé-journalisation `>= OFFSET 8` retire
     // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets), 0012 (socle_worlds), 0013
-    // (household_settings), 0014 (colonne `profiles.recalibration_requested`) et 0015 (colonnes
-    // son `household_settings`) → on drope ces tables + la colonne pour que leur
-    // `CREATE TABLE` / `ADD COLUMN` rejoue (DROP TABLE household_settings couvre 0013 ET 0015).
+    // (household_settings), 0014 (colonne `profiles.recalibration_requested`), 0015 (colonnes
+    // son `household_settings`) et 0016 (économie de dépense : cosmetics/cosmetics_owned/
+    // inventory_items/daily) → on drope ces tables + la colonne pour que leur `CREATE TABLE` /
+    // `ADD COLUMN` rejoue (DROP TABLE household_settings couvre 0013 ET 0015 ; drop
+    // `cosmetics_owned` avant `cosmetics` — FK).
+    seed.run(sql`DROP TABLE cosmetics_owned`);
+    seed.run(sql`DROP TABLE cosmetics`);
+    seed.run(sql`DROP TABLE inventory_items`);
+    seed.run(sql`DROP TABLE daily`);
     seed.run(sql`DROP TABLE household_settings`);
     seed.run(sql`DROP TABLE socle_worlds`);
     seed.run(sql`DROP TABLE teddy_reference_assets`);
