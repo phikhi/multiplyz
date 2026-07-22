@@ -40,6 +40,7 @@ function entry(overrides: Partial<CollectionEntry> = {}): CollectionEntry {
     rarity: "legendary",
     story: "La gardienne légendaire.",
     stage: 1,
+    maxStage: 1,
     count: 1,
     artRef: "placeholder://legendary/0",
     ...overrides,
@@ -97,6 +98,24 @@ describe("CollectionScreen — affichage (WIREFRAMES §5)", () => {
       .replace("{nom}", "Braisille")
       .replace("{rareté}", strings.collection.rarity.legendary);
     expect(screen.getByLabelText(label)).toBeInTheDocument();
+  });
+
+  // GARDE navigation (story R3.2 #379, WIREFRAMES §5b) : tap sur une carte → sa fiche détail.
+  it("chaque carte est un LIEN vers sa fiche créature (`/collection/<id>`)", async () => {
+    await renderReady([entry({ characterId: "legendary:0", displayName: "Braisille" })]);
+    const label = strings.collection.cardLabel
+      .replace("{nom}", "Braisille")
+      .replace("{rareté}", strings.collection.rarity.legendary);
+    const link = screen.getByRole("link", { name: label });
+    // characterId contient `:` → encodé dans l'URL (jamais un caractère brut non-échappé).
+    expect(link).toHaveAttribute("href", "/collection/legendary%3A0");
+  });
+
+  it("le lien de fiche reste DISTINCT du CTA « Retour à la carte » (deux liens co-existent)", async () => {
+    await renderReady([entry()]);
+    const links = screen.getAllByRole("link");
+    // 1 lien de carte + 1 lien « Retour à la carte ».
+    expect(links).toHaveLength(2);
   });
 
   /**

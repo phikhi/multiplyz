@@ -2086,6 +2086,115 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.screenshot({ path: "docs/captures/266-collection-phone.png", fullPage: true });
   });
 
+  // ==========================================================================
+  // Fiche créature (détail + histoire, story R3.2 #379, WIREFRAMES §5b) — navigable depuis une
+  // carte de la Collection (tap → fiche). Réutilise le MÊME profil dédié `Nino` (surface
+  // disjointe de Léa, cf. bloc collection ci-dessus) + la légendaire RÉELLE « Astréa » (art
+  // socle committé `legendary_world_2`, #170 : art EN GRAND réellement pixel-vérifié, pas un
+  // fixture de test — le payoff que R3.1 a noté « vignettes petites en collection, R3.2 fiche
+  // montre l'art en grand »). Zéro élément overlaid/positionné sur cet écran (flux normal
+  // vertical, prouvé par l'audit unitaire `CreatureDetailScreen.test.tsx`) : la garde de
+  // non-occlusion ci-dessous re-vérifie EMPIRIQUEMENT (#190, mesure > raisonnement) que la
+  // flèche retour ne chevauche jamais l'art, plutôt que de se fier au seul raisonnement de
+  // mise en page. Renommage exercé via la VRAIE server action puis RESTAURÉ (état E2E partagé
+  // entre fichiers — `pwa.spec.ts` référence aussi ce profil `Nino`, jamais de mutation
+  // résiduelle inter-specs).
+  // ==========================================================================
+  test("fiche créature → art EN GRAND + nom/rareté/stade/histoire + renommage persisté (story R3.2 #379, capture)", async ({
+    page,
+  }) => {
+    const cookie = {
+      name: "mz_session",
+      value: COLLECTION_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+    await page.goto("/collection");
+    await page.waitForLoadState("networkidle");
+
+    const legendary = COLLECTION_CREATURES[4]; // Astréa — art RÉEL committé (legendary_world_2)
+    const cardLabel = strings.collection.cardLabel
+      .replace("{nom}", legendary.nameDefault)
+      .replace("{rareté}", strings.collection.rarity.legendary);
+    await page.getByRole("link", { name: cardLabel }).click();
+    await page.waitForLoadState("networkidle");
+
+    // Navigation RÉELLE vers la fiche (URL encodée, le `:` du characterId échappé).
+    await expect(page).toHaveURL(`/collection/${encodeURIComponent(legendary.id)}`);
+    await expect(
+      page.getByRole("heading", { level: 1, name: legendary.nameDefault }),
+    ).toBeVisible();
+    await expect(page.getByText(strings.collection.rarity.legendary)).toBeVisible();
+    await expect(page.getByText(`« ${legendary.story} »`)).toBeVisible();
+
+    // ---------- Art de créature RÉEL EN GRAND (le payoff, #180) ----------
+    const art = page.locator('[data-asset="creature-detail-art"][data-asset-state="rendered"]');
+    await expect(art).toBeVisible();
+    await expect
+      .poll(async () =>
+        art.evaluate((el) => el instanceof HTMLImageElement && el.complete && el.naturalWidth > 0),
+      )
+      .toBe(true);
+    const artBox = await art.boundingBox();
+    expect(artBox).not.toBeNull();
+    // EN GRAND — le payoff DOMINE la carte (review R3.2 Frontend/Game-design) : un simple plancher
+    // « > vignette de grille » (>80px) resterait vert sur un rendu timide. On assert la taille RÉELLE
+    // rendue au viewport desktop par défaut (1280px) : `min(13.5rem, 62vw)` = 13.5rem = 216px → seuil
+    // ≥180px qui ROUGIT si le token retombe à `--space-10` (128px) ou plus petit. Empirique (#190) :
+    // le rendu vrai-navigateur, jamais un raisonnement de layout.
+    expect(artBox!.width).toBeGreaterThanOrEqual(180);
+
+    // ---------- Stade d'évolution (affichage seul, roadmap statique bébé▸ado▸adulte) ----------
+    await expect(page.locator("[data-creature-stage]")).toBeVisible();
+    await expect(page.getByText(strings.creatureDetail.stageBaby)).toBeVisible();
+
+    // ---------- Non-occlusion RÉELLE (#170/#190, mesure > raisonnement) : la flèche retour ne
+    // chevauche jamais l'art, même si les deux sont EN FLUX (jamais superposés/positionnés). ----
+    const backLink = page.getByRole("link", { name: strings.creatureDetail.back });
+    const backBox = await backLink.boundingBox();
+    expect(backBox).not.toBeNull();
+    expect(backBox!.y + backBox!.height).toBeLessThanOrEqual(artBox!.y);
+    // Cible tactile ≥44px (WIREFRAMES §8).
+    expect(backBox!.width).toBeGreaterThanOrEqual(44);
+    expect(backBox!.height).toBeGreaterThanOrEqual(44);
+
+    // Capture DoD (#170, vrai art, vraie créature — pixels regardés) : la fiche complète.
+    await page.screenshot({
+      path: "docs/captures/379-creature-detail-legendary.png",
+      fullPage: true,
+    });
+
+    // ---------- Renommage RÉEL (server action, PRODUCT §2.3) — puis RESTAURÉ ----------
+    const renameButton = page.getByRole("button", { name: `✏️ ${strings.collection.rename}` });
+    const renameBox = await renameButton.boundingBox();
+    expect(renameBox).not.toBeNull();
+    expect(renameBox!.width).toBeGreaterThanOrEqual(44);
+    expect(renameBox!.height).toBeGreaterThanOrEqual(44);
+
+    await renameButton.click();
+    await page.getByLabel(strings.collection.renameLabel).fill("Astréa-test");
+    await page.getByRole("button", { name: strings.collection.renameSubmit }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Astréa-test" })).toBeVisible();
+
+    // Restauration (idempotence de l'état E2E partagé, jamais de mutation résiduelle).
+    await page.getByRole("button", { name: `✏️ ${strings.collection.rename}` }).click();
+    await page.getByLabel(strings.collection.renameLabel).fill(legendary.nameDefault);
+    await page.getByRole("button", { name: strings.collection.renameSubmit }).click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: legendary.nameDefault }),
+    ).toBeVisible();
+
+    // ---------- Retour vers la Collection (WIREFRAMES §5b ←) ----------
+    await backLink.click();
+    await page.waitForLoadState("networkidle");
+    await expect(page).toHaveURL("/collection");
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.collection.title }),
+    ).toBeVisible();
+  });
+
   test("route jeu sans session valide → redirection vers le sélecteur (capture)", async ({
     page,
   }) => {

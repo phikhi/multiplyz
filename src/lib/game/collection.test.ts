@@ -13,6 +13,7 @@ import {
   legendaryForWorld,
   legendarySpeciesKey,
   loadCollection,
+  loadCollectionEntry,
   NICKNAME_MAX_LENGTH,
   normalizeNickname,
   pickDeterministic,
@@ -216,6 +217,7 @@ describe("loadCollection (Pokédex — PRODUCT §2.3)", () => {
       rarity: "legendary",
       story: legendary.story,
       stage: 1,
+      maxStage: 1,
       count: 1,
       artRef: legendary.artRef,
     });
@@ -302,6 +304,76 @@ describe("loadCollection (Pokédex — PRODUCT §2.3)", () => {
       "legendary:0",
       "legendary:2",
     ]);
+  });
+});
+
+describe("loadCollectionEntry (fiche créature — story R3.2 #379, WIREFRAMES §5b)", () => {
+  it("créature possédée ⇒ entrée enrichie (même forme que loadCollection, + maxStage)", () => {
+    db.transaction((tx) => grantLegendaryInTx(tx, profileId, 0, NOW));
+    const legendary = legendaryForWorld(0);
+    expect(loadCollectionEntry(db, profileId, "legendary:0")).toEqual({
+      characterId: "legendary:0",
+      displayName: legendary.nameDefault,
+      defaultName: legendary.nameDefault,
+      nickname: null,
+      rarity: "legendary",
+      story: legendary.story,
+      stage: 1,
+      maxStage: 1,
+      count: 1,
+      artRef: legendary.artRef,
+    });
+  });
+
+  it("nom affiché = nickname si l'enfant a renommé (même dérivation que loadCollection)", () => {
+    db.transaction((tx) => grantLegendaryInTx(tx, profileId, 0, NOW));
+    renameCharacter(db, profileId, "legendary:0", "Flamme");
+    const entry = loadCollectionEntry(db, profileId, "legendary:0");
+    expect(entry?.displayName).toBe("Flamme");
+    expect(entry?.nickname).toBe("Flamme");
+  });
+
+  // GARDE PROPRIÉTÉ (effet observable, mutation-prouvé) : une créature qui n'existe pas du
+  // tout (id inconnu) ⇒ null, jamais un plantage.
+  it("id inconnu ⇒ null (jamais un plantage)", () => {
+    expect(loadCollectionEntry(db, profileId, "legendary:999")).toBeNull();
+  });
+
+  // GARDE ISOLATION (effet observable, mutation-prouvé) : une créature possédée par un AUTRE
+  // profil ⇒ null pour CE profil — rougit si le **scope par clé encodée** `collectionKey`
+  // sautait (la PK `"${profileId}:${characterId}"` encode déjà le profil : c'est ELLE qui pinne
+  // l'isolation, pas le prédicat `AND collection.profileId = ?` qui est belt-and-suspenders
+  // redondant — retirer ce prédicat laisse ce test VERT, seul le scope par clé le fait rougir,
+  // vérifié empiriquement par QA #143/#206).
+  it("créature possédée par un AUTRE profil ⇒ null (jamais de fuite inter-profil)", () => {
+    const other = seedProfile("Noé");
+    db.transaction((tx) => grantLegendaryInTx(tx, other, 0, NOW));
+    expect(loadCollectionEntry(db, profileId, "legendary:0")).toBeNull();
+    // Le propriétaire réel la voit bien.
+    expect(loadCollectionEntry(db, other, "legendary:0")?.characterId).toBe("legendary:0");
+  });
+
+  it("story null (catalogue sans histoire) → chaîne vide (même repli que loadCollection)", () => {
+    db.insert(characters)
+      .values({
+        id: "legendary:0",
+        worldIndex: 0,
+        speciesKey: "legendary_world_0",
+        nameDefault: "Braisille",
+        rarity: "legendary",
+        inEggPool: false,
+        artRef: "placeholder://legendary/0",
+        // story omis → NULL
+      })
+      .run();
+    db.insert(collection)
+      .values({
+        id: collectionKey(profileId, "legendary:0"),
+        profileId,
+        characterId: "legendary:0",
+      })
+      .run();
+    expect(loadCollectionEntry(db, profileId, "legendary:0")?.story).toBe("");
   });
 });
 

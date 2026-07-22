@@ -26,6 +26,7 @@ const FAKE_ENTRY = {
   rarity: "legendary" as const,
   story: "La gardienne.",
   stage: 1,
+  maxStage: 1,
   count: 1,
   artRef: "placeholder://legendary/0",
 };
