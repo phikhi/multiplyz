@@ -41,7 +41,8 @@ export interface ResultsScreenProps {
   readonly coins: number | null;
   /**
    * **Légendaire garantie** obtenue en battant le boss (MAP §6, story 5.6), ou `null` pour un
-   * niveau non-boss (aucune carte légendaire affichée). Nom + histoire + réf d'art placeholder.
+   * niveau non-boss (aucune carte légendaire affichée). Nom + histoire + réf d'art **RÉELLE** de la
+   * légendaire (art committé, R3.1 #378) ; `placeholder://…` seulement hors socle (repli no-fail).
    */
   readonly legendary?: GrantedLegendary | null;
   readonly onContinue: () => void;

@@ -387,7 +387,10 @@ describe("generateWorld — câblage art réel + persistance", () => {
         nameDefault: legendary.nameDefault,
         rarity: "legendary",
         inEggPool: false,
-        artRef: legendary.artRef, // placeholder://legendary/0
+        // Simule un ancien placeholder (état pré-R3.1) que generateWorld REMPLACE par son art généré
+        // `world/0/legendary.png` — la valeur pré-seed importe peu (upsert ciblé art), mais on la fige
+        // en placeholder explicite pour que le titre « remplace le placeholder » reste littéral (#164).
+        artRef: "placeholder://legendary/0",
         story: legendary.story,
       })
       .run();

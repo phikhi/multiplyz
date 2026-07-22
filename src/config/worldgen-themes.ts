@@ -140,7 +140,10 @@ export const CURATED_THEMES: readonly CuratedTheme[] = [
       { concept: "a cheerful baby moon creature", features: "crater dimples, soft silver glow" },
       { concept: "a plump friendly planet buddy", features: "tiny orbiting ring, pastel bands" },
       { concept: "a soft round nebula sprite", features: "swirly cloud body, glittery specks" },
-      { concept: "a bouncy little rocket cub", features: "round porthole tummy, fin ears" },
+      {
+        concept: "a bouncy little rocket sprite",
+        features: "star-window tummy with a twinkle inside, fin ears",
+      },
       { concept: "a gentle star jelly", features: "constellation dots, glowing dome" },
       { concept: "a tiny satellite pup", features: "dish-shaped ears, blinking light nose" },
     ],

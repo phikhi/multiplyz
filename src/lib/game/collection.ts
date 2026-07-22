@@ -10,8 +10,8 @@
  * cf. `finish-level.ts`).
  *
  * **Déterminisme (MAP §6)** : la légendaire d'un `world_index` est **entièrement dérivée**
- * de l'index (id/species/nom/histoire) — aucun RNG, aucune génération IA ici (l'art réel
- * + les vraies histoires arrivent à l'épic #6 ; ce module pose un **placeholder** stable).
+ * de l'index (id/species/nom/histoire/**art réel**) — aucun RNG, aucune génération IA ici :
+ * l'`art_ref` pointe l'illustration réelle committée (`creatureArtRef`, story R3.1 #378).
  * Même `world_index` ⇒ même légendaire, à chaque appel, sur n'importe quel appareil.
  *
  * **Hors œufs (ECONOMY §4.2)** : la légendaire du catalogue est amorcée avec
@@ -20,6 +20,7 @@
  */
 
 import { and, eq } from "drizzle-orm";
+import { creatureArtRef } from "@/config/creatures";
 import type { AppDatabase } from "@/lib/db";
 import { characters, collection, collectionKey, type Rarity } from "@/lib/db/schema";
 import { strings } from "@/strings";
@@ -32,7 +33,7 @@ import { strings } from "@/strings";
  */
 export type DbHandle = Pick<AppDatabase, "select" | "insert">;
 
-/** Une créature du catalogue amorcée par le serveur (placeholder art épic #6). */
+/** Une créature du catalogue amorcée par le serveur (art réel committé, story R3.1 #378). */
 export interface SeededCharacter {
   readonly id: string;
   readonly worldIndex: number;
@@ -83,15 +84,6 @@ export function legendarySpeciesKey(worldIndex: number): string {
 }
 
 /**
- * **Réf d'art placeholder** de la légendaire (art réel branché par l'épic #6, WORLDGEN).
- * Le schéma d'URL `placeholder://` signale clairement un asset non encore généré (le
- * front affiche une silhouette/emoji de repli — jamais une image cassée).
- */
-export function legendaryArtRef(worldIndex: number): string {
-  return `placeholder://legendary/${worldIndex}`;
-}
-
-/**
  * Sélectionne un élément d'une liste **non vide** de façon déterministe depuis
  * `world_index` (modulo). Pur, sans RNG (MAP §6 : la légendaire est déterministe). Sert
  * à piocher un **nom par défaut** + une **histoire** placeholder stables dans les banques
@@ -103,8 +95,15 @@ export function pickDeterministic<T>(pool: readonly T[], worldIndex: number): T 
 
 /**
  * **Descripteur déterministe** de la légendaire d'un monde (MAP §6). Entièrement dérivé
- * de `world_index` : id, species, nom par défaut, histoire (placeholder), art placeholder.
- * `in_egg_pool = false` (boss only, ECONOMY §4.2). `rarity = "legendary"`. Pure.
+ * de `world_index` : id, species, nom par défaut, histoire, **art réel**. `in_egg_pool =
+ * false` (boss only, ECONOMY §4.2). `rarity = "legendary"`. Pure.
+ *
+ * **Art réel (story R3.1, #378)** : `artRef` = `creatureArtRef(legendarySpeciesKey(worldIndex))`
+ * = réf **relative rendable** `socle/creature/legendary_world_<i>.png` — l'art committé du run
+ * payant (game-design signé ADR 0009). Le boss (`grantLegendaryInTx` → `ensureCharacterInTx`)
+ * câble donc la **vraie** légendaire dans `characters` sans étape de seed. Pour un `world_index`
+ * hors socle (≥ `SOCLE_WORLD_COUNT`, sans PNG committé), la réf reste bien formée mais l'image
+ * n'est pas servie → `<AssetImage>` retombe sur le repli emoji (no-fail), jamais une image cassée.
  */
 export function legendaryForWorld(worldIndex: number): SeededCharacter {
   return {
@@ -114,7 +113,7 @@ export function legendaryForWorld(worldIndex: number): SeededCharacter {
     nameDefault: pickDeterministic(strings.collection.legendaryNames, worldIndex),
     rarity: "legendary",
     inEggPool: false,
-    artRef: legendaryArtRef(worldIndex),
+    artRef: creatureArtRef(legendarySpeciesKey(worldIndex)),
     story: pickDeterministic(strings.collection.legendaryStories, worldIndex),
   };
 }
@@ -122,8 +121,8 @@ export function legendaryForWorld(worldIndex: number): SeededCharacter {
 /**
  * **Amorce (idempotent) la ligne catalogue** d'une créature si absente (upsert par PK).
  * Ne réécrit **jamais** une ligne existante (`onConflictDoNothing`) → le catalogue reste
- * stable (l'art réel de l'épic #6 ne sera pas écrasé par le placeholder au rejeu). À
- * appeler **dans** la transaction de l'appelant (aucune transaction imbriquée).
+ * stable (un art déjà posé — réel ou seedé — n'est jamais écrasé au rejeu). À appeler
+ * **dans** la transaction de l'appelant (aucune transaction imbriquée).
  */
 export function ensureCharacterInTx(db: DbHandle, character: SeededCharacter): void {
   db.insert(characters)
@@ -168,7 +167,7 @@ export function grantLegendaryInTx(
   now: Date,
 ): GrantResult {
   const legendary = legendaryForWorld(worldIndex);
-  // 1. Catalogue : amorce la ligne si absente (l'art placeholder ne réécrit jamais l'existant).
+  // 1. Catalogue : amorce la ligne si absente, avec l'art RÉEL (jamais d'écrasement d'un existant).
   ensureCharacterInTx(db, legendary);
 
   // 2. Possession : déjà possédée ? (garde d'idempotence — la légendaire est GARANTIE une fois,

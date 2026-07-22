@@ -13,6 +13,29 @@ import { legendaryForWorld } from "@/lib/game/collection";
 import { generateImage, type GenerateImageInput, type ImageRef } from "./image-client";
 import { getApprovedMaster, MASTER_ASSET_ID } from "./reference-assets";
 import { deriveWorldPalette, serializePalette } from "./palette";
+import {
+  CREATURE_TOTALS,
+  creatureCharacterId,
+  creatureSpeciesKey,
+  deriveCreatureSplit,
+  makeSeededRandom,
+  pickFromBank,
+  type CreatureSplit,
+  type GeneratedRarity,
+} from "./creature-catalog";
+
+// Réexport des primitives déterministes déplacées dans le module **PUR** `creature-catalog.ts`
+// (R3.1, #378) — pour que le catalogue soit seedable hors du chemin server-only. Contrat inchangé
+// pour les consommateurs existants (tests, `socle-creatures.ts`) qui les importent depuis ici.
+export {
+  CREATURE_TOTALS,
+  creatureCharacterId,
+  creatureSpeciesKey,
+  deriveCreatureSplit,
+  makeSeededRandom,
+  pickFromBank,
+};
+export type { CreatureSplit, GeneratedRarity };
 
 /**
  * **Générateur de monde — Stage B** (WORLDGEN §4/§8, story 6.3, épic #6). Fonction pure côté
@@ -45,33 +68,6 @@ import { deriveWorldPalette, serializePalette } from "./palette";
  * **Dépendances injectables** (tests) : générateur d'image (mocké → **zéro appel réseau réel en
  * CI**, DoD), horloge, style-bible de créatures. En prod, les défauts s'appliquent.
  */
-
-/** Rareté d'une créature générée (hors légendaire, qui est fixée par MAP §6). */
-export type GeneratedRarity = Extract<Rarity, "common" | "rare">;
-
-/** ⚙️ Répartition des créatures d'un monde (ECONOMY §5 : « plusieurs communes + 1-2 rares + 1 légendaire »). */
-export interface CreatureSplit {
-  /** Nombre de créatures **communes** (œufs, `in_egg_pool = true`). */
-  readonly commons: number;
-  /** Nombre de créatures **rares** (œufs, `in_egg_pool = true`). */
-  readonly rares: number;
-}
-
-/**
- * ⚙️ **Bornes de répartition** (ECONOMY §5, WORLDGEN §4.3) : 6-8 créatures/monde = plusieurs
- * communes + 1-2 rares + **exactement 1 légendaire** (boss only). Centralisées ici (source unique) ;
- * la légendaire n'est pas comptée (fixée par MAP §6, `legendaryForWorld`).
- */
-export const CREATURE_TOTALS = {
-  /** Total de créatures/monde, bornes incluses (ECONOMY §5 « ~6-8 »). */
-  minTotal: 6,
-  maxTotal: 8,
-  /** Rares/monde, bornes incluses (ECONOMY §5 « 1-2 rares »). */
-  minRares: 1,
-  maxRares: 2,
-  /** La légendaire (boss only) — toujours exactement 1 (MAP §6). */
-  legendaries: 1,
-} as const;
 
 /**
  * Coût **estimé** par image payante (ADR 0008 / WORLDGEN §5 : « ~0,039 $/image »). ⚙️ de
@@ -197,43 +193,6 @@ export class WorldGenError extends Error {
   }
 }
 
-/**
- * PRNG **déterministe** seedé (mulberry32, même famille que `game/map.ts`) — aucune dépendance à
- * `Math.random`. Même `world_index` ⇒ même suite ⇒ même monde (WORLDGEN §7 reproductibilité :
- * la répartition + la sélection de concepts/noms/histoires sont dérivées, jamais RNG cru).
- */
-export function makeSeededRandom(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a += 0x6d_2b_79_f5;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-  };
-}
-
-/** Entier déterministe dans `[min, max]` (bornes incluses) depuis un tirage `[0,1)`. */
-function intInRange(rand: () => number, min: number, max: number): number {
-  return min + Math.floor(rand() * (max - min + 1));
-}
-
-/**
- * **Répartition déterministe** des créatures d'un monde (ECONOMY §5, WORLDGEN §4.3). Tire un
- * total dans `[minTotal, maxTotal]` et un nombre de rares dans `[minRares, maxRares]`, le reste
- * en communes (**exactement 1 légendaire** en plus, boss only — non compté ici). Garantit
- * `commons ≥ 1` (une répartition sans commune n'a pas de sens pour un pool d'œufs). Pure.
- */
-export function deriveCreatureSplit(worldIndex: number): CreatureSplit {
-  const rand = makeSeededRandom(worldIndex ^ 0x5f_3a_c1_00);
-  const total = intInRange(rand, CREATURE_TOTALS.minTotal, CREATURE_TOTALS.maxTotal);
-  const rares = intInRange(rand, CREATURE_TOTALS.minRares, CREATURE_TOTALS.maxRares);
-  // Total inclut la légendaire (MAP §6) → les œufs (communes+rares) = total − 1 légendaire.
-  const eggPool = total - CREATURE_TOTALS.legendaries;
-  const commons = eggPool - rares;
-  return { commons, rares };
-}
-
 /** Assemble le prompt du **fond de monde** (gabarit background ART §5, {base_style} résolu). */
 export function buildBackgroundPrompt(config: WorldGenConfig, theme: CuratedTheme): string {
   const base = config.prompts.background
@@ -270,9 +229,10 @@ export function buildTeddyPrompt(config: WorldGenConfig, theme: CuratedTheme): s
 /**
  * Assemble le prompt d'une **créature** (gabarit creature ART §5) : `{base_style}` résolu +
  * concept + traits + palette du monde. **Aucune référence au master Teddy** dans le prompt (une
- * créature n'est pas Teddy — ADR 0009).
+ * créature n'est pas Teddy — ADR 0009). **Exporté** : réutilisé tel quel par le chemin
+ * créature-seule du socle (`socle-creatures.ts`, R3.1) — même gabarit ART, aucune divergence.
  */
-function buildCreaturePrompt(
+export function buildCreaturePrompt(
   config: WorldGenConfig,
   concept: CreatureConcept,
   accent: string,
@@ -291,26 +251,14 @@ function buildCreaturePrompt(
  * `{base_style}` en TEXTE (mécanisme contractuel). **Ne renvoie JAMAIS le master Teddy** : le
  * générateur ne passe que la bible ici (une créature n'est pas Teddy). Renvoie `undefined` (pas
  * `[]`) quand la bible est vide → le client image omet le champ `refImages`.
+ *
+ * **Exporté** : réutilisé par le chemin créature-seule du socle (`socle-creatures.ts`, R3.1) —
+ * même règle d'ancrage (bible optionnelle, JAMAIS le master : une créature n'est pas Teddy).
  */
-function creatureRefImages(
+export function creatureRefImages(
   bible: readonly ImageRef[],
 ): { refImages: readonly ImageRef[] } | object {
   return bible.length > 0 ? { refImages: bible } : {};
-}
-
-/** Clé de catalogue stable d'une créature non légendaire d'un monde (déterministe). */
-export function creatureCharacterId(worldIndex: number, slot: number): string {
-  return `creature:${worldIndex}:${slot}`;
-}
-
-/** Clé d'espèce stable d'une créature non légendaire (contrat de génération). */
-export function creatureSpeciesKey(worldIndex: number, slot: number): string {
-  return `creature_world_${worldIndex}_${slot}`;
-}
-
-/** Pioche un élément d'une banque **sans réutilisation** dans le monde (index dérivé + offset slot). */
-function pickFromBank<T>(bank: readonly T[], seedBase: number, slot: number): T {
-  return bank[(seedBase + slot) % bank.length];
 }
 
 /**
