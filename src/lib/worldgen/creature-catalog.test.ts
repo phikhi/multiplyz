@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
-import { characters } from "@/lib/db/schema";
+import { characters, collection, collectionKey, profiles } from "@/lib/db/schema";
 import {
   COMMITTED_CREATURE_SPECIES,
   DEMO_CREATURE_SPECIES,
@@ -12,6 +12,7 @@ import {
 import { legendaryForWorld } from "@/lib/game/collection";
 import { isRenderableAssetRef } from "@/lib/game/world-theme";
 import {
+  backfillPlaceholderCreatureArt,
   creatureCharacterId,
   creatureSpeciesKey,
   deriveCreatureSplit,
@@ -145,5 +146,142 @@ describe("seedSocleCreatures — seed idempotent qui compose avec le boss", () =
 
   it("le socle n'a que SOCLE_WORLD_COUNT mondes (invariant de dérivation)", () => {
     expect(SOCLE_WORLD_COUNT).toBe(6);
+  });
+});
+
+describe("backfillPlaceholderCreatureArt — répare l'art placeholder d'une collection existante (#401/#180)", () => {
+  function insertCharacter(overrides: {
+    id: string;
+    worldIndex: number;
+    speciesKey: string;
+    nameDefault: string;
+    rarity: "common" | "rare" | "legendary";
+    inEggPool: boolean;
+    artRef: string;
+    story: string | null;
+  }): void {
+    db.insert(characters).values(overrides).run();
+  }
+
+  // ▶▶ Garde MUTATION-PROUVÉE (#60/#173) ◀◀ — un SEUL test nommé pinne les DEUX mutations du brief :
+  //   (a) retirer le backfill → la ligne placeholder reste placeholder → « art réel posé » ROUGIT ;
+  //   (b) retirer la garde `if (isRenderableAssetRef(art_ref)) continue` (clobbe les lignes déjà
+  //       réelles) → la ligne `world/custom/deja.png` devient `socle/creature/...` → « inchangée » ROUGIT.
+  // Prouve aussi le NON-destructif : possession `collection` (count/nickname) JAMAIS touchée.
+  it("placeholder→réel posé, ligne déjà-réelle + possession collection INTACTES (art_ref/story ciblés)", () => {
+    const profileId = db
+      .insert(profiles)
+      .values({ name: "Zoé", nameKey: "zoé", avatar: "fox", pinHash: "x" })
+      .returning({ id: profiles.id })
+      .get().id;
+
+    const derived = deriveSocleCreatures(0);
+    const legendary = derived[derived.length - 1]; // legendary:0 — art réel dérivé.
+    const common = derived[0]; // creature:0:0 — art réel dérivé.
+    const alreadyReal = derived[1]; // creature:0:1 — on lui pose un art réel CUSTOM distinct.
+
+    // (1) Légendaire gagnée au boss AVANT R3.1 : art placeholder, story VIDE (null).
+    insertCharacter({
+      id: legendary.id,
+      worldIndex: 0,
+      speciesKey: legendary.speciesKey,
+      nameDefault: legendary.nameDefault,
+      rarity: "legendary",
+      inEggPool: false,
+      artRef: "placeholder://legendary/0",
+      story: null,
+    });
+    // (2) Commune pré-R3.1 : art placeholder mais story DÉJÀ écrite (doit être préservée).
+    insertCharacter({
+      id: common.id,
+      worldIndex: 0,
+      speciesKey: common.speciesKey,
+      nameDefault: common.nameDefault,
+      rarity: "common",
+      inEggPool: true,
+      artRef: "placeholder://common/0",
+      story: "Une histoire déjà écrite.",
+    });
+    // (3) Ligne DÉJÀ RÉELLE (art rendable custom, distinct du dérivé) : ne doit JAMAIS être réécrite.
+    insertCharacter({
+      id: alreadyReal.id,
+      worldIndex: 0,
+      speciesKey: alreadyReal.speciesKey,
+      nameDefault: alreadyReal.nameDefault,
+      rarity: "common",
+      inEggPool: true,
+      artRef: "world/custom/deja.png",
+      story: "Réel préservé.",
+    });
+    // Possession enfant de la légendaire placeholder (renommée + doublon) — doit rester INTACTE.
+    db.insert(collection)
+      .values({
+        id: collectionKey(profileId, legendary.id),
+        profileId,
+        characterId: legendary.id,
+        count: 3,
+        stage: 1,
+        nickname: "Mon dragon",
+      })
+      .run();
+
+    backfillPlaceholderCreatureArt(db);
+
+    // (1) légendaire : art réel dérivé posé + rendable, story backfillée (était vide).
+    const legRow = db.select().from(characters).where(eq(characters.id, legendary.id)).get();
+    expect(legRow?.artRef).toBe("socle/creature/legendary_world_0.png");
+    expect(legRow?.artRef).toBe(legendary.artRef);
+    expect(isRenderableAssetRef(legRow?.artRef ?? "")).toBe(true);
+    expect(legRow?.story).toBe(legendary.story); // vide → dérivée.
+
+    // (2) commune : art réel dérivé posé, story existante PRÉSERVÉE.
+    const commonRow = db.select().from(characters).where(eq(characters.id, common.id)).get();
+    expect(commonRow?.artRef).toBe(common.artRef);
+    expect(isRenderableAssetRef(commonRow?.artRef ?? "")).toBe(true);
+    expect(commonRow?.story).toBe("Une histoire déjà écrite."); // JAMAIS écrasée.
+
+    // (3) ligne déjà réelle : art_ref + story INCHANGÉS (jamais clobbés — garde !isRenderableAssetRef).
+    const realRow = db.select().from(characters).where(eq(characters.id, alreadyReal.id)).get();
+    expect(realRow?.artRef).toBe("world/custom/deja.png");
+    expect(realRow?.story).toBe("Réel préservé.");
+
+    // NON-destructif : possession `collection` (count/nickname/characterId) JAMAIS touchée.
+    const owned = db
+      .select()
+      .from(collection)
+      .where(eq(collection.id, collectionKey(profileId, legendary.id)))
+      .get();
+    expect(owned?.count).toBe(3);
+    expect(owned?.nickname).toBe("Mon dragon");
+    expect(owned?.characterId).toBe("legendary:0");
+  });
+
+  it("catalogue vide → no-op (aucune ligne à réparer ; branche `ligne absente` + early-return)", () => {
+    // beforeEach a vidé `characters` → toutes les lectures socle retombent `undefined`.
+    expect(() => backfillPlaceholderCreatureArt(db)).not.toThrow();
+    expect(db.select().from(characters).all()).toHaveLength(0);
+  });
+
+  it("idempotent : un 2ᵉ passage ne réécrit rien (art déjà réel préservé, #91/#105)", () => {
+    const legendary = legendaryForWorld(0);
+    insertCharacter({
+      id: legendary.id,
+      worldIndex: 0,
+      speciesKey: legendary.speciesKey,
+      nameDefault: legendary.nameDefault,
+      rarity: "legendary",
+      inEggPool: false,
+      artRef: "placeholder://legendary/0",
+      story: legendary.story,
+    });
+
+    backfillPlaceholderCreatureArt(db);
+    const after1 = db.select().from(characters).where(eq(characters.id, legendary.id)).get();
+    expect(after1?.artRef).toBe(legendary.artRef); // placeholder → réel.
+
+    // 2ᵉ passage : la garde `!isRenderableAssetRef` écarte la ligne (déjà réelle) → 0 écriture, stable.
+    expect(() => backfillPlaceholderCreatureArt(db)).not.toThrow();
+    const after2 = db.select().from(characters).where(eq(characters.id, legendary.id)).get();
+    expect(after2?.artRef).toBe(legendary.artRef);
   });
 });

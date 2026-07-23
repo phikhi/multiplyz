@@ -6,9 +6,11 @@ import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { nameKey } from "../auth/validation";
 import { CONFIG_DEFAULTS } from "../../config/server-config";
 import { getDatabaseConfig, resolveDatabasePath } from "./config";
+import { loadCollection } from "../game/collection";
+import { isRenderableAssetRef } from "../game/world-theme";
 import { createDatabase, getDb } from "./index";
 import { backfillNameKeys, runMigrations } from "./migrate";
-import { characters, schemaMeta } from "./schema";
+import { characters, collection, profiles, schemaMeta } from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-db-"));
 let counter = 0;
@@ -140,6 +142,53 @@ describe("runMigrations", () => {
     const before = rows.length;
     expect(() => runMigrations(db)).not.toThrow();
     expect(db.select().from(characters).all()).toHaveLength(before);
+  });
+
+  // ▶▶ #401 / #180 END-TO-END : l'art réel atteint une COLLECTION DÉJÀ PEUPLÉE ◀◀
+  // Reproduit fidèlement le bug playtest : une légendaire gagnée au boss AVANT R3.1 a une ligne
+  // `characters` restée `placeholder://legendary/0` (le seed `onConflictDoNothing` ne la réécrit
+  // jamais). Après un `runMigrations` ultérieur (backfill câblé), la créature DÉJÀ POSSÉDÉE rend le
+  // vrai art via le VRAI chemin de lecture (`loadCollection`, le Pokédex), possession INTACTE.
+  it("backfille l'art d'une légendaire déjà possédée → art réel via loadCollection (#401/#180)", () => {
+    const path = freshDbPath();
+    runMigrations(createDatabase(path));
+    const seed = createDatabase(path);
+
+    // État « base migrée AVANT R3.1 » : la ligne catalogue de la légendaire est ramenée à son
+    // placeholder d'antan, et l'enfant la possède déjà (renommée, count doublé au boss rejoué).
+    seed.run(
+      sql`UPDATE characters SET art_ref = 'placeholder://legendary/0' WHERE id = 'legendary:0'`,
+    );
+    const profileId = seed
+      .insert(profiles)
+      .values({ name: "Zoé", nameKey: nameKey("Zoé"), avatar: "fox", pinHash: "x" })
+      .returning({ id: profiles.id })
+      .get().id;
+    seed
+      .insert(collection)
+      .values({
+        id: `${profileId}:legendary:0`,
+        profileId,
+        characterId: "legendary:0",
+        count: 2,
+        stage: 1,
+        nickname: "Mon dragon",
+      })
+      .run();
+    // Pré-condition : la possession existe mais son art n'est PAS rendable (repli 🐾).
+    expect(isRenderableAssetRef(loadCollection(seed, profileId)[0].artRef)).toBe(false);
+
+    // Rejeu des migrations (démarrage suivant) → le backfill répare la ligne placeholder existante.
+    const db = createDatabase(path);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // La créature DÉJÀ possédée rend désormais le VRAI art (valeur atteinte via le Pokédex), possession
+    // (count/nickname) INTACTE — le backfill n'a touché QUE le catalogue.
+    const entry = loadCollection(db, profileId).find((e) => e.characterId === "legendary:0");
+    expect(entry?.artRef).toBe("socle/creature/legendary_world_0.png");
+    expect(isRenderableAssetRef(entry?.artRef ?? "")).toBe(true);
+    expect(entry?.count).toBe(2);
+    expect(entry?.nickname).toBe("Mon dragon");
   });
 
   // Régression #105 : la migration 0005 (ajout `name_key`) doit s'appliquer sur
