@@ -13,6 +13,7 @@ import {
 import { CANARI_PROFILE_NAME, CANARI_PROFILE_PIN } from "./seed-canari";
 import { BOSS_PROGRESS_SESSION_TOKEN, BOSS_PROGRESS_COMPLETED_LEVELS } from "./seed-boss-progress";
 import { BOUTIQUE_SESSION_TOKEN } from "./seed-boutique";
+import { CONFIG_DEFAULTS } from "../src/config/server-config";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -3459,7 +3460,13 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     await expect(
       page.getByRole("heading", { level: 1, name: strings.boutique.title }),
     ).toBeVisible();
-    const buyButton = page.getByRole("button", { name: "Ouvrir 🪙50" });
+    // Libellé du bouton d'achat DÉRIVÉ de la config ⚙️ (pas figé sur 50) : découplé du prix, robuste
+    // à une recalibration de `eggPriceCoins` — même patron que les autres sélecteurs config-driven.
+    const buyLabel = strings.boutique.buy.replace(
+      "{prix}",
+      String(CONFIG_DEFAULTS.economy.spend.eggPriceCoins),
+    );
+    const buyButton = page.getByRole("button", { name: buyLabel });
     await expect(buyButton).toBeVisible();
 
     // Achat → ouverture d'œuf.

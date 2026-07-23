@@ -18,7 +18,7 @@ import {
  * - l'achat relaie un `drawId` opaque, la révélation affiche la créature (art rendable → `<img>`) ;
  * - **doublon** → « +N ✨ » (jamais « rien ») ; **nouvelle** → beat célébration ; **broke** → doux ;
  * - l'art consomme le token de **MAGNITUDE** dédié `--egg-reveal-art-size` (la taille rendue = E2E) ;
- * - **a11y** : bloc de révélation `role="img"` au nom accessible, art décoratif, cibles ≥ 44 px ;
+ * - **a11y** : bloc de révélation `role="group"` (nom + rareté, contenu annoncé), art décoratif, ≥ 44 px ;
  * - **contraste WCAG résolu** (rétro #104/#125/#126) sur TOUS les couples texte/fond de l'écran.
  */
 
@@ -53,6 +53,11 @@ const DUP_RESULT: Extract<BuyEggActionResult, { ok: true }> = {
   coins: 70,
   shards: 25,
 };
+
+/** Nom accessible attendu du bloc de révélation (nom + rareté FR — parité `collection.cardLabel`). */
+const REVEAL_LABEL = strings.eggReveal.creatureLabel
+  .replace("{nom}", "Goupil")
+  .replace("{rareté}", strings.collection.rarity.common);
 
 async function renderReady() {
   stateMock.mockResolvedValue({ ok: true, eggPriceCoins: 50, coins: 120, shards: 40 });
@@ -92,10 +97,9 @@ describe("BoutiqueScreen — ouverture d'œuf (WIREFRAMES §6b)", () => {
     buyMock.mockResolvedValue(NEW_RESULT);
     fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
 
-    // Bloc de révélation présent, nommé par la créature (a11y : role="img" + aria-label).
-    const reveal = await screen.findByRole("img", {
-      name: strings.eggReveal.creatureLabel.replace("{nom}", "Goupil"),
-    });
+    // Bloc de révélation présent, nommé par la créature + RARETÉ (a11y : role="group" + aria-label —
+    // un SR entend la rareté, parité `collection.cardLabel`).
+    const reveal = await screen.findByRole("group", { name: REVEAL_LABEL });
     expect(reveal).toHaveAttribute("data-egg-reveal", "creature:0:0");
     expect(reveal).toHaveAttribute("data-egg-reveal-new", "true");
     // Un drawId opaque a bien été transmis (string non vide).
@@ -121,14 +125,15 @@ describe("BoutiqueScreen — ouverture d'œuf (WIREFRAMES §6b)", () => {
     buyMock.mockResolvedValue(DUP_RESULT);
     fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
 
-    const reveal = await screen.findByRole("img", {
-      name: strings.eggReveal.creatureLabel.replace("{nom}", "Goupil"),
-    });
+    const reveal = await screen.findByRole("group", { name: REVEAL_LABEL });
     expect(reveal).toHaveAttribute("data-egg-reveal-new", "false");
     // Le beat doublon interpole les éclats gagnés (25) — jamais un gabarit figé.
-    expect(
-      screen.getByText(strings.eggReveal.duplicate.replace("{éclats}", "25")),
-    ).toBeInTheDocument();
+    const beat = screen.getByText(strings.eggReveal.duplicate.replace("{éclats}", "25"));
+    expect(beat).toBeInTheDocument();
+    // A11y (#6) : pour un DOUBLON, le beat « +N ✨ » est la SEULE surface du gain d'éclats → il DOIT
+    // être ANNONCÉ (jamais `aria-hidden`, sinon silencieux à l'AT). Garde à effet observable : re-poser
+    // `aria-hidden` sur le beat rougit ce test.
+    expect(beat).not.toHaveAttribute("aria-hidden");
   });
 
   it("« Génial ! » referme la révélation et revient à la carte œuf (solde rafraîchi)", async () => {
@@ -180,13 +185,13 @@ describe("BoutiqueScreen — a11y", () => {
     expect(buy.style.minHeight).toBe("var(--tap-target-min)");
   });
 
-  it("l'art de la révélation est DÉCORATIF (le role=img parent porte le nom, pas de double annonce)", async () => {
+  it("l'art de la révélation est DÉCORATIF (le role=group parent porte le nom, pas de double annonce)", async () => {
     await renderReady();
     buyMock.mockResolvedValue(NEW_RESULT);
     fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
     await screen.findByRole("button", { name: strings.eggReveal.dismiss });
     const art = document.querySelector('[data-asset="egg-reveal-art"]');
-    // Décoratif : l'`<img>` porte alt="" (ignoré des lecteurs d'écran) — l'ancêtre role=img nomme.
+    // Décoratif : l'`<img>` porte alt="" (ignoré des lecteurs d'écran) — l'ancêtre role=group nomme.
     expect(art?.getAttribute("alt")).toBe("");
   });
 });

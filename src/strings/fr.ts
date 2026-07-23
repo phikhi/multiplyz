@@ -548,8 +548,12 @@ export const fr = {
      * §7). Réassurance douce, jamais une mécanique exposée crûment à l'enfant.
      */
     pity: "Teddy t'avait gardé une surprise rien que pour toi ! 🎁",
-    /** Nom accessible du bloc de révélation (`role="img"`, `{nom}` = nom de la créature). */
-    creatureLabel: "Ta créature : {nom}",
+    /**
+     * Nom accessible du bloc de révélation (`role="group"`, `{nom}` = nom de la créature, `{rareté}` =
+     * libellé FR de rareté). Parité avec la carte de créature (`collection.cardLabel`) : un lecteur
+     * d'écran entend AUSSI la rareté (a11y daltonisme — jamais la couleur seule).
+     */
+    creatureLabel: "Ta créature : {nom} — créature {rareté}",
     /** CTA de fermeture (WIREFRAMES §6b « [ Génial ! ] »). */
     dismiss: "Génial !",
   },

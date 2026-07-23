@@ -92,8 +92,11 @@ const CREATURE_FALLBACK_EMOJI = "🐾";
 
 /**
  * **Révélation de la créature tirée** (WIREFRAMES §6b) — art EN GRAND (`--egg-reveal-art-size`), beat
- * Teddy (nouvelle vs doublon), CTA « Génial ! ». Bloc `role="img"` au nom accessible (nom de la
- * créature). L'art est **décoratif** (l'ancêtre porte le nom). EN FLUX → non-occlusion structurelle.
+ * Teddy (nouvelle vs doublon), CTA « Génial ! ». Bloc `role="group"` au nom accessible (créature +
+ * **rareté**, parité `collection.cardLabel`) : le lecteur d'écran annonce le nom+rareté PUIS le
+ * contenu ANNONCÉ (le beat « +N ✨ » d'un doublon = seule surface du gain d'éclats, jamais silencieux ;
+ * le nom/la rareté visibles sont des échos `aria-hidden`). L'art est **décoratif** (le groupe porte le
+ * nom). EN FLUX → non-occlusion structurelle.
  */
 function EggReveal({
   result,
@@ -125,8 +128,16 @@ function EggReveal({
       </p>
 
       <div
-        role="img"
-        aria-label={fill(strings.eggReveal.creatureLabel, { nom: result.creature.displayName })}
+        // `role="group"` (PAS `role="img"`) : le bloc porte un nom accessible (créature + rareté) MAIS
+        // n'est PAS un nœud-feuille — le lecteur d'écran ANNONCE aussi son contenu textuel (le beat
+        // « +N ✨ » d'un doublon = SEULE surface du gain d'éclats, jamais silencieux ; role="img"
+        // pruderait ce contenu). Le nom + la rareté (redondants avec le label) restent des ÉCHOS
+        // VISUELS `aria-hidden` (pas de double annonce), comme la carte légendaire des résultats.
+        role="group"
+        aria-label={fill(strings.eggReveal.creatureLabel, {
+          nom: result.creature.displayName,
+          rareté: strings.collection.rarity[result.creature.rarity],
+        })}
         data-egg-reveal={result.creature.characterId}
         data-egg-reveal-new={result.isNew ? "true" : "false"}
         style={{
@@ -169,7 +180,10 @@ function EggReveal({
             </span>
           }
         />
+        {/* Nom + rareté = ÉCHOS VISUELS du nom accessible du bloc (`aria-hidden`, pas de double
+            annonce) — le lecteur d'écran les entend déjà via l'`aria-label` du `role="group"` parent. */}
         <span
+          aria-hidden="true"
           data-egg-reveal-name=""
           style={{
             fontFamily: "var(--font-family-display)",
@@ -180,12 +194,13 @@ function EggReveal({
         >
           {result.creature.displayName}
         </span>
-        <RarityBadge rarity={result.creature.rarity} />
+        <span aria-hidden="true">
+          <RarityBadge rarity={result.creature.rarity} />
+        </span>
         {/* Beat Teddy : nouvelle → « un nouvel ami » ; doublon → « +N ✨ » (jamais « rien », ECONOMY §1).
-            `aria-hidden` : le nom accessible du bloc est déjà porté par le `role="img"` parent ; ce beat
-            est un ajout de TON visuel (voix de Teddy), pas un doublon de contenu a11y. */}
+            **ANNONCÉ** (pas d'`aria-hidden`) : pour un DOUBLON, c'est la SEULE surface qui porte le gain
+            d'éclats → un lecteur d'écran DOIT l'entendre (parité avec le bandeau pitié ci-dessous). */}
         <p
-          aria-hidden="true"
           data-egg-reveal-beat=""
           style={{
             margin: 0,

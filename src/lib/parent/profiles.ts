@@ -170,9 +170,13 @@ export async function resetChildPin(
 /**
  * **Supprime** un profil = **purge RGPD** (AUTH.md §6). Un `DELETE` **unique** sur `profiles`
  * qui déclenche la **cascade FK** (`ON DELETE CASCADE`, schema.ts) → efface d'un seul geste
- * **atomique** (sémantique d'un statement SQLite) : les `sessions` du profil (**révocation** —
- * un token encore en circulation cesse d'ouvrir quoi que ce soit), `mastery`, `attempts`,
- * `progress`, `wallet`, `ledger`, `collection`. Aucune donnée d'un **autre** profil n'est touchée.
+ * **atomique** (sémantique d'un statement SQLite) **TOUTES les tables enfant** liées au profil par
+ * FK cascade — la liste suit le schéma et n'est PAS à maintenir à la main ici (toute table portant
+ * `profile_id … references(profiles.id, onDelete: "cascade")` est purgée) : à ce jour `sessions`
+ * (**révocation** — un token encore en circulation cesse d'ouvrir quoi que ce soit), `mastery`,
+ * `attempts`, `progress`, `wallet`, `ledger`, `collection`, ainsi que les tables de dépense enfant
+ * `cosmetics_owned` / `inventory_items` / `daily` (R4.1) et `egg_pity` (pitié d'œuf, R4.2). Aucune
+ * donnée d'un **autre** profil n'est touchée.
  *
  * **Garde propriétaire (mutation-prouvée)** : le profil porteur de `parent_pin_hash` est
  * **indestructible** — le supprimer casserait l'accès parent **et** le code de secours du foyer

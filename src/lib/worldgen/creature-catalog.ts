@@ -156,13 +156,14 @@ export function socleCreatureSpeciesKeys(): string[] {
  * même garde que `seedSocleWorlds`/`ensureCharacterInTx`). **Composé avec le boss** : mêmes clés
  * (`creatureCharacterId`/`legendaryForWorld`) → un grant ultérieur ne duplique rien.
  *
- * **Statut R3.1 (#378) — fondation, consommateur R4 (#155/#127)** : ce seed est **prêt** (committé +
- * unit-testé) mais **n'est PAS encore appelé au runtime** — ni par `runMigrations`, ni ailleurs.
- * Peupler `characters` avec les communes/rares **maintenant serait INVISIBLE** : le Pokédex
- * (`loadCollection`) lit `collection` (possessions), pas le catalogue → une commune/rare non possédée
- * ne s'affiche pas, et elle ne s'obtient qu'au **tirage d'œuf, qui arrive en R4**. R4 câblera
- * l'invocation de ce seed **avec** le draw. En R3, seules les **légendaires** sont vécues (art réel
- * via `legendaryForWorld` + boss, **sans** ce seed). Transaction = amorçage atomique (quand R4 l'appellera).
+ * **Statut R4.2 (#393, résout #382) — CÂBLÉ** : ce seed, posé en R3.1 (#378), est **désormais invoqué
+ * au runtime par `runMigrations`** (`src/lib/db/migrate.ts`) — le catalogue de communes/rares EXISTE en
+ * base après migration, ce qui le rend **tirable au tirage d'œuf** (R4.2, `game/egg-draw.ts`). Avant R4,
+ * le peupler aurait été INVISIBLE : le Pokédex (`loadCollection`) lit `collection` (possessions), pas le
+ * catalogue → une commune/rare non possédée ne s'affiche pas, et elle ne s'obtient qu'au tirage d'œuf.
+ * En R3, seules les **légendaires** étaient vécues (art réel via `legendaryForWorld` + boss, **sans** ce
+ * seed) ; R4.2 câble l'amorçage **avec** le draw (#155/#127 : fondation R3.1, consommateur R4.2).
+ * Transaction = amorçage atomique.
  */
 export function seedSocleCreatures(db: AppDatabase): void {
   db.transaction((tx) => {
