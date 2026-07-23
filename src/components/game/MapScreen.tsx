@@ -175,6 +175,22 @@ const TITLE_TEXT_STYLE: CSSProperties = {
   textAlign: "center",
 };
 
+/** Style partagé des liens du hub (Collection / Boutique) — pilule neutre, cible ≥ 44 px, tokens only. */
+const HUB_LINK_STYLE: CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  minHeight: "var(--tap-target-min)",
+  padding: "var(--space-2) var(--space-5)",
+  fontFamily: "var(--font-family-display)",
+  fontSize: "var(--font-size-md)",
+  fontWeight: "var(--font-weight-bold)",
+  color: "var(--color-text-primary)",
+  backgroundColor: "var(--color-bg-tertiary)",
+  border: "1px solid var(--color-border-primary)",
+  borderRadius: "var(--border-radius-full)",
+  textDecoration: "none",
+};
+
 function fill(template: string, replacements: Record<string, string>): string {
   return Object.entries(replacements).reduce(
     (acc, [token, value]) => acc.replace(`{${token}}`, value),
@@ -1005,27 +1021,25 @@ export function MapScreen() {
             teddyUrl={screen.map.theme.teddy}
             hasBackground={screen.map.theme.background !== null}
           />
-          {/* Hub (WIREFRAMES §2) : accès à la Collection (Pokédex) depuis la carte. */}
-          <Link
-            href="/collection"
-            className="mz-focusable"
+          {/* Hub (WIREFRAMES §2) : accès à la Collection (Pokédex) ET à la Boutique / Œufs (R4.2 #393,
+              WIREFRAMES §6 — c'est le point d'entrée de la boucle de DÉPENSE : dépenser ses pièces en
+              œufs). Deux liens frères EN FLUX (aucun `position` → aucune occlusion, #170/#278). */}
+          <nav
+            data-map-hub-links=""
             style={{
-              display: "inline-flex",
-              alignItems: "center",
-              minHeight: "var(--tap-target-min)",
-              padding: "var(--space-2) var(--space-5)",
-              fontFamily: "var(--font-family-display)",
-              fontSize: "var(--font-size-md)",
-              fontWeight: "var(--font-weight-bold)",
-              color: "var(--color-text-primary)",
-              backgroundColor: "var(--color-bg-tertiary)",
-              border: "1px solid var(--color-border-primary)",
-              borderRadius: "var(--border-radius-full)",
-              textDecoration: "none",
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              gap: "var(--space-3)",
             }}
           >
-            {strings.collection.title}
-          </Link>
+            <Link href="/collection" className="mz-focusable" style={HUB_LINK_STYLE}>
+              {strings.collection.title}
+            </Link>
+            <Link href="/boutique" className="mz-focusable" style={HUB_LINK_STYLE}>
+              {strings.boutique.title}
+            </Link>
+          </nav>
         </>
       )}
       {/* « Changer de joueur » vit désormais dans le shell persistant (story R1.1 #337,

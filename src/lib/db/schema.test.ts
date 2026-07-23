@@ -15,6 +15,7 @@ import {
   cosmetics,
   cosmeticsOwned,
   daily,
+  eggPity,
   HOUSEHOLD_SETTINGS_ID,
   householdSettings,
   inventoryItemKey,
@@ -36,11 +37,22 @@ import {
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-auth-schema-"));
 let counter = 0;
-/** Base fraîche migrée par cas (FK activées via createDatabase). */
+/**
+ * Base fraîche migrée par cas (FK activées via createDatabase).
+ *
+ * **Catalogue vidé (R4.2 #382)** : `runMigrations` amorce désormais le catalogue socle de créatures
+ * (`seedSocleCreatures` → ~41 lignes `characters`, art réel). Ces tests de **MÉCANIQUE de schéma**
+ * (colonnes/défauts/contraintes/cascade des tables `characters`/`collection`) partent d'un catalogue
+ * **VIDE** (fixture contrôlée) → on efface le seed ici. Le seed lui-même est couvert par
+ * `creature-catalog.test.ts` (contenu) + `db.test.ts`/`migrate` (câblage runMigrations).
+ */
 function freshDb() {
   counter += 1;
   const db = createDatabase(join(tmpRoot, `case-${counter}`, "app.sqlite"));
   runMigrations(db);
+  // collection (vide après seed) puis characters (FK cascade) → catalogue contrôlé pour les tests.
+  db.delete(collection).run();
+  db.delete(characters).run();
   return db;
 }
 
@@ -1679,6 +1691,59 @@ describe("schéma daily (récompense quotidienne — ECONOMY §3.6)", () => {
 
   it("référence daily.profile_id → profiles.id en cascade", () => {
     const [fk] = getTableConfig(daily).foreignKeys;
+    expect(fk.reference().foreignTable).toBe(profiles);
+    expect(fk.reference().foreignColumns[0].name).toBe("id");
+    expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+describe("schéma egg_pity (pitié anti-malchance des œufs — ECONOMY §4.2/§7, story R4.2 #393)", () => {
+  it("insère et relit une ligne (défaut consecutive_duplicates=0 / updated_at)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    // Sans `consecutiveDuplicates` → défaut 0 (profil neuf).
+    db.insert(eggPity).values({ profileId: 1 }).run();
+    const row = db.select().from(eggPity).get();
+    expect(row).toMatchObject({ profileId: 1, consecutiveDuplicates: 0 });
+    expect(row?.updatedAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste un compteur de doublons consécutifs", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(eggPity).values({ profileId: 1, consecutiveDuplicates: 4 }).run();
+    expect(db.select().from(eggPity).get()?.consecutiveDuplicates).toBe(4);
+  });
+
+  it("une seule ligne par profil (PK = profile_id)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(eggPity).values({ profileId: 1, consecutiveDuplicates: 1 }).run();
+    expect(() =>
+      db.insert(eggPity).values({ profileId: 1, consecutiveDuplicates: 2 }).run(),
+    ).toThrow();
+  });
+
+  it("laisse consecutive_duplicates NOT NULL avec défaut 0 (garde PRAGMA, #105)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number; dflt_value: string | null }>(
+      sql`PRAGMA table_info(egg_pity)`,
+    );
+    const col = info.find((c) => c.name === "consecutive_duplicates");
+    expect(col?.notnull).toBe(1);
+    expect(col?.dflt_value).toBe("0");
+  });
+
+  it("purge la pitié à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(eggPity).values({ profileId: 1, consecutiveDuplicates: 3 }).run();
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(eggPity).all()).toHaveLength(0);
+  });
+
+  it("référence egg_pity.profile_id → profiles.id en cascade", () => {
+    const [fk] = getTableConfig(eggPity).foreignKeys;
     expect(fk.reference().foreignTable).toBe(profiles);
     expect(fk.reference().foreignColumns[0].name).toBe("id");
     expect(fk.onDelete).toBe("cascade");

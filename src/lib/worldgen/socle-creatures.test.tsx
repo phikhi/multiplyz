@@ -38,6 +38,10 @@ let profileId: number;
 beforeEach(() => {
   db = createDatabase(":memory:");
   runMigrations(db); // migre + amorce socle_worlds (placeholders). AUCUN master approuvé.
+  // Catalogue VIDÉ (R4.2 #382) : `runMigrations` amorce désormais le catalogue socle
+  // (`seedSocleCreatures`). Ces tests exercent `generateSocleCreatures` qui **écrit** les créatures →
+  // catalogue de départ vide (sinon collision de PK). `db.delete(characters)` cascade `collection`.
+  db.delete(characters).run();
   profileId = db
     .insert(profiles)
     .values({ name: "Nino", nameKey: "nino", avatar: "owl", pinHash: "x" })

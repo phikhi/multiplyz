@@ -58,7 +58,7 @@ export default defineConfig({
     // E2E `world/e2e/…` (les deux fixtures pointent la même image committée, mais des URLs
     // publiques différentes — les assertions `toContain("world/e2e/…")` attendent précisément
     // celle-ci). `next dev` seul saute ce double-amorçage, la migration ayant déjà tourné ci-dessus.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && tsx e2e/seed-canari.cli.ts && tsx e2e/seed-boss-progress.cli.ts && next dev --port ${PORT}`,
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && tsx e2e/seed-canari.cli.ts && tsx e2e/seed-boss-progress.cli.ts && tsx e2e/seed-boutique.cli.ts && next dev --port ${PORT}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

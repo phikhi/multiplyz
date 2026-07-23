@@ -8,7 +8,7 @@ import { CONFIG_DEFAULTS } from "../../config/server-config";
 import { getDatabaseConfig, resolveDatabasePath } from "./config";
 import { createDatabase, getDb } from "./index";
 import { backfillNameKeys, runMigrations } from "./migrate";
-import { schemaMeta } from "./schema";
+import { characters, schemaMeta } from "./schema";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "multiplyz-db-"));
 let counter = 0;
@@ -116,6 +116,32 @@ describe("runMigrations", () => {
     expect(rows).toEqual([{ key: "schema_version", value: "1", updatedAt: expect.any(Date) }]);
   });
 
+  // Câblage R4.2 (#382, « déclaré ≠ vécu » #180) : `runMigrations` doit AMORCER le catalogue socle de
+  // créatures (`seedSocleCreatures`) → les communes/rares du pool d'œufs EXISTENT en base après
+  // migration (sinon un tirage d'œuf n'aurait rien à tirer). Effet observable : `characters` peuplé
+  // (communes+rares in_egg_pool=true + légendaires hors œufs), idempotent au re-run.
+  it("amorce le catalogue socle de créatures dans characters (câblage #382 seedSocleCreatures)", () => {
+    const path = freshDbPath();
+    runMigrations(createDatabase(path));
+    const db = createDatabase(path);
+
+    const rows = db.select().from(characters).all();
+    // Le catalogue est peuplé (jamais vide) — le pool d'œufs a de quoi tirer.
+    expect(rows.length).toBeGreaterThan(0);
+    // Au moins une commune/rare DANS le pool d'œufs (tirable) …
+    expect(rows.some((r) => r.inEggPool && (r.rarity === "common" || r.rarity === "rare"))).toBe(
+      true,
+    );
+    // … et la légendaire du monde 0 présente mais HORS œufs (boss only).
+    const leg = rows.find((r) => r.id === "legendary:0");
+    expect(leg?.inEggPool).toBe(false);
+
+    // Idempotent : un 2ᵉ runMigrations n'ajoute aucune ligne (onConflictDoNothing par PK).
+    const before = rows.length;
+    expect(() => runMigrations(db)).not.toThrow();
+    expect(db.select().from(characters).all()).toHaveLength(before);
+  });
+
   // Régression #105 : la migration 0005 (ajout `name_key`) doit s'appliquer sur
   // une table `profiles` DÉJÀ peuplée sans planter (`Cannot add a NOT NULL column
   // with default value NULL`), et backfiller la clé accent-correcte.
@@ -138,7 +164,9 @@ describe("runMigrations", () => {
     // rejoue ; son 0015 : colonnes `household_settings.sound_enabled`/`music_enabled`/`volume` —
     // DROP TABLE household_settings ci-dessous suffit (0013 + 0015 rejouent tous deux sur la table
     // recréée) ; économie de dépense 0016 : cosmetics/cosmetics_owned/inventory_items/daily —
-    // `cosmetics_owned` référence `cosmetics` par FK, donc drop dans cet ordre.
+    // `cosmetics_owned` référence `cosmetics` par FK, donc drop dans cet ordre ; pitié d'œuf 0017 :
+    // egg_pity (sans dépendant, drop libre).
+    seed.run(sql`DROP TABLE egg_pity`);
     seed.run(sql`DROP TABLE cosmetics_owned`);
     seed.run(sql`DROP TABLE cosmetics`);
     seed.run(sql`DROP TABLE inventory_items`);
@@ -210,10 +238,11 @@ describe("runMigrations", () => {
     // migrations, comme la régression #105). La dé-journalisation `>= OFFSET 8` retire
     // AUSSI 0009 (worlds/jobs), 0010 (teddy_reference_assets), 0012 (socle_worlds), 0013
     // (household_settings), 0014 (colonne `profiles.recalibration_requested`), 0015 (colonnes
-    // son `household_settings`) et 0016 (économie de dépense : cosmetics/cosmetics_owned/
-    // inventory_items/daily) → on drope ces tables + la colonne pour que leur `CREATE TABLE` /
-    // `ADD COLUMN` rejoue (DROP TABLE household_settings couvre 0013 ET 0015 ; drop
-    // `cosmetics_owned` avant `cosmetics` — FK).
+    // son `household_settings`), 0016 (économie de dépense : cosmetics/cosmetics_owned/
+    // inventory_items/daily) et 0017 (pitié d'œuf : egg_pity) → on drope ces tables + la colonne
+    // pour que leur `CREATE TABLE` / `ADD COLUMN` rejoue (DROP TABLE household_settings couvre 0013
+    // ET 0015 ; drop `cosmetics_owned` avant `cosmetics` — FK).
+    seed.run(sql`DROP TABLE egg_pity`);
     seed.run(sql`DROP TABLE cosmetics_owned`);
     seed.run(sql`DROP TABLE cosmetics`);
     seed.run(sql`DROP TABLE inventory_items`);

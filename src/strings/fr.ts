@@ -503,6 +503,57 @@ export const fr = {
     stageLockedSuffix: "pas encore",
   },
   /**
+   * **Boutique / Œufs** (story R4.2 #393, WIREFRAMES §6, ECONOMY §4.2/§6/§7, COPY §3 « Déblocage
+   * créature / œuf »). Écran **enfant** → voix de Teddy, tutoiement, posture de joie (jamais « rien »,
+   * jamais de pression/FOMO). Périmètre R4.2 = **l'œuf** (achat pièces → tirage → doublon→éclats +
+   * pitié) ; la boutique de ciblage (éclats, R4.3) et les cosmétiques (R4.5) arrivent plus tard.
+   */
+  boutique: {
+    /** Titre de l'écran (WIREFRAMES §6a « Boutique »). */
+    title: "Boutique 🥚",
+    /** Retour à la carte (hub, WIREFRAMES §2). */
+    back: "Retour à la carte",
+    /** Sous-titre de la section œufs (WIREFRAMES §6a « — Œufs 🥚 — »). */
+    eggsHeading: "Les œufs surprise",
+    /** Nom de l'œuf de base (commun). */
+    eggName: "Œuf surprise",
+    /** Libellé du bouton d'achat (`{prix}` = prix en pièces, ex. « Ouvrir 🪙50 »). */
+    buy: "Ouvrir 🪙{prix}",
+    /** Achat en cours (le tirage se résout côté serveur). */
+    buying: "L'œuf s'ouvre…",
+    /**
+     * Indice DOUX quand l'enfant n'a pas assez de pièces (ECONOMY §1 : jamais « rien », jamais un
+     * blocage — juste une invitation à jouer encore). Voix de Teddy, posture positive.
+     */
+    broke: "Il te faut encore quelques pièces — retourne jouer, on gagne vite ! 🪙",
+    /** États de chargement / erreur de l'écran (mêmes postures que `collection`/`map`). */
+    loading: "Je prépare la boutique…",
+    loadError: "Oups, ça n'a pas marché. On réessaie ?",
+    loadErrorRetry: "Réessayer",
+  },
+  /**
+   * **Ouverture d'œuf** (moment fun, WIREFRAMES §6b, COPY §3). Voix de Teddy, tutoiement.
+   * La créature tirée est révélée EN GRAND (art réel) ; un doublon est résolu avec **joie**
+   * (éclats), jamais « rien » (ECONOMY §1). `{nom}` = nom de la créature, `{éclats}` = éclats gagnés.
+   */
+  eggReveal: {
+    /** Titre du moment d'ouverture (WIREFRAMES §6b « L'œuf s'ouvre… 🥚 »). */
+    opening: "L'œuf s'ouvre… 🥚",
+    /** Beat Teddy pour une NOUVELLE créature (COPY §3 « Oooh, un nouvel ami ! »). */
+    newFriend: "Oooh, un nouvel ami ! Viens voir 👀",
+    /** Beat Teddy pour un DOUBLON (`{éclats}` = éclats gagnés) — résolu avec joie, jamais « rien ». */
+    duplicate: "Tu l'avais déjà — mais regarde, +{éclats} ✨ éclats !",
+    /**
+     * Bandeau discret « pitié » quand la garantie anti-malchance a offert cette nouveauté (ECONOMY
+     * §7). Réassurance douce, jamais une mécanique exposée crûment à l'enfant.
+     */
+    pity: "Teddy t'avait gardé une surprise rien que pour toi ! 🎁",
+    /** Nom accessible du bloc de révélation (`role="img"`, `{nom}` = nom de la créature). */
+    creatureLabel: "Ta créature : {nom}",
+    /** CTA de fermeture (WIREFRAMES §6b « [ Génial ! ] »). */
+    dismiss: "Génial !",
+  },
+  /**
    * Récupération du code parent via code de secours (AUTH.md §5). Écran
    * **parent** → registre **neutre/vouvoiement** (COPY.md §5, pas la voix de
    * Teddy). Message d'échec du code **générique** (rate-limité, AUTH.md §4).
