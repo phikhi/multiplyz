@@ -217,9 +217,13 @@ export function seedSocleCreatures(db: AppDatabase): void {
  * vivent dans `collection.nickname`). Couvre légendaires ET communes/rares (toute créature socle dérivée).
  *
  * Lecture des lignes candidates hors transaction (comme `backfillNameKeys`), puis application des
- * `UPDATE` dans **une seule** `db.transaction` → amorçage **atomique** (#122 ; tout-ou-rien, pas de
- * catalogue à demi-réparé si le process meurt). À appeler dans `runMigrations` **après**
- * `seedSocleCreatures` (les lignes manquantes sont d'abord insérées, celles-ci sont réparées ensuite).
+ * `UPDATE` dans **une seule** `db.transaction`. **Atomicité par construction** (`db.transaction`
+ * protège d'une mort de process en milieu de batch → pas de catalogue à demi-réparé), **NON
+ * mutation-prouvée** (#124) : le batch est **homogène** — des `UPDATE` par PK sans 2ᵉ écriture dont
+ * une contrainte pourrait échouer APRÈS la 1ʳᵉ → aucun test de rollback non-vacuous n'est
+ * constructible ici (il resterait vert sans la transaction). On garde `db.transaction` (construct
+ * correct + cohérence `backfillNameKeys`), sans sur-revendiquer une atomicité *testée*. À appeler dans
+ * `runMigrations` **après** `seedSocleCreatures` (les manquantes insérées d'abord, celles-ci réparées ensuite).
  */
 export function backfillPlaceholderCreatureArt(db: AppDatabase): void {
   // 1ʳᵉ passe (lectures seules) : lignes socle DÉJÀ présentes dont l'art_ref est encore placeholder.
@@ -240,7 +244,7 @@ export function backfillPlaceholderCreatureArt(db: AppDatabase): void {
       // lignes déjà réelles → le test nommé rougit.
       if (isRenderableAssetRef(row.artRef)) continue;
       // `story` réel préservé ; seulement (re)posé s'il est vide/absent (pré-R3.1 pouvait le laisser vide).
-      const story = row.story === null || row.story === "" ? c.story : row.story;
+      const story = !row.story ? c.story : row.story;
       updates.push({ id: c.id, artRef: c.artRef, story });
     }
   }
