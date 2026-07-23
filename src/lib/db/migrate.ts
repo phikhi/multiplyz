@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { nameKey } from "../auth/validation";
-import { seedSocleCreatures } from "../worldgen/creature-catalog";
+import { backfillPlaceholderCreatureArt, seedSocleCreatures } from "../worldgen/creature-catalog";
 import { seedSocleWorlds } from "../worldgen/socle";
 import { MIGRATIONS_FOLDER } from "./config";
 import type { AppDatabase } from "./index";
@@ -11,14 +11,19 @@ import type { AppDatabase } from "./index";
  * amorçages **applicatifs idempotents** : backfill de la colonne dérivée
  * `profiles.name_key` (#105) + amorçage du **socle de mondes de secours**
  * (WORLDGEN §7, story 6.6 → 1er lancement instantané, hors réseau) + amorçage du
- * **catalogue de créatures socle** (communes/rares + légendaires, story R4.2 #382/#393).
+ * **catalogue de créatures socle** (communes/rares + légendaires, story R4.2 #382/#393)
+ * + **backfill de l'art réel** des lignes `characters` restées `placeholder://` (bug #401 :
+ * une créature gagnée AVANT que R3.1 committe le vrai art garde son placeholder, que le seed
+ * `onConflictDoNothing` ne réécrit jamais → `backfillPlaceholderCreatureArt` la répare).
  *
  * Idempotent : Drizzle journalise les migrations déjà jouées
  * (`__drizzle_migrations`) → un second appel est un no-op sans erreur ; le backfill
- * (`WHERE name_key IS NULL`), l'amorçage du socle (`onConflictDoNothing`) et celui du
- * catalogue de créatures (`onConflictDoNothing` par PK) sont eux-mêmes idempotents.
+ * (`WHERE name_key IS NULL`), l'amorçage du socle (`onConflictDoNothing`), celui du
+ * catalogue de créatures (`onConflictDoNothing` par PK) et le backfill d'art placeholder
+ * (`WHERE !isRenderableAssetRef(art_ref)`) sont eux-mêmes idempotents.
  * `seedSocleWorlds` / `seedSocleCreatures` tournent **après** `migrate` (les tables
- * `socle_worlds` / `characters` existent alors).
+ * `socle_worlds` / `characters` existent alors) ; `backfillPlaceholderCreatureArt` tourne
+ * **après** `seedSocleCreatures` (répare ce qui existe déjà, une fois les manquantes insérées).
  *
  * **Câblage R4.2 (#382, « déclaré ≠ vécu » #180)** : `seedSocleCreatures` était **prêt** depuis
  * R3.1 (#378) mais **non appelé** — le peupler seul aurait été invisible (le Pokédex lit les
@@ -32,6 +37,7 @@ export function runMigrations(db: AppDatabase, migrationsFolder: string = MIGRAT
   backfillNameKeys(db);
   seedSocleWorlds(db);
   seedSocleCreatures(db);
+  backfillPlaceholderCreatureArt(db);
 }
 
 /**

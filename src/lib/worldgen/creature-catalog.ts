@@ -1,7 +1,9 @@
+import { eq } from "drizzle-orm";
 import { creatureArtRef } from "@/config/creatures";
 import type { AppDatabase } from "@/lib/db";
 import { characters, type Rarity } from "@/lib/db/schema";
 import { legendaryForWorld, type SeededCharacter } from "@/lib/game/collection";
+import { isRenderableAssetRef } from "@/lib/game/world-theme";
 import { strings } from "@/strings";
 import { SOCLE_WORLD_COUNT } from "./socle";
 
@@ -184,6 +186,76 @@ export function seedSocleCreatures(db: AppDatabase): void {
           .onConflictDoNothing({ target: characters.id })
           .run();
       }
+    }
+  });
+}
+
+/**
+ * **Backfill applicatif idempotent** de l'art réel des créatures socle (bug #401, épic R4 #320,
+ * garde #180 « déclaré = vécu »). Répare les lignes `characters` **déjà peuplées** dont l'`art_ref`
+ * est resté **non-rendable** (`placeholder://…`) parce qu'elles ont été créées AVANT que R3.1 (#378)
+ * committe le vrai art.
+ *
+ * **Pourquoi un backfill dédié et NON `seedSocleCreatures` en `onConflictDoUpdate`** : une légendaire
+ * gagnée au boss avant R3.1 (`grantLegendaryInTx`→`ensureCharacterInTx`, `onConflictDoNothing`) a une
+ * ligne `characters` avec `art_ref = placeholder://legendary/N` ; le seed d'art réel arrivé plus tard
+ * (`seedSocleCreatures`, `onConflictDoNothing`) ne la **réécrit jamais** — c'est exactement la garde
+ * R3.1 « ne réécrit JAMAIS » (préserve un renommage/champ existant). On ne peut donc pas la relâcher
+ * en `DoUpdate` (elle clobbererait des champs + casserait le test mutation-prouvé de R3.1). Ce backfill
+ * est **chirurgical** : il ne touche QUE `art_ref` (+ `story` s'il est vide) et SEULEMENT les lignes
+ * dont l'`art_ref` est non-rendable — le placeholder→réel, jamais l'inverse.
+ *
+ * **Idempotent** (#91/#105, patron `backfillNameKeys`) : la garde `!isRenderableAssetRef(art_ref)` ne
+ * sélectionne QUE les lignes encore placeholder → après un 1ᵉʳ passage elles sont rendables → un 2ᵉ
+ * `runMigrations` est un **no-op** (`updates` vide, aucune écriture). L'art réel dérivé
+ * (`creatureArtRef`, invariant `isRenderableAssetRef` **prouvé** par le test `#189` du catalogue socle)
+ * remplace le placeholder ; on n'écrit donc jamais une réf non-rendable (pas de branche runtime
+ * redondante avec cet invariant — règle #143).
+ *
+ * **Non-destructif** : ne touche QUE le **catalogue** `characters` (`art_ref` + `story` si vide), JAMAIS
+ * `collection` (possession/`count`/`nickname` intacts) ni `characters.name_default` (les renommages
+ * vivent dans `collection.nickname`). Couvre légendaires ET communes/rares (toute créature socle dérivée).
+ *
+ * Lecture des lignes candidates hors transaction (comme `backfillNameKeys`), puis application des
+ * `UPDATE` dans **une seule** `db.transaction`. **Atomicité par construction** (`db.transaction`
+ * protège d'une mort de process en milieu de batch → pas de catalogue à demi-réparé), **NON
+ * mutation-prouvée** (#124) : le batch est **homogène** — des `UPDATE` par PK sans 2ᵉ écriture dont
+ * une contrainte pourrait échouer APRÈS la 1ʳᵉ → aucun test de rollback non-vacuous n'est
+ * constructible ici (il resterait vert sans la transaction). On garde `db.transaction` (construct
+ * correct + cohérence `backfillNameKeys`), sans sur-revendiquer une atomicité *testée*. À appeler dans
+ * `runMigrations` **après** `seedSocleCreatures` (les manquantes insérées d'abord, celles-ci réparées ensuite).
+ */
+export function backfillPlaceholderCreatureArt(db: AppDatabase): void {
+  // 1ʳᵉ passe (lectures seules) : lignes socle DÉJÀ présentes dont l'art_ref est encore placeholder.
+  const updates: { id: string; artRef: string; story: string }[] = [];
+  for (let slot = 0; slot < SOCLE_WORLD_COUNT; slot += 1) {
+    for (const c of deriveSocleCreatures(slot)) {
+      const row = db
+        .select({ artRef: characters.artRef, story: characters.story })
+        .from(characters)
+        .where(eq(characters.id, c.id))
+        .limit(1)
+        .get();
+      // Ligne absente → rien à backfiller (le seed insère les manquantes ; ce backfill RÉPARE
+      // seulement les lignes pré-existantes, il n'en crée aucune).
+      if (row === undefined) continue;
+      // Art déjà réel (rendable) → JAMAIS réécrit : garde d'idempotence ET de non-clobber (préserve un
+      // art posé par un grant/seed). C'est LA garde mutation-prouvée (#60/#173) : la retirer clobbe les
+      // lignes déjà réelles → le test nommé rougit.
+      if (isRenderableAssetRef(row.artRef)) continue;
+      // `story` réel préservé ; seulement (re)posé s'il est vide/absent (pré-R3.1 pouvait le laisser vide).
+      const story = !row.story ? c.story : row.story;
+      updates.push({ id: c.id, artRef: c.artRef, story });
+    }
+  }
+  if (updates.length === 0) return; // no-op : 2ᵉ run, ou aucune ligne placeholder (idempotence).
+
+  db.transaction((tx) => {
+    for (const u of updates) {
+      tx.update(characters)
+        .set({ artRef: u.artRef, story: u.story })
+        .where(eq(characters.id, u.id))
+        .run();
     }
   });
 }
