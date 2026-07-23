@@ -124,13 +124,23 @@ describe("creditWallet — crédit atomique + journal", () => {
     expect(db.select().from(ledger).all()).toHaveLength(0);
   });
 
+  // GARDE MONNAIE (défense en profondeur #282, symétrie avec le débit) : le crédit refuse aussi
+  // une monnaie hors {coins,shards}. Rouge si `assertKnownCurrency` est retirée de creditWalletInTx.
+  it("REJETTE une monnaie inconnue (defense-in-depth #282)", () => {
+    expect(() =>
+      creditWallet(db, earn({ currency: "gems" as unknown as "coins", refId: "x" }), NOW),
+    ).toThrow(/monnaie invalide/);
+    expect(db.select().from(wallet).all()).toHaveLength(0);
+    expect(db.select().from(ledger).all()).toHaveLength(0);
+  });
+
   // GARDE ATOMICITÉ (effet observable, mutation-testée) : si l'INSERT du **journal**
   // échoue APRÈS que le crédit du portefeuille a réussi, tout est ANNULÉ (rollback de
-  // la transaction). Le point subtil : `creditWallet` appelle d'abord `creditExists`
+  // la transaction). Le point subtil : `creditWallet` appelle d'abord `ledgerEntryExists`
   // (un `SELECT id FROM ledger`) — casser la table entière (`DROP`) ferait throw CE
   // select AVANT toute écriture wallet → test VACUOUS (passerait même sans transaction,
   // rétro #60/#61). On casse donc UNIQUEMENT l'INSERT : on rebuild `ledger` sans la
-  // colonne `amount` que l'INSERT fournit. Alors : (1) le SELECT `id` de `creditExists`
+  // colonne `amount` que l'INSERT fournit. Alors : (1) le SELECT `id` de `ledgerEntryExists`
   // fonctionne toujours, (2) l'upsert `wallet` s'exécute (crédit +50), (3) l'INSERT
   // `ledger` jette « no such column: amount » → rollback. Sans le wrapper
   // `db.transaction`, le crédit wallet SURVIVRAIT à l'échec → ce test CASSE (vérifié
@@ -291,6 +301,28 @@ describe("debitWallet — débit atomique + journal", () => {
       InsufficientBalanceError,
     );
     expect(db.select().from(wallet).all()).toHaveLength(0);
+  });
+
+  // GARDE MONNAIE (défense en profondeur #282, mutation-testée) : une monnaie hors {coins,shards}
+  // est REFUSÉE au sommet de la primitive. C'est le cas #282 « input client brut au runtime » : le
+  // type TS `"coins"|"shards"` ne protège pas. SANS `assertKnownCurrency`, `balanceBefore["gems"]`
+  // serait `undefined` → `undefined < amount` = false → la GARDE ANTI-SOLDE-NÉGATIF serait
+  // CONTOURNÉE (le débit passerait sans fonds). Mutation : retirer `assertKnownCurrency` de
+  // `debitWalletInTx` → ce test rougit (plus de throw `/monnaie invalide/`, écriture incohérente).
+  // Épingle `assertKnownCurrency` (pas la garde anti-négatif : ici la monnaie n'atteint jamais
+  // le check de solde) — crédité par CE test nommé (#173).
+  it("MONNAIE : refuse une monnaie inconnue (defense-in-depth #282, anti-bypass garde négatif)", () => {
+    fund(100, 100);
+    expect(() =>
+      debitWallet(
+        db,
+        spend({ currency: "gems" as unknown as "coins", amount: 50, refId: "egg:1" }),
+        LATER,
+      ),
+    ).toThrow(/monnaie invalide/);
+    // Aucune écriture : soldes intacts (ni coins ni shards touchés), aucune ligne spend.
+    expect(loadWallet(db, profileId)).toEqual({ coins: 100, shards: 100 });
+    expect(db.select().from(ledger).where(eq(ledger.direction, "spend")).all()).toHaveLength(0);
   });
 
   it("porte le solde disponible réel dans InsufficientBalanceError (message + champs)", () => {

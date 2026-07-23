@@ -141,6 +141,29 @@ export function assertPositiveAmount(amount: number): void {
 }
 
 /**
+ * Valide que `currency` est **EXACTEMENT** `"coins"` ou `"shards"` (défense en profondeur #282,
+ * fondation monétaire). **Le type TS `"coins" | "shards"` ne protège PAS au runtime** : un
+ * consommateur futur (server-action de dépense R4.2+) peut passer un `currency` **client brut non
+ * validé** — le server-action reçoit l'input client **brut** au runtime, les types TS sont erasés
+ * (même piège que #282). Une monnaie **inconnue** serait catastrophique côté portefeuille :
+ * - `wallet[currency]` = `undefined` → `undefined < amount` = `false` → **garde anti-solde-négatif
+ *   CONTOURNÉE** (le débit « réussit » sans fonds) ;
+ * - le ternaire de colonne retombe silencieusement sur `wallet.shards` + `set({ [currency]: … })`
+ *   écrit sur une **clé de colonne dynamique invalide** (mutation d'état incohérente).
+ *
+ * On refuse donc **au plus tôt**, au sommet des primitives `creditWalletInTx`/`debitWalletInTx`
+ * (avant toute lecture/écriture) — symétrique de `assertPositiveAmount`, mais **dans** la primitive
+ * (et non dans le wrapper) pour couvrir AUSSI les appelants directs `…InTx` (R4.2 appelle la
+ * primitive **dans sa propre** transaction). Throw avant la 1ʳᵉ écriture → rollback vide de
+ * l'appelant, jamais d'état partiel.
+ */
+export function assertKnownCurrency(currency: string): asserts currency is "coins" | "shards" {
+  if (currency !== "coins" && currency !== "shards") {
+    throw new Error(`wallet: monnaie invalide (${currency}) — attendu "coins" ou "shards".`);
+  }
+}
+
+/**
  * **Crédite** le portefeuille + journalise le mouvement **dans une transaction déjà
  * ouverte** (`tx`), sans en ouvrir une nouvelle — c'est le cœur de crédit réutilisable
  * **à l'intérieur** d'une transaction multi-écritures (ex. la fin de niveau, 5.5 :
@@ -165,6 +188,9 @@ export function assertPositiveAmount(amount: number): void {
  * `now` = instant serveur injecté (jamais un `Date.now()` interne, LEARNINGS #46).
  */
 export function creditWalletInTx(tx: DbHandle, input: CreditInput, now: Date): CreditResult {
+  // Défense en profondeur (#282) : monnaie EXACTE avant toute lecture/écriture (protège aussi
+  // les appelants directs de la primitive contre un `currency` client brut non validé).
+  assertKnownCurrency(input.currency);
   // Rejeu déjà journalisé (retry réseau) → aucune 2ᵉ mutation, solde inchangé.
   if (ledgerEntryExists(tx, input.profileId, input.reason, input.refId)) {
     return { balance: loadWallet(tx, input.profileId), applied: false };
@@ -318,6 +344,10 @@ export class InsufficientBalanceError extends Error {
  * transaction). `now` = instant serveur injecté (jamais un `Date.now()` interne, LEARNINGS #46).
  */
 export function debitWalletInTx(tx: DbHandle, input: DebitInput, now: Date): DebitResult {
+  // Défense en profondeur (#282) : monnaie EXACTE avant toute lecture/écriture. SANS cette garde,
+  // une monnaie inconnue rendrait `balanceBefore[currency]` undefined → `undefined < amount` = false
+  // → la garde anti-solde-négatif ci-dessous serait CONTOURNÉE (débit sans fonds).
+  assertKnownCurrency(input.currency);
   // Rejeu déjà journalisé (retry réseau / double-clic) → aucun 2ᵉ débit, solde inchangé.
   if (ledgerEntryExists(tx, input.profileId, input.reason, input.refId)) {
     return { balance: loadWallet(tx, input.profileId), applied: false };

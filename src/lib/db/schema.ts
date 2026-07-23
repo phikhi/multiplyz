@@ -399,7 +399,7 @@ export type LedgerCurrency = "coins" | "shards" | "item";
  * portant le même `(profile_id, reason, ref_id)` **ne recrédite pas**.
  *
  * **Défense en profondeur (#82)** — même doctrine que `attempts`. (1) La garde applicative
- * `creditExists` (dans la transaction synchrone) reste la barrière **primaire** : elle
+ * `ledgerEntryExists` (dans la transaction synchrone) reste la barrière **primaire** : elle
  * transforme un rejeu de `finishLevel` en no-op (`applied: false`, aucune 2ᵉ ligne ledger,
  * aucun 2ᵉ crédit) — correcte en **mono-process**. (2) L'**index UNIQUE composite**
  * `(profile_id, reason, ref_id)` (callback table 3ᵉ-arg) garantit le dédoublonnage **au

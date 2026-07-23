@@ -196,7 +196,7 @@ describe("runMigrations", () => {
   // Régression #82 : la migration 0008 (index UNIQUE composites sur `attempts` +
   // `ledger`) doit s'appliquer sur des tables DÉJÀ PEUPLÉES sans planter. Un
   // `CREATE UNIQUE INDEX` échoue si des lignes existantes violent l'unicité ; l'idempotence
-  // applicative (attemptExists/creditExists) ayant tenu jusqu'ici, aucun doublon
+  // applicative (attemptExists/ledgerEntryExists) ayant tenu jusqu'ici, aucun doublon
   // (profil, id client) / (profil, raison, ref) ne préexiste → la création doit réussir.
   // On ramène une base fraîche à l'état PRÉ-0008 (index retirés, 0008 dé-journalisée),
   // on peuple attempts + ledger avec des lignes valides (dont des NULL, distincts en SQLite),

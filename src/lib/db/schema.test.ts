@@ -701,7 +701,7 @@ describe("schéma ledger (journal append-only — ECONOMY §3.7)", () => {
 
   // Idempotence DB-niveau du crédit (#82) : l'index UNIQUE composite `(profile_id,
   // reason, ref_id)` doit **rejeter au niveau MOTEUR** un rejeu de crédit portant la
-  // même clé de rejeu — indépendamment de la garde applicative `creditExists`. On insère
+  // même clé de rejeu — indépendamment de la garde applicative `ledgerEntryExists`. On insère
   // la 2ᵉ ligne EN BRUT (sans passer par `creditWalletInTx`) → seule la contrainte DB
   // peut lever. Effet observable : retirer le `uniqueIndex(...)` du `ledger` → rouge.
   // GARDE anti-drift (#82) : après `runMigrations`, l'index UNIQUE

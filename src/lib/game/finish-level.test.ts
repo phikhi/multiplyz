@@ -259,7 +259,7 @@ describe("finishLevel — ATOMICITÉ multi-écritures / rollback (règle #122/#1
   // La transaction protège ≥2 écritures : (1) recordStars (progress), puis (2)/(3) creditWalletInTx
   // (upsert wallet + INSERT ledger). On induit la panne à la 2ᵉ/3ᵉ écriture GARDÉE — l'INSERT
   // `ledger` — en DROPPANT la colonne `amount` de `ledger` (rebuild sans `amount`). Le
-  // `creditExists` en amont fait `SELECT id FROM ledger WHERE …` : il reste requêtable (colonnes
+  // `ledgerEntryExists` en amont fait `SELECT id FROM ledger WHERE …` : il reste requêtable (colonnes
   // id/profile_id/reason/ref_id présentes) → il NE court-circuite PAS avant la 1ʳᵉ écriture (règle
   // #122 : la panne frappe l'écriture gardée, jamais une lecture en amont). L'ordre observé :
   //   1. recordStars réussit (progress écrit)   ← 1ʳᵉ écriture
@@ -269,7 +269,7 @@ describe("finishLevel — ATOMICITÉ multi-écritures / rollback (règle #122/#1
   // PREUVE : retirer le wrapper `db.transaction` de finishLevel casse PRÉCISÉMENT ce test
   // (progress + wallet resteraient écrits malgré l'échec du ledger). Vérifié par mutation manuelle.
   it("ROLLBACK : panne de l'INSERT ledger (2ᵉ/3ᵉ écriture) ⇒ progress ET wallet annulés (aucun état partiel)", () => {
-    // Rebuild `ledger` SANS la colonne `amount` : le SELECT de `creditExists` (id/reason/ref_id)
+    // Rebuild `ledger` SANS la colonne `amount` : le SELECT de `ledgerEntryExists` (id/reason/ref_id)
     // reste valide → l'échec survient à l'INSERT (qui pose `amount`), APRÈS recordStars + wallet.
     db.run(sql`DROP TABLE ledger`);
     db.run(

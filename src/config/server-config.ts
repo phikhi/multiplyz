@@ -253,7 +253,13 @@ export interface EconomySpendConfig {
    * Entier ≥ 1. Encadre le `price_coins` du catalogue `cosmetics` (déco pure, aucun avantage de jeu).
    */
   cosmeticMinPriceCoins: number;
-  /** Borne **haute** ⚙️ du prix d'un **cosmétique** en pièces 🪙 (ECONOMY §4.5/§5 « 30-120 »). Défaut `120`. Entier ≥ 1. */
+  /**
+   * Borne **haute** ⚙️ du prix d'un **cosmétique** en pièces 🪙 (ECONOMY §4.5/§5 « 30-120 »). Défaut
+   * `120`. Entier ≥ 1. **Feed-forward R4.5 (#164, non cross-validé ici)** : `min ≤ max` n'est **pas**
+   * garanti au chargement (chaque borne est parsée indépendamment) — le consommateur cosmétique R4.5
+   * valide la cohérence `cosmeticMinPriceCoins ≤ cosmeticMaxPriceCoins` + encadre le `price_coins` du
+   * catalogue. Symétrie avec les odds (non normalisées ici, R4.2 les normalise).
+   */
   cosmeticMaxPriceCoins: number;
   /**
    * **Booster** poisson au miel 🐟🍯 : **bonus de pièces en %** sur 1 niveau (ECONOMY §4.6/§5, défaut `25`
