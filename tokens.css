@@ -586,6 +586,21 @@
      --collection-placeholder-size (48px, vignette de grille). */
   --creature-detail-art-size: min(13.5rem, 62vw);
 
+  /* ---------- BOUTIQUE / ŒUFS — ART DE LA CRÉATURE RÉVÉLÉE (story R4.2 #393, WIREFRAMES §6b) ----------
+     L'art de la créature tirée à l'OUVERTURE D'UN ŒUF est LE moment de gratification de la boucle de
+     DÉPENSE (gacha, ECONOMY §4.2/§6) — l'art est le HÉROS de l'écran (WIREFRAMES §6b « [créature] ! »
+     centrée, en grand). C'est une magnitude-valued reveal, EXACTEMENT la classe promue en règle dure
+     (garde-MAGNITUDE, RÉCIDIVE 3× R3 : fiche #379, boss-reveal #381/#387) → token DÉDIÉ, jamais une
+     valeur d'espacement réutilisée (qui masquerait le ⚙️ de magnitude sous un nom générique). L'écran
+     d'ouverture est DÉDIÉ/plein (titre + art + beat Teddy + CTA, budget vertical large) → l'art peut
+     être plus grand que le boss-reveal (`--results-legendary-art-size` ~128-144px, budget résultats
+     serré) : ⚙️ calibrable (playtest enfant) `min(15rem, 66vw)` ≈ 240px desktop/tablette, scale-DOWN
+     sur téléphone (66vw = 247px @375px → plafonné 240px ; 211px @320px) pour ne jamais déborder la
+     carte bornée à --max-width-play. Garde-MAGNITUDE E2E (PAS garde-plancher, rétro R3.2 #379 :
+     `artBox.width >= 80` restait vert sur un rendu sous-livré) : `auth.spec.ts` asserte
+     `artBox.width >= 180`, rougit si ce token régresse vers une vignette (< ~180px). */
+  --egg-reveal-art-size: min(15rem, 66vw);
+
   /* ---------- RESPONSIVE — BREAKPOINT ÉCRAN DE JEU (story 8.1 #254, WIREFRAMES §8) ----------
      UN SEUL breakpoint numérique consommé par cette story : --bp-phone (téléphone vs
      tablette/desktop, qui restent GROUPÉS — WIREFRAMES §8 « tablette/desktop : disposition

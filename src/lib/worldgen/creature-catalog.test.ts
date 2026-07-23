@@ -30,7 +30,12 @@ import { SOCLE_WORLD_COUNT } from "./socle";
 let db: AppDatabase;
 beforeEach(() => {
   db = createDatabase(":memory:");
-  runMigrations(db); // migre (socle_worlds amorcé) — characters VIDE (le catalogue n'est PAS seedé à la migration).
+  runMigrations(db);
+  // Catalogue VIDÉ : `runMigrations` amorce désormais le catalogue socle (`seedSocleCreatures`, câblé
+  // en R4.2 #382). Ces tests exercent `seedSocleCreatures` contre un catalogue CONTRÔLÉ (vide, ou une
+  // ligne pré-insérée à la main) → on efface le seed de migration ici (le câblage runMigrations est
+  // couvert par `db.test.ts`). `db.delete(characters)` cascade sur `collection` (FK, vide de toute façon).
+  db.delete(characters).run();
 });
 
 describe("deriveSocleCreatures — descripteurs déterministes (art réel committé)", () => {

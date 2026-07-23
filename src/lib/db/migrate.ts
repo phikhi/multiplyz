@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { nameKey } from "../auth/validation";
+import { seedSocleCreatures } from "../worldgen/creature-catalog";
 import { seedSocleWorlds } from "../worldgen/socle";
 import { MIGRATIONS_FOLDER } from "./config";
 import type { AppDatabase } from "./index";
@@ -9,18 +10,28 @@ import type { AppDatabase } from "./index";
  * Applique les migrations versionnées sur la connexion fournie, puis exécute les
  * amorçages **applicatifs idempotents** : backfill de la colonne dérivée
  * `profiles.name_key` (#105) + amorçage du **socle de mondes de secours**
- * (WORLDGEN §7, story 6.6 → 1er lancement instantané, hors réseau).
+ * (WORLDGEN §7, story 6.6 → 1er lancement instantané, hors réseau) + amorçage du
+ * **catalogue de créatures socle** (communes/rares + légendaires, story R4.2 #382/#393).
  *
  * Idempotent : Drizzle journalise les migrations déjà jouées
  * (`__drizzle_migrations`) → un second appel est un no-op sans erreur ; le backfill
- * (`WHERE name_key IS NULL`) et l'amorçage du socle (`onConflictDoNothing`) sont
- * eux-mêmes idempotents. `seedSocleWorlds` tourne **après** `migrate` (la table
- * `socle_worlds` existe alors).
+ * (`WHERE name_key IS NULL`), l'amorçage du socle (`onConflictDoNothing`) et celui du
+ * catalogue de créatures (`onConflictDoNothing` par PK) sont eux-mêmes idempotents.
+ * `seedSocleWorlds` / `seedSocleCreatures` tournent **après** `migrate` (les tables
+ * `socle_worlds` / `characters` existent alors).
+ *
+ * **Câblage R4.2 (#382, « déclaré ≠ vécu » #180)** : `seedSocleCreatures` était **prêt** depuis
+ * R3.1 (#378) mais **non appelé** — le peupler seul aurait été invisible (le Pokédex lit les
+ * possessions, pas le catalogue). C'est R4.2 (tirage d'œuf) qui **consomme** ce catalogue : les
+ * communes/rares doivent EXISTER dans `characters` pour être tirables → on câble l'amorçage **ici**,
+ * avec le draw (#155/#127 : fondation posée en R3.1, consommateur en R4.2). Le catalogue est
+ * **partagé** (comme `worlds`/légendaires), non enfant-spécifique → seedé une fois, hors cascade RGPD.
  */
 export function runMigrations(db: AppDatabase, migrationsFolder: string = MIGRATIONS_FOLDER): void {
   migrate(db, { migrationsFolder });
   backfillNameKeys(db);
   seedSocleWorlds(db);
+  seedSocleCreatures(db);
 }
 
 /**

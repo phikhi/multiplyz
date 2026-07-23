@@ -46,6 +46,12 @@ function seedProfile(name: string): number {
 beforeEach(() => {
   db = createDatabase(":memory:");
   runMigrations(db);
+  // Catalogue VIDÉ (R4.2 #382) : `runMigrations` amorce désormais le catalogue socle
+  // (`seedSocleCreatures`, ~41 lignes `characters`). Ces tests de la couche collection partent d'un
+  // catalogue CONTRÔLÉ (fixtures propres, comptes exacts) → on efface le seed. Son contenu est couvert
+  // par `creature-catalog.test.ts`, son câblage runMigrations par `db.test.ts`/`migrate`.
+  db.delete(collection).run();
+  db.delete(characters).run();
   profileId = seedProfile("Léa");
 });
 

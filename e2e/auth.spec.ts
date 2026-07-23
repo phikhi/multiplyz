@@ -12,6 +12,8 @@ import {
 } from "./seed-accuracy-history";
 import { CANARI_PROFILE_NAME, CANARI_PROFILE_PIN } from "./seed-canari";
 import { BOSS_PROGRESS_SESSION_TOKEN, BOSS_PROGRESS_COMPLETED_LEVELS } from "./seed-boss-progress";
+import { BOUTIQUE_SESSION_TOKEN } from "./seed-boutique";
+import { CONFIG_DEFAULTS } from "../src/config/server-config";
 import { pluralize } from "../src/app/parent/(espace)/dashboard-format";
 
 /**
@@ -3423,5 +3425,99 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     await page.screenshot({ path: "docs/captures/381-boss-reveal.png", fullPage: true });
     await page.screenshot({ path: "docs/captures/387-boss-reveal-agrandi.png", fullPage: true });
+  });
+});
+
+// ============================================================================
+// Boutique / Œufs — la boucle de DÉPENSE (story R4.2 #393, WIREFRAMES §6, ECONOMY §4.2/§6/§7).
+// Profil DÉDIÉ `Pixie` (`seed-boutique.ts`) : session enfant injectée + portefeuille garni (500
+// pièces), ZÉRO créature possédée → tout tirage du monde 0 est une NOUVEAUTÉ au VRAI art committé.
+// Surface DISJOINTE (aucune dépendance à l'état des autres tests `describe.serial`).
+//
+// Prouve BOUT-EN-BOUT (#180) que l'enfant OBTIENT réellement une créature commune/rare au VRAI art
+// rendu (`data-asset-state="rendered"`, image chargée) — la valeur produit centrale de R4 — ET la
+// **garde-MAGNITUDE** (CLAUDE.md, règle promue) : l'art de la révélation est le HÉROS de l'écran
+// (`artBox.width >= 180`, rougit si le token régresse vers une vignette — PAS un plancher de présence).
+// ============================================================================
+test.describe("Boutique / Œufs (R4.2 #393)", () => {
+  test("acheter un œuf → ouverture → créature révélée EN GRAND au VRAI art (capture, #180 + garde-MAGNITUDE)", async ({
+    page,
+  }) => {
+    // Viewport desktop fixe → magnitude déterministe (`--egg-reveal-art-size: min(15rem, 66vw)` = 240px).
+    await page.setViewportSize({ width: 1024, height: 768 });
+    const cookie = {
+      name: "mz_session",
+      value: BOUTIQUE_SESSION_TOKEN,
+      url: `http://localhost:${process.env.PORT || "3104"}`,
+      httpOnly: true,
+      sameSite: "Lax" as const,
+    };
+    await page.context().addCookies([cookie]);
+    await page.goto("/boutique");
+    await page.waitForLoadState("networkidle");
+
+    // Carte œuf affichée (état serveur chargé) + prix interpolé (⚙️ 50) sur le bouton d'achat.
+    await expect(
+      page.getByRole("heading", { level: 1, name: strings.boutique.title }),
+    ).toBeVisible();
+    // Libellé du bouton d'achat DÉRIVÉ de la config ⚙️ (pas figé sur 50) : découplé du prix, robuste
+    // à une recalibration de `eggPriceCoins` — même patron que les autres sélecteurs config-driven.
+    const buyLabel = strings.boutique.buy.replace(
+      "{prix}",
+      String(CONFIG_DEFAULTS.economy.spend.eggPriceCoins),
+    );
+    const buyButton = page.getByRole("button", { name: buyLabel });
+    await expect(buyButton).toBeVisible();
+
+    // Achat → ouverture d'œuf.
+    await buyButton.click();
+
+    // La révélation apparaît (moment WIREFRAMES §6b). Le bloc `role="img"` nomme la créature.
+    const reveal = page.locator("[data-egg-reveal]");
+    await expect(reveal).toBeVisible();
+    // Nouveauté (profil vierge) : beat célébration Teddy (COPY §3), jamais « rien ».
+    await expect(reveal).toHaveAttribute("data-egg-reveal-new", "true");
+    await expect(page.getByText(strings.eggReveal.newFriend)).toBeVisible();
+
+    // ---------- #180 : VRAI art committé RENDU (pas le repli emoji) ----------
+    const art = page.locator('[data-asset="egg-reveal-art"]');
+    await expect(art).toBeVisible();
+    await expect(art).toHaveAttribute("data-asset-state", "rendered");
+    // Tirage du monde 0 → art réel `creature_world_0_*.png` servi par `seed-creature-sprites`
+    // (assertion NON permissive #239 : le préfixe exact du namespace socle, jamais un pattern flou).
+    const src = await art.getAttribute("src");
+    expect(src).toContain("/generated/socle/creature/creature_world_0_");
+    // Réellement CHARGÉE (vrais pixels décodés, pas un <img> pointant un 404).
+    expect(await art.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+
+    // ---------- Garde-MAGNITUDE (règle promue CLAUDE.md ; PAS un plancher de présence) ----------
+    // L'art de la créature tirée est LE moment de gratification de la boucle de dépense → il DOMINE
+    // l'écran (`--egg-reveal-art-size` ≈ 240px desktop). Seuil `>= 180` : rougit si le token régresse
+    // vers `--teddy-*` (96px) ou une vignette (48px) — jamais un plancher `> vignette` qui resterait
+    // vert sur un rendu sous-livré (rétro R3.2 #379).
+    const artBox = await art.boundingBox();
+    expect(artBox).not.toBeNull();
+    expect(artBox!.width).toBeGreaterThanOrEqual(180);
+
+    // ---------- Non-occlusion (art EN FLUX, géométrie RENDUE réelle — jamais raisonnée, #170/#190) ----------
+    // Le titre du moment d'ouverture (« L'œuf s'ouvre… ») est le `[data-egg-opening]` focus-managé —
+    // l'art (dans le bloc `[data-egg-reveal]`) suit EN FLUX, jamais recouvert par lui.
+    const geometry = await page.evaluate(() => {
+      const opening = document.querySelector("[data-egg-opening]");
+      const artEl = document.querySelector('[data-asset="egg-reveal-art"]');
+      if (opening === null || artEl === null) return null;
+      return {
+        openingBottom: opening.getBoundingClientRect().bottom,
+        artTop: artEl.getBoundingClientRect().top,
+      };
+    });
+    expect(geometry).not.toBeNull();
+    // L'art (en flux) est sous le titre du moment, jamais recouvert par lui.
+    expect(geometry!.artTop).toBeGreaterThanOrEqual(geometry!.openingBottom);
+
+    // CTA de fermeture présent (l'enfant repart quand il veut, no-FOMO).
+    await expect(page.getByRole("button", { name: strings.eggReveal.dismiss })).toBeVisible();
+
+    await page.screenshot({ path: "docs/captures/393-egg-open-reveal.png", fullPage: true });
   });
 });

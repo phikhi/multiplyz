@@ -1082,3 +1082,36 @@ export const daily = sqliteTable("daily", {
    */
   lastClaimDate: text("last_claim_date"),
 });
+
+/**
+ * **Compteur de PITIÉ anti-malchance des œufs** par profil (ECONOMY §4.2/§7 « après N doublons
+ * d'affilée, le prochain tirage est garanti nouveau ») — story R4.2 (#393, tirage d'œuf). **Une
+ * seule ligne par profil** → PK directement le `profile_id` (comme `wallet`/`daily`). Données
+ * **enfant** → FK cascade (RGPD).
+ *
+ * **État persistant strictement nécessaire au tirage** (le pity est une propriété du profil qui
+ * traverse les tirages, jamais reconstructible à la volée) : c'est la SEULE écriture de schéma de
+ * R4.2 (le reste consomme les primitives R4.1 `wallet`/`ledger` + le catalogue `characters`). Table
+ * **neuve** (jamais peuplée avant cette migration) → `NOT NULL` + `default` sans le piège « ADD NOT
+ * NULL sur table peuplée » (issue #105). Aucun callback `sqliteTable` d'extras (LEARNINGS #34/#46).
+ *
+ * Invariants (honorés par `game/egg.ts` + `game/egg-draw.ts`) :
+ * - `consecutive_duplicates` = nombre de **doublons d'affilée** depuis la dernière NOUVELLE créature.
+ *   Défaut 0 (profil neuf). Incrémenté à chaque doublon, **remis à 0** dès qu'une nouvelle créature
+ *   est tirée (y compris quand la pitié force la nouveauté). Quand il atteint `pityThreshold` ⚙️
+ *   (défaut 5), le tirage suivant garantit une nouveauté **si une existe** (ECONOMY §7 : jamais
+ *   bloqué par la malchance — sinon, complétude déjà atteinte, il retombe sur un doublon utile).
+ * - `updated_at` = instant serveur du dernier tirage ayant modifié le compteur.
+ */
+export const eggPity = sqliteTable("egg_pity", {
+  /** Profil propriétaire = PK (1 ligne / profil). FK cascade (données enfant, RGPD). */
+  profileId: integer("profile_id")
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Doublons consécutifs depuis la dernière nouveauté (ECONOMY §4.2). Défaut 0 (profil neuf). */
+  consecutiveDuplicates: integer("consecutive_duplicates").notNull().default(0),
+  /** Instant serveur du dernier tirage ayant modifié le compteur. */
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});

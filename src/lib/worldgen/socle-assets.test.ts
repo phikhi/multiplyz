@@ -34,6 +34,10 @@ function freshDb(): AppDatabase {
   counter += 1;
   const db = createDatabase(join(tmpRoot, `case-${counter}`, "app.sqlite"));
   runMigrations(db);
+  // Catalogue VIDÉ (R4.2 #382) : `runMigrations` amorce désormais le catalogue socle de créatures
+  // (`seedSocleCreatures`). Ces tests exercent le seed d'ASSETS de créatures sur un catalogue
+  // CONTRÔLÉ (dont un cas « catalogue vide ») → on efface le seed de migration.
+  db.delete(characters).run();
   return db;
 }
 afterAll(() => rmSync(tmpRoot, { recursive: true, force: true }));

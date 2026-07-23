@@ -97,6 +97,13 @@ Obtention validée = **hybride** : œufs surprise **+** boutique éclats. Légen
 | ref_id | text \| null | id de l'objet lié |
 | created_at | integer (ts) | |
 
+### 3.8 Pitié des œufs — `egg_pity` (1 ligne / profil)
+| Champ | Type | Notes |
+|---|---|---|
+| profile_id | integer (FK, PK) | `ON DELETE CASCADE` (données enfant, RGPD) |
+| consecutive_duplicates | integer | compteur de **doublons consécutifs** depuis la dernière nouveauté — arme la **garantie pitié** (§4.2 / §7 : nouveau garanti après `pity_threshold` doublons) ; remis à 0 dès qu'une nouveauté est tirée |
+| updated_at | integer (ts) | dernier tirage ayant modifié le compteur |
+
 > **Config économique** (taux, prix, odds) = **fichier de config versionné** (pas en DB), pour calibrer facilement.
 
 ---

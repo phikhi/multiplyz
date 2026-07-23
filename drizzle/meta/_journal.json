@@ -120,6 +120,13 @@
       "when": 1784738433186,
       "tag": "0016_friendly_zaran",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1784793804963,
+      "tag": "0017_stiff_scourge",
+      "breakpoints": true
     }
   ]
 }

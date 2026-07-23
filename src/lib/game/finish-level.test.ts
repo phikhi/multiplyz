@@ -77,6 +77,13 @@ function finish(
 beforeEach(() => {
   db = createDatabase(":memory:");
   runMigrations(db);
+  // Catalogue VIDÉ (R4.2 #382) : `runMigrations` amorce désormais le catalogue socle
+  // (`seedSocleCreatures`, art réel), dont la légendaire `legendary:0`. Ces tests isolent le chemin
+  // boss qui **crée** la ligne catalogue (rollback « catalogue annulé », contrôle « boss écrit
+  // catalogue ») → on part d'un catalogue vide. En PROD la ligne est pré-seedée et `grantLegendaryInTx`
+  // (onConflictDoNothing) reste idempotent (même art dérivé) → aucun changement de comportement.
+  db.delete(collection).run();
+  db.delete(characters).run();
   profileId = seedProfile("Léa");
 });
 
