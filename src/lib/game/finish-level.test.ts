@@ -5,7 +5,7 @@ import { render } from "@testing-library/react";
 import { createDatabase, type AppDatabase } from "@/lib/db";
 import { runMigrations } from "@/lib/db/migrate";
 import { characters, collection, collectionKey, ledger, profiles } from "@/lib/db/schema";
-import type { EconomyConfig, MapConfig } from "@/config/server-config";
+import { CONFIG_DEFAULTS, type EconomyConfig, type MapConfig } from "@/config/server-config";
 import { ResultsScreen } from "@/components/game/ResultsScreen";
 import { loadStars, recordStars } from "./progress";
 import { getUnlockedWorldCount } from "./unlock";
@@ -35,6 +35,8 @@ const ECONOMY: EconomyConfig = {
   starBonusCoins: 5,
   treasureBonusCoins: 15,
   bossBonusCoins: 50,
+  // Le crédit de fin de niveau ne lit que le barème earn ; spend (R4.1) = défauts pour le type.
+  spend: CONFIG_DEFAULTS.economy.spend,
 };
 
 function seedProfile(name: string): number {
@@ -189,6 +191,7 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
       starBonusCoins: 50,
       treasureBonusCoins: 0,
       bossBonusCoins: 0,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     const result = finish(0, 0, 2, NOW, richConfig);
     expect(result.ok && result.reward.total).toBe(200); // 100 + 2×50
@@ -203,6 +206,7 @@ describe("finishLevel — gains de pièces (ECONOMY §4.1/§5, story #126)", () 
       starBonusCoins: 0,
       treasureBonusCoins: 0,
       bossBonusCoins: 0,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     const result = finish(0, 0, 0, NOW, zeroConfig);
     expect(result.ok).toBe(true);
@@ -255,7 +259,7 @@ describe("finishLevel — ATOMICITÉ multi-écritures / rollback (règle #122/#1
   // La transaction protège ≥2 écritures : (1) recordStars (progress), puis (2)/(3) creditWalletInTx
   // (upsert wallet + INSERT ledger). On induit la panne à la 2ᵉ/3ᵉ écriture GARDÉE — l'INSERT
   // `ledger` — en DROPPANT la colonne `amount` de `ledger` (rebuild sans `amount`). Le
-  // `creditExists` en amont fait `SELECT id FROM ledger WHERE …` : il reste requêtable (colonnes
+  // `ledgerEntryExists` en amont fait `SELECT id FROM ledger WHERE …` : il reste requêtable (colonnes
   // id/profile_id/reason/ref_id présentes) → il NE court-circuite PAS avant la 1ʳᵉ écriture (règle
   // #122 : la panne frappe l'écriture gardée, jamais une lecture en amont). L'ordre observé :
   //   1. recordStars réussit (progress écrit)   ← 1ʳᵉ écriture
@@ -265,7 +269,7 @@ describe("finishLevel — ATOMICITÉ multi-écritures / rollback (règle #122/#1
   // PREUVE : retirer le wrapper `db.transaction` de finishLevel casse PRÉCISÉMENT ce test
   // (progress + wallet resteraient écrits malgré l'échec du ledger). Vérifié par mutation manuelle.
   it("ROLLBACK : panne de l'INSERT ledger (2ᵉ/3ᵉ écriture) ⇒ progress ET wallet annulés (aucun état partiel)", () => {
-    // Rebuild `ledger` SANS la colonne `amount` : le SELECT de `creditExists` (id/reason/ref_id)
+    // Rebuild `ledger` SANS la colonne `amount` : le SELECT de `ledgerEntryExists` (id/reason/ref_id)
     // reste valide → l'échec survient à l'INSERT (qui pose `amount`), APRÈS recordStars + wallet.
     db.run(sql`DROP TABLE ledger`);
     db.run(

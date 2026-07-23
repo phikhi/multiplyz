@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EconomyConfig } from "@/config/server-config";
+import { CONFIG_DEFAULTS, type EconomyConfig } from "@/config/server-config";
 import type { NodeType } from "./map";
 import type { Stars } from "@/lib/db/schema";
 import { computeLevelReward } from "./reward";
@@ -17,6 +17,9 @@ const CONFIG: EconomyConfig = {
   starBonusCoins: 5,
   treasureBonusCoins: 15,
   bossBonusCoins: 50,
+  // `computeLevelReward` ne lit que le barème earn ; le bloc spend (R4.1) est fourni par les
+  // défauts pour satisfaire le type sans affecter le calcul de gain.
+  spend: CONFIG_DEFAULTS.economy.spend,
 };
 
 describe("computeLevelReward — base + bonus par étoile (ECONOMY §5)", () => {
@@ -117,6 +120,7 @@ describe("computeLevelReward — barème = config versionnée (ECONOMY §3, jama
       starBonusCoins: 7,
       treasureBonusCoins: 100,
       bossBonusCoins: 0,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     expect(computeLevelReward("treasure", 3, alt)).toEqual({
       base: 3,
@@ -134,6 +138,7 @@ describe("computeLevelReward — barème = config versionnée (ECONOMY §3, jama
       starBonusCoins: 7,
       treasureBonusCoins: 0,
       bossBonusCoins: 200,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     expect(computeLevelReward("boss", 3, alt)).toEqual({
       base: 3,
@@ -152,6 +157,7 @@ describe("computeLevelReward — barème = config versionnée (ECONOMY §3, jama
       starBonusCoins: 0,
       treasureBonusCoins: 0,
       bossBonusCoins: 0,
+      spend: CONFIG_DEFAULTS.economy.spend,
     };
     expect(computeLevelReward("boss", 3, zero).total).toBe(0);
   });

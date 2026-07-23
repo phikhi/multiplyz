@@ -11,8 +11,14 @@ import {
   characters,
   collection,
   collectionKey,
+  cosmeticOwnedKey,
+  cosmetics,
+  cosmeticsOwned,
+  daily,
   HOUSEHOLD_SETTINGS_ID,
   householdSettings,
+  inventoryItemKey,
+  inventoryItems,
   jobs,
   ledger,
   mastery,
@@ -695,7 +701,7 @@ describe("schéma ledger (journal append-only — ECONOMY §3.7)", () => {
 
   // Idempotence DB-niveau du crédit (#82) : l'index UNIQUE composite `(profile_id,
   // reason, ref_id)` doit **rejeter au niveau MOTEUR** un rejeu de crédit portant la
-  // même clé de rejeu — indépendamment de la garde applicative `creditExists`. On insère
+  // même clé de rejeu — indépendamment de la garde applicative `ledgerEntryExists`. On insère
   // la 2ᵉ ligne EN BRUT (sans passer par `creditWalletInTx`) → seule la contrainte DB
   // peut lever. Effet observable : retirer le `uniqueIndex(...)` du `ledger` → rouge.
   // GARDE anti-drift (#82) : après `runMigrations`, l'index UNIQUE
@@ -1365,5 +1371,316 @@ describe("schéma household_settings (réglages foyer — story 7.3/8.3)", () =>
     expect(musicEnabled?.dflt_value).toBe("true");
     expect(volume?.notnull).toBe(1);
     expect(volume?.dflt_value).toBe("70");
+  });
+});
+
+// ============================================================================
+// Économie de dépense (story R4.1) — cosmetics + cosmetics_owned +
+// inventory_items + daily (ECONOMY §3.4/§3.5/§3.6). FONDATION data.
+// ============================================================================
+
+/** Seed du profil #1 (owner minimal) — réutilisé par les tables enfant d'économie. */
+function seedProfile1(db: ReturnType<typeof freshDb>) {
+  db.insert(profiles)
+    .values({ id: 1, name: "Lina", nameKey: "lina", pinHash: "h", avatar: "fox" })
+    .run();
+}
+
+/** Seed d'un cosmétique de catalogue (parent partagé de `cosmetics_owned`). */
+function seedCosmetic(db: ReturnType<typeof freshDb>, overrides: Record<string, unknown> = {}) {
+  db.insert(cosmetics)
+    .values({
+      id: "cosmetic:hat_flower",
+      kind: "avatar",
+      name: "Chapeau fleuri",
+      artRef: "placeholder://cosmetic/hat_flower",
+      priceCoins: 60,
+      ...overrides,
+    })
+    .run();
+}
+
+describe("cosmeticOwnedKey (PK composite (profil, cosmétique) encodée en texte)", () => {
+  it("encode (profil, cosmétique) en une clé stable séparée par `:`", () => {
+    expect(cosmeticOwnedKey(1, "cosmetic:hat_flower")).toBe("1:cosmetic:hat_flower");
+    expect(cosmeticOwnedKey(42, "cosmetic:scarf")).toBe("42:cosmetic:scarf");
+  });
+
+  it("distingue des profils voisins pour un même cosmétique (pas de collision)", () => {
+    const keys = new Set([cosmeticOwnedKey(1, "cosmetic:x"), cosmeticOwnedKey(2, "cosmetic:x")]);
+    expect(keys.size).toBe(2);
+  });
+});
+
+describe("schéma cosmetics (catalogue — ECONOMY §3.4)", () => {
+  it("insère et relit un cosmétique (kind avatar/teddy, prix pièces)", () => {
+    const db = freshDb();
+    seedCosmetic(db, { id: "cosmetic:bowtie", kind: "teddy", name: "Nœud pap", priceCoins: 120 });
+    const row = db.select().from(cosmetics).get();
+    expect(row).toMatchObject({
+      id: "cosmetic:bowtie",
+      kind: "teddy",
+      name: "Nœud pap",
+      artRef: "placeholder://cosmetic/hat_flower",
+      priceCoins: 120,
+    });
+  });
+
+  it("contraint l'unicité de l'id (PK texte) — même id rejeté", () => {
+    const db = freshDb();
+    seedCosmetic(db);
+    expect(() => seedCosmetic(db)).toThrow();
+  });
+
+  it("catalogue PARTAGÉ : aucune FK profil (non enfant-spécifique, comme characters/worlds)", () => {
+    // Garde structurelle : la table n'a aucune FK (ni cascade profil) — c'est un catalogue.
+    expect(getTableConfig(cosmetics).foreignKeys).toHaveLength(0);
+  });
+
+  it("toutes les colonnes du catalogue sont NOT NULL (garde PRAGMA — aucune nullable)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(cosmetics)`);
+    for (const name of ["kind", "name", "art_ref", "price_coins"]) {
+      expect(info.find((c) => c.name === name)?.notnull).toBe(1);
+    }
+  });
+});
+
+describe("schéma cosmetics_owned (possession — ECONOMY §3.4)", () => {
+  function seed(db: ReturnType<typeof freshDb>) {
+    seedProfile1(db);
+    seedCosmetic(db);
+  }
+
+  it("insère et relit une possession (défauts equipped=false / acquired_at)", () => {
+    const db = freshDb();
+    seed(db);
+    // Sans `equipped`/`acquiredAt` → exerce le défaut equipped=false + acquired_at.
+    db.insert(cosmeticsOwned)
+      .values({
+        id: cosmeticOwnedKey(1, "cosmetic:hat_flower"),
+        profileId: 1,
+        cosmeticId: "cosmetic:hat_flower",
+      })
+      .run();
+    const row = db.select().from(cosmeticsOwned).get();
+    expect(row).toMatchObject({ profileId: 1, cosmeticId: "cosmetic:hat_flower", equipped: false });
+    expect(row?.acquiredAt).toBeInstanceOf(Date);
+  });
+
+  it("persiste equipped=true (bool drizzle → 0/1)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(cosmeticsOwned)
+      .values({
+        id: cosmeticOwnedKey(1, "cosmetic:hat_flower"),
+        profileId: 1,
+        cosmeticId: "cosmetic:hat_flower",
+        equipped: true,
+      })
+      .run();
+    expect(db.select().from(cosmeticsOwned).get()?.equipped).toBe(true);
+  });
+
+  it("contraint l'unicité (profil, cosmétique) via la PK texte encodée", () => {
+    const db = freshDb();
+    seed(db);
+    const row = {
+      id: cosmeticOwnedKey(1, "cosmetic:hat_flower"),
+      profileId: 1,
+      cosmeticId: "cosmetic:hat_flower",
+    };
+    db.insert(cosmeticsOwned).values(row).run();
+    expect(() => db.insert(cosmeticsOwned).values(row).run()).toThrow();
+  });
+
+  it("purge la possession à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(cosmeticsOwned)
+      .values({
+        id: cosmeticOwnedKey(1, "cosmetic:hat_flower"),
+        profileId: 1,
+        cosmeticId: "cosmetic:hat_flower",
+      })
+      .run();
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(cosmeticsOwned).all()).toHaveLength(0);
+  });
+
+  it("purge la possession à la suppression du cosmétique (FK cascade au catalogue)", () => {
+    const db = freshDb();
+    seed(db);
+    db.insert(cosmeticsOwned)
+      .values({
+        id: cosmeticOwnedKey(1, "cosmetic:hat_flower"),
+        profileId: 1,
+        cosmeticId: "cosmetic:hat_flower",
+      })
+      .run();
+    db.delete(cosmetics).where(eq(cosmetics.id, "cosmetic:hat_flower")).run();
+    expect(db.select().from(cosmeticsOwned).all()).toHaveLength(0);
+  });
+
+  it("refuse une possession orpheline de cosmétique (FK au catalogue active)", () => {
+    const db = freshDb();
+    seed(db);
+    expect(() =>
+      db
+        .insert(cosmeticsOwned)
+        .values({ id: cosmeticOwnedKey(1, "ghost"), profileId: 1, cosmeticId: "ghost" })
+        .run(),
+    ).toThrow();
+  });
+
+  it("référence cosmetics_owned.profile_id → profiles.id en cascade", () => {
+    const fk = getTableConfig(cosmeticsOwned).foreignKeys.find(
+      (f) => f.reference().foreignTable === profiles,
+    );
+    expect(fk?.reference().foreignColumns[0].name).toBe("id");
+    expect(fk?.onDelete).toBe("cascade");
+  });
+
+  it("référence cosmetics_owned.cosmetic_id → cosmetics.id en cascade", () => {
+    const fk = getTableConfig(cosmeticsOwned).foreignKeys.find(
+      (f) => f.reference().foreignTable === cosmetics,
+    );
+    expect(fk?.reference().foreignColumns[0].name).toBe("id");
+    expect(fk?.onDelete).toBe("cascade");
+  });
+});
+
+describe("inventoryItemKey (PK composite (profil, item) encodée en texte)", () => {
+  it("encode (profil, item) en une clé stable séparée par `:`", () => {
+    expect(inventoryItemKey(1, "honey_fish")).toBe("1:honey_fish");
+    expect(inventoryItemKey(7, "star_dust")).toBe("7:star_dust");
+  });
+
+  it("distingue des profils voisins pour un même item (pas de collision)", () => {
+    const keys = new Set([inventoryItemKey(1, "honey_fish"), inventoryItemKey(2, "honey_fish")]);
+    expect(keys.size).toBe(2);
+  });
+});
+
+describe("schéma inventory_items (consommables — ECONOMY §3.5)", () => {
+  it("insère et relit un item (défaut qty=0)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    // Sans `qty` → défaut 0.
+    db.insert(inventoryItems)
+      .values({ id: inventoryItemKey(1, "honey_fish"), profileId: 1, itemKey: "honey_fish" })
+      .run();
+    const row = db.select().from(inventoryItems).get();
+    expect(row).toMatchObject({ profileId: 1, itemKey: "honey_fish", qty: 0 });
+  });
+
+  it("persiste une quantité", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(inventoryItems)
+      .values({
+        id: inventoryItemKey(1, "honey_fish"),
+        profileId: 1,
+        itemKey: "honey_fish",
+        qty: 3,
+      })
+      .run();
+    expect(db.select().from(inventoryItems).get()?.qty).toBe(3);
+  });
+
+  it("contraint l'unicité (profil, item) via la PK texte encodée", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    const row = { id: inventoryItemKey(1, "honey_fish"), profileId: 1, itemKey: "honey_fish" };
+    db.insert(inventoryItems).values(row).run();
+    expect(() => db.insert(inventoryItems).values(row).run()).toThrow();
+  });
+
+  it("purge l'inventaire à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(inventoryItems)
+      .values({
+        id: inventoryItemKey(1, "honey_fish"),
+        profileId: 1,
+        itemKey: "honey_fish",
+        qty: 2,
+      })
+      .run();
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(inventoryItems).all()).toHaveLength(0);
+  });
+
+  it("refuse un item orphelin de profil (contrainte FK active)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    expect(() =>
+      db
+        .insert(inventoryItems)
+        .values({ id: inventoryItemKey(999, "honey_fish"), profileId: 999, itemKey: "honey_fish" })
+        .run(),
+    ).toThrow();
+  });
+
+  it("référence inventory_items.profile_id → profiles.id en cascade", () => {
+    const [fk] = getTableConfig(inventoryItems).foreignKeys;
+    expect(fk.reference().foreignTable).toBe(profiles);
+    expect(fk.reference().foreignColumns[0].name).toBe("id");
+    expect(fk.onDelete).toBe("cascade");
+  });
+});
+
+describe("schéma daily (récompense quotidienne — ECONOMY §3.6)", () => {
+  it("insère et relit une ligne (défaut streak_count=0 / last_claim_date nullable)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    // Sans `streakCount`/`lastClaimDate` → défaut 0 + NULL (jamais réclamé).
+    db.insert(daily).values({ profileId: 1 }).run();
+    const row = db.select().from(daily).get();
+    expect(row).toMatchObject({ profileId: 1, streakCount: 0, lastClaimDate: null });
+  });
+
+  it("persiste une série + une date de dernier coffre (YYYY-MM-DD local)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(daily).values({ profileId: 1, streakCount: 3, lastClaimDate: "2026-07-22" }).run();
+    expect(db.select().from(daily).get()).toMatchObject({
+      streakCount: 3,
+      lastClaimDate: "2026-07-22",
+    });
+  });
+
+  it("une seule ligne par profil (PK = profile_id)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(daily).values({ profileId: 1, streakCount: 1 }).run();
+    expect(() => db.insert(daily).values({ profileId: 1, streakCount: 2 }).run()).toThrow();
+  });
+
+  it("laisse last_claim_date physiquement NULLABLE, streak_count NOT NULL (garde PRAGMA)", () => {
+    const db = freshDb();
+    const info = db.all<{ name: string; notnull: number }>(sql`PRAGMA table_info(daily)`);
+    expect(info.find((c) => c.name === "last_claim_date")?.notnull).toBe(0);
+    expect(info.find((c) => c.name === "streak_count")?.notnull).toBe(1);
+  });
+
+  it("purge le quotidien à la suppression du profil (FK cascade — RGPD)", () => {
+    const db = freshDb();
+    seedProfile1(db);
+    db.insert(daily).values({ profileId: 1, streakCount: 5, lastClaimDate: "2026-07-22" }).run();
+    db.delete(profiles).where(eq(profiles.id, 1)).run();
+    expect(db.select().from(daily).all()).toHaveLength(0);
+  });
+
+  it("refuse une ligne orpheline de profil (contrainte FK active)", () => {
+    const db = freshDb();
+    expect(() => db.insert(daily).values({ profileId: 999 }).run()).toThrow();
+  });
+
+  it("référence daily.profile_id → profiles.id en cascade", () => {
+    const [fk] = getTableConfig(daily).foreignKeys;
+    expect(fk.reference().foreignTable).toBe(profiles);
+    expect(fk.reference().foreignColumns[0].name).toBe("id");
+    expect(fk.onDelete).toBe("cascade");
   });
 });

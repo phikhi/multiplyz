@@ -399,7 +399,7 @@ export type LedgerCurrency = "coins" | "shards" | "item";
  * portant le même `(profile_id, reason, ref_id)` **ne recrédite pas**.
  *
  * **Défense en profondeur (#82)** — même doctrine que `attempts`. (1) La garde applicative
- * `creditExists` (dans la transaction synchrone) reste la barrière **primaire** : elle
+ * `ledgerEntryExists` (dans la transaction synchrone) reste la barrière **primaire** : elle
  * transforme un rejeu de `finishLevel` en no-op (`applied: false`, aucune 2ᵉ ligne ledger,
  * aucun 2ᵉ crédit) — correcte en **mono-process**. (2) L'**index UNIQUE composite**
  * `(profile_id, reason, ref_id)` (callback table 3ᵉ-arg) garantit le dédoublonnage **au
@@ -925,4 +925,160 @@ export const householdSettings = sqliteTable("household_settings", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
+});
+
+// ============================================================================
+// Économie de dépense (epic #R4, story R4.1) — cosmétiques + inventaire +
+// récompense quotidienne (ECONOMY §3.4/§3.5/§3.6). FONDATION data seulement :
+// aucune feature de dépense (œufs/boutique/évolution/cosmétiques/coffre) n'est
+// construite ici — celles-ci consomment ces tables + la primitive `debitWalletInTx`
+// en R4.2-R4.5 (#155/#127 : on POSE les tables, on ne revendique aucun flux vécu).
+// Convention FK `integer` (`profile_id → profiles.id`) identique à wallet/collection.
+// ============================================================================
+
+/** Type d'un cosmétique (ECONOMY §3.4) : habillage d'avatar ou de Teddy. Déco pure (ECONOMY §1). */
+export type CosmeticKind = "avatar" | "teddy";
+
+/**
+ * **Catalogue** des cosmétiques (ECONOMY §3.4). Une ligne par cosmétique **partagée**
+ * entre profils (comme `characters`/`worlds`) : ce n'est **pas** une donnée enfant → **pas
+ * de FK profil, pas de cascade RGPD**. Amorcé côté serveur (comme le catalogue `characters`) ;
+ * l'`art_ref` est un **placeholder** tant que l'épic #6 n'a pas branché l'art réel.
+ *
+ * PK `id` **texte** (clé stable, ex. `cosmetic:hat_flower`) : déterministe → amorçage/upsert
+ * idempotent du catalogue (même patron que `characters`/`worlds`). Aucun callback `sqliteTable`
+ * d'extras (index/PK composite) qui casserait le gate 100 % fonctions (LEARNINGS #34/#46).
+ *
+ * Table **neuve** (jamais peuplée avant cette migration) → colonnes `NOT NULL` **sans** le
+ * piège « ADD NOT NULL sur table peuplée » (issue #105 — un `CREATE TABLE` pose librement du
+ * `NOT NULL`). `price_coins` = prix en **pièces** (déco = pièces, ECONOMY §4.5 ; fourchette ⚙️
+ * `cosmeticMinPriceCoins`..`cosmeticMaxPriceCoins` d'`EconomyConfig`, appliquée par la story
+ * consommatrice — la colonne porte le prix concret d'un item, jamais un défaut figé).
+ */
+export const cosmetics = sqliteTable("cosmetics", {
+  /** Clé stable (ex. `cosmetic:hat_flower`) — déterministe, permet l'amorçage idempotent. */
+  id: text("id").primaryKey(),
+  /** `avatar` (habillage de l'avatar) | `teddy` (habillage de Teddy) — déco pure (ECONOMY §1). */
+  kind: text("kind").$type<CosmeticKind>().notNull(),
+  /** Nom affiché du cosmétique (FR, voix douce COPY §5). */
+  name: text("name").notNull(),
+  /** Référence de l'asset (url/chemin servi par Nginx) — **placeholder** jusqu'à l'épic #6. */
+  artRef: text("art_ref").notNull(),
+  /** Prix en **pièces** 🪙 (≥ 0 côté application, ECONOMY §4.5). Déco pure : jamais d'avantage de jeu. */
+  priceCoins: integer("price_coins").notNull(),
+});
+
+/**
+ * Assemble la **PK texte** d'une ligne `cosmetics_owned` : une seule ligne par
+ * `(profil, cosmétique)`. L'unicité composite est **encodée dans la PK** — pas de callback
+ * `sqliteTable` d'extras (uniqueIndex / PK composite) qui, jamais invoqué au runtime,
+ * casserait le gate 100 % fonctions (LEARNINGS #34/#46, même patron que `collectionKey`).
+ *
+ * Séparateur `:` non ambigu : la 1ʳᵉ composante est le `profileId` (entier, aucun `:`) et on
+ * ne **découpe jamais** la clé (aucun décodage : `profile_id`/`cosmetic_id` restent des colonnes
+ * normales). La clé reste injective même si `cosmeticId` contient un `:` (concaténée telle quelle).
+ */
+export function cosmeticOwnedKey(profileId: number, cosmeticId: string): string {
+  return `${profileId}:${cosmeticId}`;
+}
+
+/**
+ * **Possession** d'un cosmétique par un profil (ECONOMY §3.4). Une ligne par
+ * `(profil, cosmétique)` acquis. Données **enfant** → FK cascade (RGPD), comme `collection`.
+ *
+ * Unicité `(profil, cosmétique)` portée par la **PK texte encodée** (`cosmeticOwnedKey`).
+ * `profileId` / `cosmeticId` restent des colonnes normales pour les requêtes (garde-robe d'un
+ * profil, possesseurs d'un cosmétique). Table **neuve** → `NOT NULL` + default sans piège #105.
+ *
+ * Invariants (honorés par la story consommatrice R4.5) :
+ * - `equipped` = cosmétique porté ? (bool 0/1). Défaut `false` (acquis mais non équipé).
+ * - `acquired_at` = instant serveur de l'acquisition (affichage / tri garde-robe).
+ * - **Idempotence de l'acquisition** : ré-acheter un cosmétique déjà possédé n'ajoute **jamais**
+ *   une 2ᵉ ligne (upsert par PK encodée) — la garde vit dans la story consommatrice.
+ */
+export const cosmeticsOwned = sqliteTable("cosmetics_owned", {
+  /** `"<profileId>:<cosmeticId>"` — une ligne par (profil, cosmétique) (cf. `cosmeticOwnedKey`). */
+  id: text("id").primaryKey(),
+  /** Profil propriétaire — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Cosmétique possédé (clé de catalogue `cosmetics.id`). FK cascade au catalogue. */
+  cosmeticId: text("cosmetic_id")
+    .notNull()
+    .references(() => cosmetics.id, { onDelete: "cascade" }),
+  /** Cosmétique porté ? (bool SQLite 0/1). Défaut `false` (acquis, non équipé). */
+  equipped: integer("equipped", { mode: "boolean" }).notNull().default(false),
+  /** Instant serveur de l'acquisition (affichage / tri garde-robe). */
+  acquiredAt: integer("acquired_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+/**
+ * Assemble la **PK texte** d'une ligne `inventory_items` : une seule ligne par
+ * `(profil, item)`. Même patron d'encodage que `cosmeticOwnedKey` (composite PK sans callback
+ * d'extras, LEARNINGS #34/#46). `itemKey` est un vocabulaire contrôlé (ex. `honey_fish`) sans `:` ;
+ * l'encodage reste injectif (profileId = entier sans `:`, clé jamais re-splittée).
+ */
+export function inventoryItemKey(profileId: number, itemKey: string): string {
+  return `${profileId}:${itemKey}`;
+}
+
+/**
+ * **Inventaire de consommables** par profil (ECONOMY §3.5) — ex. `honey_fish` (poisson au miel,
+ * booster doux du coffre quotidien, ECONOMY §4.6). Une ligne par `(profil, item)`. Données
+ * **enfant** → FK cascade (RGPD).
+ *
+ * Unicité `(profil, item)` portée par la **PK texte encodée** (`inventoryItemKey`). `profileId` /
+ * `itemKey` restent des colonnes normales. Table **neuve** → `NOT NULL` + default sans piège #105.
+ *
+ * Invariants (honorés par la story consommatrice) :
+ * - `qty` = quantité détenue (≥ 0 côté application, ECONOMY §3.5). Défaut 0 (item connu, épuisé).
+ * - La **consommation** d'un item (booster joué) décrémente `qty` sans jamais passer < 0 (garde
+ *   dans la story consommatrice, jamais ici — R4.1 pose la table, pas le flux).
+ */
+export const inventoryItems = sqliteTable("inventory_items", {
+  /** `"<profileId>:<itemKey>"` — une ligne par (profil, item) (cf. `inventoryItemKey`). */
+  id: text("id").primaryKey(),
+  /** Profil propriétaire — données enfant, purge en cascade (RGPD). */
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Clé de consommable (ex. `honey_fish`) — vocabulaire contrôlé (ECONOMY §3.5/§4.6). */
+  itemKey: text("item_key").notNull(),
+  /** Quantité détenue (≥ 0 côté application). Défaut 0. */
+  qty: integer("qty").notNull().default(0),
+});
+
+/**
+ * **Récompense quotidienne** par profil (ECONOMY §3.6, coffre quotidien §4.1). **Une seule
+ * ligne par profil** → PK directement le `profile_id` (comme `wallet`). Données **enfant** →
+ * FK cascade (RGPD).
+ *
+ * `last_claim_date` est **nullable** (physiquement NULLABLE, cohérent schema.ts↔SQL — jamais un
+ * `.notNull()` de type sur une colonne physiquement nullable, doctrine #91/#105) : `NULL` =
+ * **jamais réclamé** (état initial d'un profil neuf, avant tout coffre). Stocké en **texte
+ * `YYYY-MM-DD`** dans le **fuseau local** de la famille (jamais un timestamp UTC brut : le « jour »
+ * du coffre est un jour calendaire vécu, comme la régularité `RegularityConfig.dayTimeZone`, ADR
+ * 0014) → comparaison de dates locales stable, indépendante de l'heure d'ouverture.
+ *
+ * Invariants (honorés par la story consommatrice R4.5, coffre quotidien) :
+ * - `streak_count` = jours consécutifs réclamés (progression monotone tant que la série tient).
+ *   Défaut 0 (profil neuf). Reset à 1 si un jour est sauté (garde dans la story consommatrice).
+ * - Réclamer **deux fois le même jour** = no-op (le `last_claim_date` du jour bloque le 2ᵉ coffre)
+ *   — garde d'idempotence de la story consommatrice, jamais ici.
+ */
+export const daily = sqliteTable("daily", {
+  /** Profil propriétaire = PK (1 ligne / profil). FK cascade (données enfant, RGPD). */
+  profileId: integer("profile_id")
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  /** Jours consécutifs réclamés (ECONOMY §3.6). Défaut 0 (profil neuf). */
+  streakCount: integer("streak_count").notNull().default(0),
+  /**
+   * Date `YYYY-MM-DD` (fuseau local) du **dernier** coffre réclamé — **nullable** (`NULL` =
+   * jamais réclamé). Texte, jamais un timestamp UTC (jour calendaire vécu, ADR 0014).
+   */
+  lastClaimDate: text("last_claim_date"),
 });
