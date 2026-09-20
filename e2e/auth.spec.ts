@@ -74,7 +74,8 @@ let recoveryCode = "";
  */
 async function enterPin(page: Page, pin: string) {
   for (const d of pin) {
-    await page.getByRole("button", { name: digit(d) }).dispatchEvent("click");
+    await page.getByRole("button", { name: digit(d) }).click({ force: true });
+    await page.waitForTimeout(25);
   }
 }
 
@@ -3468,7 +3469,7 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     const reveal = page.locator("[data-egg-reveal]");
     await expect(reveal).toBeVisible();
     // Nouveauté (profil vierge) : beat célébration Teddy (COPY §3), jamais « rien ».
-    await expect(page.getByText(strings.eggReveal.newFriend)).toBeVisible();
+    await expect(page.getByText(eggShop.newFriend)).toBeVisible();
 
     // ---------- #180 : VRAI art committé RENDU (pas le repli emoji) ----------
     const art = page.locator('[data-asset="egg-reveal-creature"]');
