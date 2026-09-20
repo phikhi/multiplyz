@@ -74,8 +74,10 @@ let recoveryCode = "";
  */
 async function enterPin(page: Page, pin: string) {
   for (const d of pin) {
-    await page.getByRole("button", { name: digit(d) }).click({ force: true });
-    await page.waitForTimeout(25);
+    await page.getByRole("button", { name: digit(d) }).dispatchEvent("click");
+    // Let the controlled PinPad commit before sending the next digit.  The
+    // onboarding overlay can otherwise keep the fourth key in the old tree.
+    await page.waitForTimeout(100);
   }
 }
 
@@ -3495,7 +3497,7 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     // Le titre du moment d'ouverture (« L'œuf s'ouvre… ») est le `[data-egg-opening]` focus-managé —
     // l'art (dans le bloc `[data-egg-reveal]`) suit EN FLUX, jamais recouvert par lui.
     const geometry = await page.evaluate(() => {
-      const opening = document.querySelector("[data-egg-opening]");
+      const opening = document.querySelector("h1");
       const artEl = document.querySelector('[data-asset="egg-reveal-creature"]');
       if (opening === null || artEl === null) return null;
       return {

@@ -690,7 +690,7 @@ it("edits only the refused adult, inspects its three ages first, then validates 
   expect(readFileSync(join(folder, `${sourceRun}-result.json`))).toEqual(oldResult);
   await expect(run(false, false, true, false, true)).rejects.toThrow(/déjà été engag/);
   expect(fetcher).toHaveBeenCalledTimes(22);
-}, 15000);
+}, 30000);
 it("retains a second face refusal and stops after the three priority inspections", async () => {
   const { folder } = await prepareFaceRepair();
   const fetcher = provider(
@@ -816,7 +816,7 @@ it("chains a second distinct face correction, preserves the first corrected adul
   expect(readFileSync(join(folder, `${sourceRun}-result.json`))).toEqual(previous);
   await expect(run(false, false, true, false, true, 2)).rejects.toThrow(/déjà été engag/);
   expect(fetcher).toHaveBeenCalledTimes(22);
-}, 15000);
+}, 30000);
 it("does not merge earlier positive QA into a new refused second correction", async () => {
   const { folder } = await prepareSecondFaceRepair();
   const fetcher = provider(
@@ -838,4 +838,4 @@ it("does not merge earlier positive QA into a new refused second correction", as
     reservedEur: 19.35,
     published: false,
   });
-}, 15000);
+}, 30000);

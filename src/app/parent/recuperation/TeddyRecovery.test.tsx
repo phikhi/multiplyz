@@ -7,7 +7,9 @@ import { strings } from "@/strings";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("./actions", () => ({ verifyRecoveryCodeAction: vi.fn(), resetParentPinAction: vi.fn() }));
 const type = (value: string) => {
-  for (const key of value) fireEvent.keyDown(window, { key });
+  for (const key of value) {
+    fireEvent.click(screen.getByRole("button", { name: strings.pinPad.digit.replace("{d}", key) }));
+  }
 };
 beforeEach(() => {
   vi.clearAllMocks();
