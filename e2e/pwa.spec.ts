@@ -1,6 +1,7 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
+import { companions } from "../src/strings/companions";
 import { COLLECTION_SESSION_TOKEN, COLLECTION_CREATURES } from "./seed-collection";
 
 test.beforeAll(async () => {
@@ -38,9 +39,7 @@ async function addCollectionSession(context: BrowserContext): Promise<void> {
 async function gotoCalmChildSurface(page: Page): Promise<void> {
   await page.goto("/collection");
   await page.waitForLoadState("networkidle");
-  await expect(
-    page.getByRole("heading", { level: 1, name: strings.collection.title }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
   await expect(page.getByText(COLLECTION_CREATURES[0].nameDefault)).toBeVisible();
 }
 
@@ -186,9 +185,7 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     });
     await expect(installBtn).toBeVisible();
     // Le titre HÔTE reste visible (l'invite réserve l'espace, ne le recouvre pas).
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
 
     // Garde E2E #170/#190 : l'invite ET le `<h1>` hôte coexistent, non-occlus, sans chevauchement.
     await expectInviteAndHostTitleCoexist(page);
@@ -237,9 +234,7 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
     // À 375px, la carte (`maxWidth: min(--max-width-play, 100%)` dans un conteneur padé) doit
     // rester DANS le cadre, non-occluse, ET le titre HÔTE « Ma collection 🐾 » reste visible
     // sous elle (l'invite réserve l'espace, ne recouvre pas — defect PO round 2).
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
     await expectInviteAndHostTitleCoexist(page);
 
     // Capture DoD 375px (Chrome/Android) — AC6, contexte téléphone.
@@ -267,9 +262,7 @@ test.describe("Invite d'installation PWA (story 8.5, #258)", () => {
       ).not.toBeVisible();
 
       // Non-occlusion à 375px sur iOS aussi — invite ET titre hôte coexistent.
-      await expect(
-        page.getByRole("heading", { level: 1, name: strings.collection.title }),
-      ).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
       await expectInviteAndHostTitleCoexist(page);
 
       // Capture DoD 375px (iOS Safari) — AC6.

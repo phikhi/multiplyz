@@ -1,6 +1,8 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
+import { companions } from "../src/strings/companions";
+import { eggShop } from "../src/strings/egg-shop";
 import { BRAND_NAME } from "../src/config/brand";
 import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
 import { PENDING_WORLD_A, PENDING_WORLD_B } from "./seed-pending-worlds";
@@ -72,7 +74,7 @@ let recoveryCode = "";
  */
 async function enterPin(page: Page, pin: string) {
   for (const d of pin) {
-    await page.getByRole("button", { name: digit(d) }).click();
+    await page.getByRole("button", { name: digit(d) }).click({ force: true });
   }
 }
 
@@ -1942,9 +1944,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.context().addCookies([cookie]);
     await page.goto("/collection");
     await page.waitForLoadState("networkidle");
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
     // Les 5 créatures amorcées sont bien affichées avant de lire la géométrie (dont la
     // légendaire, dernière de la liste — preuve que le fetch serveur a résolu la collection).
     await expect(page.getByText(COLLECTION_CREATURES[4].nameDefault)).toBeVisible();
@@ -2193,9 +2193,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await backLink.click();
     await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL("/collection");
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
   });
 
   test("route jeu sans session valide → redirection vers le sélecteur (capture)", async ({
@@ -3280,11 +3278,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     // ---------- LEG 5 : navigation vers /collection — ATTEIGNABLE + RENDUE, PAS de créature ----------
     // gagnée (cf. commentaire de tête : la jambe gain-créature est R3, hors scope ici).
-    await page.getByRole("link", { name: strings.collection.title }).click();
+    await page.getByRole("link", { name: companions.title }).click();
     await expect(page).toHaveURL(/\/collection$/);
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
     await page.screenshot({ path: "docs/captures/326-canari-collection.png", fullPage: true });
 
     // ---------- « La boucle doit être propre » : AUCUN mismatch d'hydratation React accumulé ----------
@@ -3457,15 +3453,10 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     await page.waitForLoadState("networkidle");
 
     // Carte œuf affichée (état serveur chargé) + prix interpolé (⚙️ 50) sur le bouton d'achat.
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.boutique.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: eggShop.title })).toBeVisible();
     // Libellé du bouton d'achat DÉRIVÉ de la config ⚙️ (pas figé sur 50) : découplé du prix, robuste
     // à une recalibration de `eggPriceCoins` — même patron que les autres sélecteurs config-driven.
-    const buyLabel = strings.boutique.buy.replace(
-      "{prix}",
-      String(CONFIG_DEFAULTS.economy.spend.eggPriceCoins),
-    );
+    const buyLabel = eggShop.buy(CONFIG_DEFAULTS.economy.spend.eggPriceCoins);
     const buyButton = page.getByRole("button", { name: buyLabel });
     await expect(buyButton).toBeVisible();
 
