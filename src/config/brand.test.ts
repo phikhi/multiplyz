@@ -3,6 +3,6 @@ import { BRAND_NAME } from "./brand";
 
 describe("brand", () => {
   it("expose le nom de marque", () => {
-    expect(BRAND_NAME).toBe("multiplyz");
+    expect(BRAND_NAME).toBe("TEDDy");
   });
 });

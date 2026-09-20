@@ -7,6 +7,12 @@
 
 ## 1. Flows utilisateurs
 
+### État livré — TEDDy, 10 septembre 2026
+
+Accueil/profils/codes, diagnostic persistant et fin de session sont intégrés dans la direction forêt. Le retour d’une session enfant encore valide évite une nouvelle saisie de code ; les autres profils restent protégés. Les codes de création sont confirmés et le code de secours doit être conservé avant de continuer. Le diagnostic emploie la sélection existante (~18 calculs), les aides et la fusion existantes, sans score affiché ni gains. L’adaptation légère `adaptDiagnostic` reste disponible dans le moteur mais n’était pas branchée dans l’ancien parcours et n’est pas ajoutée ici.
+
+La suggestion de pause arrive en fin de niveau, une fois par jour au seuil configuré (20 min par défaut), et autorise la continuation. Le plafond parental, s’il est activé, bloque un nouveau départ jusqu’au lendemain ; le niveau en cours reste reprenable. Le temps est l’estimation parentale existante, pas un chronomètre : amplitude bornée entre les réponses du jour, hors diagnostic. Coffre quotidien élaboré et compagnon de départ offert ne sont pas livrés par cette tranche. [Parcours et contrôles](docs/playthroughs/TEDDy-quotidien.md), [ADR 0023](docs/adr/0023-premier-voyage-et-pauses.md). Les intentions historiques ci-dessous restent distinctes de cet état livré.
+
 ### 1.1 Premier lancement (onboarding enfant)
 1. **Accueil** : choisir/créer un profil.
 2. **Création profil** : prénom + choix d'avatar + **PIN 4 chiffres** (gros pavé).

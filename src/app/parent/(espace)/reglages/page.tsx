@@ -1,3 +1,8 @@
+import { notFound, redirect } from "next/navigation";
+import { getCurrentParentSession } from "@/lib/auth/current-session";
+import { listManagedProfiles } from "@/lib/parent/profiles";
+import { getRegularityConfig } from "@/config/server-config";
+import { parent as p } from "@/strings/parent";
 import { getDb } from "@/lib/db";
 import {
   getParentControlsConfig,
@@ -6,6 +11,7 @@ import {
 } from "@/config/server-config";
 import {
   presetOptionsInRange,
+  reachableTimeOptions,
   readHouseholdSettings,
   SCREEN_TIME_HARD_LOCK_PRESETS,
   SCREEN_TIME_NUDGE_PRESETS,
@@ -26,7 +32,21 @@ export const runtime = "nodejs";
  * côté serveur, puis les passe au composant client. Toutes les mutations passent par des server
  * actions **re-gardées** par la session parent (`reglages/actions.ts`).
  */
-export default function ParentSettingsPage() {
+export default function ParentSettingsPage(): Promise<React.JSX.Element | null>;
+export default function ParentSettingsPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<React.JSX.Element | null>;
+export default async function ParentSettingsPage({
+  searchParams,
+}: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
+  const session = await getCurrentParentSession();
+  if (!session) redirect("/parent/connexion");
+  const query = (await searchParams) ?? {};
+  const profiles = listManagedProfiles(getDb());
+  const profileId = query.profile === undefined ? session.profileId : Number(query.profile);
+  const profile = profiles.find((p) => p.id === profileId);
+  if (!profile) notFound();
+  const regularity = getRegularityConfig();
   const settings = readHouseholdSettings(getDb());
   const controls = getParentControlsConfig();
   const nudgeOptions = presetOptionsInRange(
@@ -49,9 +69,23 @@ export default function ParentSettingsPage() {
   );
   return (
     <SettingsForm
+      key={profileId}
       settings={settings}
-      nudgeOptions={nudgeOptions}
-      hardLockOptions={hardLockOptions}
+      profileId={profileId}
+      displayName={profile.name}
+      profiles={profiles}
+      timeExplanation={p.timeHint(regularity.maxDayAmplitudeMinutes, regularity.dayTimeZone)}
+      maxEstimatedMinutes={regularity.maxDayAmplitudeMinutes}
+      nudgeOptions={reachableTimeOptions(
+        nudgeOptions,
+        settings.screenTimeNudgeMinutes,
+        regularity.maxDayAmplitudeMinutes,
+      )}
+      hardLockOptions={reachableTimeOptions(
+        hardLockOptions,
+        settings.screenTimeHardLockMinutes,
+        regularity.maxDayAmplitudeMinutes,
+      )}
       volumeOptions={volumeOptions}
     />
   );

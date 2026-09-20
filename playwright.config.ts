@@ -10,7 +10,10 @@ const E2E_DATABASE_PATH = "data/e2e.sqlite";
 
 export default defineConfig({
   testDir: "./e2e",
-  fullyParallel: true,
+  // E2E uses one shared migrated SQLite fixture; parallel test files race on
+  // sessions and seeded profiles. Keep the browser matrix deterministic in CI.
+  fullyParallel: false,
+  workers: process.env.CI ? 1 : undefined,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["html", { open: "never" }], ["list"]] : "list",

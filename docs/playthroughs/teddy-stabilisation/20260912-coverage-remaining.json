@@ -1,0 +1,387 @@
+[
+  {
+    "file": "src/lib/worldgen/pilot-status.ts",
+    "uncoveredLines": 178,
+    "uncoveredBranches": 65
+  },
+  {
+    "file": "src/components/game/ForestQuestion.tsx",
+    "uncoveredLines": 154,
+    "uncoveredBranches": 0
+  },
+  {
+    "file": "src/components/game/WorldScenesPreview.tsx",
+    "uncoveredLines": 101,
+    "uncoveredBranches": 0
+  },
+  {
+    "file": "src/app/parent/(espace)/profils/AddProfileForm.tsx",
+    "uncoveredLines": 83,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/lib/worldgen/creature-renewal.ts",
+    "uncoveredLines": 72,
+    "uncoveredBranches": 0
+  },
+  {
+    "file": "src/components/game/AdventureScreen.tsx",
+    "uncoveredLines": 69,
+    "uncoveredBranches": 26
+  },
+  {
+    "file": "src/app/(app)/repos/page.tsx",
+    "uncoveredLines": 48,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/app/parent/(espace)/acces/page.tsx",
+    "uncoveredLines": 29,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/game/use-adventure.ts",
+    "uncoveredLines": 20,
+    "uncoveredBranches": 9
+  },
+  {
+    "file": "src/app/(app)/collection/[id]/grandir/page.tsx",
+    "uncoveredLines": 18,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/worldgen/creature-design-runtime.ts",
+    "uncoveredLines": 17,
+    "uncoveredBranches": 9
+  },
+  {
+    "file": "src/app/parent/connexion/page.tsx",
+    "uncoveredLines": 17,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/game/use-egg-shop.ts",
+    "uncoveredLines": 13,
+    "uncoveredBranches": 15
+  },
+  {
+    "file": "src/app/(app)/reprendre/page.tsx",
+    "uncoveredLines": 12,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/components/ParentMotionControl.tsx",
+    "uncoveredLines": 9,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/lib/game/use-evolution.ts",
+    "uncoveredLines": 8,
+    "uncoveredBranches": 11
+  },
+  {
+    "file": "src/app/parent/(espace)/profils/actions.ts",
+    "uncoveredLines": 8,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/components/game/ForestScene.tsx",
+    "uncoveredLines": 7,
+    "uncoveredBranches": 4
+  },
+  {
+    "file": "src/app/atelier/mondes/page.tsx",
+    "uncoveredLines": 7,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/game/use-shard-shop.ts",
+    "uncoveredLines": 6,
+    "uncoveredBranches": 9
+  },
+  {
+    "file": "src/lib/worldgen/runtime.ts",
+    "uncoveredLines": 6,
+    "uncoveredBranches": 9
+  },
+  {
+    "file": "src/app/(app)/boutique/eclats/page.tsx",
+    "uncoveredLines": 6,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/worldgen/renewal-face-repair.ts",
+    "uncoveredLines": 4,
+    "uncoveredBranches": 11
+  },
+  {
+    "file": "src/lib/worldgen/pilot-arbelune-repair.ts",
+    "uncoveredLines": 4,
+    "uncoveredBranches": 7
+  },
+  {
+    "file": "src/app/onboarding/OnboardingFlow.tsx",
+    "uncoveredLines": 4,
+    "uncoveredBranches": 5
+  },
+  {
+    "file": "src/app/parent/(espace)/reglages/SettingsForm.tsx",
+    "uncoveredLines": 3,
+    "uncoveredBranches": 8
+  },
+  {
+    "file": "src/components/game/ForestMap.tsx",
+    "uncoveredLines": 3,
+    "uncoveredBranches": 8
+  },
+  {
+    "file": "src/lib/worldgen/renewal-batch.ts",
+    "uncoveredLines": 3,
+    "uncoveredBranches": 6
+  },
+  {
+    "file": "src/app/parent/(espace)/profils/ProfileManager.tsx",
+    "uncoveredLines": 3,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/components/game/PlayScreen.tsx",
+    "uncoveredLines": 3,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/worldgen/vision-inspector.ts",
+    "uncoveredLines": 2,
+    "uncoveredBranches": 9
+  },
+  {
+    "file": "src/lib/worldgen/pilot-inspection.ts",
+    "uncoveredLines": 2,
+    "uncoveredBranches": 6
+  },
+  {
+    "file": "src/lib/worldgen/pilot-refinement.ts",
+    "uncoveredLines": 2,
+    "uncoveredBranches": 5
+  },
+  {
+    "file": "src/lib/worldgen/future-worlds.ts",
+    "uncoveredLines": 2,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/app/generated/world/[world]/[file]/route.ts",
+    "uncoveredLines": 2,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/app/parent/(espace)/mondes/WorldApprovalManager.tsx",
+    "uncoveredLines": 1,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/strings/parent.ts",
+    "uncoveredLines": 1,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/lib/worldgen/renewal-growth-recovery.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 23
+  },
+  {
+    "file": "src/lib/worldgen/renewal-growth.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 12
+  },
+  {
+    "file": "src/lib/worldgen/pilot-cast-recovery.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 11
+  },
+  {
+    "file": "src/lib/worldgen/pilot-study-stages.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 8
+  },
+  {
+    "file": "src/lib/worldgen/renewal-batch-repair.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 8
+  },
+  {
+    "file": "src/lib/worldgen/pilot-arbelune-study.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 7
+  },
+  {
+    "file": "src/lib/worldgen/pilot-cast-completion.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 7
+  },
+  {
+    "file": "src/lib/worldgen/runtime-catalogue.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 7
+  },
+  {
+    "file": "src/lib/worldgen/creature-design.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 6
+  },
+  {
+    "file": "src/lib/worldgen/creature-cast-preview.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 5
+  },
+  {
+    "file": "src/lib/worldgen/pilot-growth-adolescent.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 5
+  },
+  {
+    "file": "src/lib/worldgen/pilot-growth-proof.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 5
+  },
+  {
+    "file": "src/lib/worldgen/renewal-baby-repair.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 5
+  },
+  {
+    "file": "src/app/parent/(espace)/reglages/page.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/lib/worldgen/pilot-cast-redesign.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/lib/worldgen/pilot-validated-cast.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 3
+  },
+  {
+    "file": "src/app/parent/(espace)/page.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/components/AppShell.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/components/PinPad.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/components/ProfileSelector.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/lib/game/evolution.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/lib/worldgen/pilot-cache.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/lib/worldgen/publish-reviewed-renewal.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/lib/worldgen/runtime-assets.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/strings/companions.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 2
+  },
+  {
+    "file": "src/app/page.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/app/(app)/carte/page.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/app/(app)/jouer/page.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/app/parent/recuperation/ParentRecoveryFlow.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/components/game/EvolutionScreen.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/components/game/ShardShopScreen.tsx",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/game/adventure.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/game/shard-shop.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/parent/create-profile.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/parent/overview.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/worldgen/creature-cast-growth.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/worldgen/generate-world.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/lib/worldgen/pilot-approved-cast.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/strings/egg-shop.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  },
+  {
+    "file": "src/strings/forest.ts",
+    "uncoveredLines": 0,
+    "uncoveredBranches": 1
+  }
+]

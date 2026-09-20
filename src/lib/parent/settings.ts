@@ -31,10 +31,9 @@ import {
  *   gate la musique de fond jouée pendant une partie active ; `volume` fixe le gain des deux
  *   (mutation-prouvé, `@/lib/sound/engine.test.ts`).
  *
- * **Ce qui est STOCKÉ seulement (consommé en story 7.8 #229, jamais enforcé ici — #127/#155)** :
- * `screenTimeNudgeMinutes`, `screenTimeHardLockEnabled`, `screenTimeHardLockMinutes` — **posés +
- * validés (bornes ⚙️ `parentControls`) + persistés** ; l'enforcement runtime (nudge de session /
- * verrou dur qui bloque l'app) dépend du **temps-joué persisté** (7.4 #217) et vit dans **7.8**.
+ * `screenTimeNudgeMinutes` et `screenTimeHardLock*` : validés et persistés ici,
+ * consommés par `daily-return` et `screen-time-lock` à partir du temps journalier estimé.
+ * Suggestion en fin de niveau, plafond avant une nouvelle partie ; ADR 0023.
  */
 
 /** Préférences de thème valides (source unique pour le parsing / la validation ⚙️). */
@@ -114,7 +113,7 @@ export function resolveSettingsDefaults(): HouseholdSettings {
  * `defaults` injectable pour les tests (mêmes conventions que `resolveWorkerDeps`).
  */
 export function readHouseholdSettings(
-  db: AppDatabase,
+  db: Pick<AppDatabase, "select">,
   defaults: HouseholdSettings = resolveSettingsDefaults(),
 ): HouseholdSettings {
   const row = db
@@ -248,4 +247,15 @@ export function presetOptionsInRange(
   const inRange = presets.filter((p) => p >= min && p <= max);
   const withCurrent = current >= min && current <= max ? [...inRange, current] : inRange;
   return [...new Set(withCurrent)].sort((a, b) => a - b);
+}
+
+/** Keep a saved value visible, while offering only thresholds the time estimate can reach. */
+export function reachableTimeOptions(
+  options: readonly number[],
+  current: number,
+  maxEstimateMinutes: number,
+): number[] {
+  return [...new Set([...options.filter((value) => value <= maxEstimateMinutes), current])].sort(
+    (a, b) => a - b,
+  );
 }

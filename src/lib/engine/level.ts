@@ -151,7 +151,7 @@ function isMaint(state: MasteryState, config: EngineConfig, now: number): boolea
  * consolidationMaxBox`). Le décompte des fragiles du périmètre actif pilote le cap de
  * nouveaux (`weak ≥ consolidationThreshold` → 0 nouveau).
  */
-function isWeak(state: MasteryState, config: EngineConfig): boolean {
+export function isWeak(state: MasteryState, config: EngineConfig): boolean {
   return state.box <= config.consolidationMaxBox;
 }
 

@@ -1,0 +1,69 @@
+# Proposition de faune · jardins suspendus
+
+Conception rédigée localement, sans nouvelle génération d’image. Les noms ont été vérifiés contre le catalogue et le pilote conservé. La distinction visuelle et la croissance restent à vérifier sur les futurs pixels. Aucun remplacement du pilote ni publication.
+
+## Vrillou · commune
+
+Vrillou rattache les petites racines quand le vent les décroche.
+
+- Corps : A low, wedge-headed climbing lizard with four broad leaf-shaped adhesive feet and one coiling tendril tail; soft moss green and pale bark belly.
+- Signature : Flattened leaf pads and a single prehensile tail with a naturally split tip.
+- Adaptation : The wide feet grip wet suspended roots; the tail secures the body while a foot guides a loose root.
+- Fonction : Reconnects young roots along the hanging garden's living bridges.
+- Adolescent : The torso becomes visibly longer than the head, the four forearms lengthen and the existing leaf pads unfold; retain the same tail and split tip.
+- Adulte : A long flexible low body with a small relative head, arched mature shoulders and broad existing feet; the same tail forms a strong open coil. No extra limbs or horns.
+
+## Samarine · commune
+
+Samarine transporte le pollen d’un jardin suspendu à l’autre.
+
+- Corps : A living paired maple seed with two unequal curved sail lobes joined by one plump central seed; a tiny kind face on the seed, no legs. Honey brown veins and fresh lime edges.
+- Signature : An unmistakable asymmetric two-bladed samara silhouette with a visible central waist, never a star or cloud.
+- Adaptation : Its two natural seed sails rotate in warm updrafts; shallow grooves on the seed retain pollen.
+- Fonction : Carries pollen across the gaps between floating gardens.
+- Adolescent : The central seed lengthens and develops a clear narrow waist; the same two folded sails become curved juvenile blades with more visible structural veins.
+- Adulte : A long tapered central seed with a much smaller relative face area, a deep mature waist and two long rigid sickle sails; preserve asymmetry and the exact two-lobe body plan.
+
+## Nacélie · commune
+
+Nacélie garde une réserve de rosée pour les pousses les plus hautes.
+
+- Corps : A small living split seed pod: two parallel hollow ivory seed halves joined by a short flexible green stem, three short anchoring roots beneath each half; no animal head or external vessel.
+- Signature : A twin-hulled open pod body with a visible gap through its middle; one integrated face at the near end.
+- Adaptation : The hollow living pod gathers dew while six existing root tips anchor it to narrow aerial branches.
+- Fonction : Stores water beside young shoots in the highest gardens.
+- Adolescent : The two short pod halves become longer oval chambers with raised inner rims; the six roots lengthen and bend while the facial area occupies less of the pod.
+- Adulte : Two long deeply arched chambers flank a slender mature connecting stem; the six roots form strong curved anchors. Retain the central open gap and smaller relative facial area, without new limbs.
+
+## Rosélice · rare
+
+Rosélice tend des fils tout fins qui recueillent les gouttes du matin.
+
+- Corps : A friendly slender canopy-weaving insect with an arched ochre stem-like torso, a small round head and six jointed legs ending in broad spoon-shaped pads; no wings.
+- Signature : A high open arch supported by six thin jointed legs with rounded spoon pads, rather than a compact beetle body.
+- Adaptation : The long stance spans gaps between twigs; the spoon pads guide dew-catching threads without sharp claws.
+- Fonction : Weaves fine dew nets beneath the floating flower beds.
+- Adolescent : The torso lengthens into a clear arch and develops a narrow waist; all six legs become longer and their existing spoon pads broaden. Keep it wingless.
+- Adulte : A long elevated thoracic arch with a small relative head, a slim curved abdomen and six tall gracefully bent legs; preserve the same spoon pads and exact appendage count.
+
+## Spirélis · rare
+
+Spirélis filtre doucement l’eau avant qu’elle ne retourne aux racines.
+
+- Corps : A low creeping garden mollusc with a broad three-lobed muscular sole and one open U-shaped porous shell, not a closed spiral; muted terracotta shell, cream body, two short sensory feelers.
+- Signature : An open horseshoe shell with a clear gap above the back and a visibly three-lobed broad foot.
+- Adaptation : The porous shell channels mineral-rich droplets to the broad absorbing foot while it clings beneath damp root beds.
+- Fonction : Filters the gardens' returning water and distributes it along hanging roots.
+- Adolescent : The foot lengthens and its three existing lobes become distinct overlapping pads; the open U-shaped shell develops taller thin side walls while retaining its open gap.
+- Adulte : A long low muscular foot with a small relative face, three broad developed pads and a tall airy horseshoe shell; preserve the open shell, two feelers and three-lobed anatomy.
+
+## Arbélune · légendaire
+
+Arbélune rapproche les îlots pour que les plus petits puissent traverser.
+
+- Corps : A living arboreal bridge creature: one broad hollow wooden arch carried by six thick root feet, with a gentle integrated face at the centre of the arch; warm russet bark and pale living wood, no humanoid torso.
+- Signature : A clear see-through bridge-shaped body above six rooted supports; neither dragon, bear nor crowned forest spirit.
+- Adaptation : Its flexible central wooden arch spreads weight over separate root islands while the six feet anchor without breaking young plants.
+- Fonction : The rare guardian joins distant garden islands into a temporary living crossing.
+- Adolescent : The initially low arch becomes a longer curved span with a clearly open centre; the six thick roots lengthen into bent supports and the face becomes smaller relative to the wooden body.
+- Adulte : A wide tall mature wooden arch on six strong spreading root supports, with a small serene face integrated in the long span. Preserve one central opening, six supports and the same bark pattern; no crown or new branches.

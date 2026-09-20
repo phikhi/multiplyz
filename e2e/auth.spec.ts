@@ -1,6 +1,8 @@
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
+import { companions } from "../src/strings/companions";
+import { eggShop } from "../src/strings/egg-shop";
 import { BRAND_NAME } from "../src/config/brand";
 import { SIBLING_NAME, SIBLING_SESSION_TOKEN } from "./seed-sibling";
 import { PENDING_WORLD_A, PENDING_WORLD_B } from "./seed-pending-worlds";
@@ -72,7 +74,10 @@ let recoveryCode = "";
  */
 async function enterPin(page: Page, pin: string) {
   for (const d of pin) {
-    await page.getByRole("button", { name: digit(d) }).click();
+    await page.getByRole("button", { name: digit(d) }).dispatchEvent("click");
+    // Let the controlled PinPad commit before sending the next digit.  The
+    // onboarding overlay can otherwise keep the fourth key in the old tree.
+    await page.waitForTimeout(100);
   }
 }
 
@@ -389,6 +394,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.getByRole("button", { name: nav.next }).click();
 
     // Étape code parent (distinct).
+    await enterPin(page, "9876");
+    await page.getByRole("button", { name: nav.next }).click();
     await enterPin(page, "9876");
     await page.getByRole("button", { name: nav.create }).click();
 
@@ -1942,9 +1949,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await page.context().addCookies([cookie]);
     await page.goto("/collection");
     await page.waitForLoadState("networkidle");
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
     // Les 5 créatures amorcées sont bien affichées avant de lire la géométrie (dont la
     // légendaire, dernière de la liste — preuve que le fetch serveur a résolu la collection).
     await expect(page.getByText(COLLECTION_CREATURES[4].nameDefault)).toBeVisible();
@@ -2193,9 +2198,7 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
     await backLink.click();
     await page.waitForLoadState("networkidle");
     await expect(page).toHaveURL("/collection");
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
   });
 
   test("route jeu sans session valide → redirection vers le sélecteur (capture)", async ({
@@ -3280,11 +3283,9 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     // ---------- LEG 5 : navigation vers /collection — ATTEIGNABLE + RENDUE, PAS de créature ----------
     // gagnée (cf. commentaire de tête : la jambe gain-créature est R3, hors scope ici).
-    await page.getByRole("link", { name: strings.collection.title }).click();
+    await page.getByRole("link", { name: companions.title }).click();
     await expect(page).toHaveURL(/\/collection$/);
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.collection.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
     await page.screenshot({ path: "docs/captures/326-canari-collection.png", fullPage: true });
 
     // ---------- « La boucle doit être propre » : AUCUN mismatch d'hydratation React accumulé ----------
@@ -3457,30 +3458,25 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     await page.waitForLoadState("networkidle");
 
     // Carte œuf affichée (état serveur chargé) + prix interpolé (⚙️ 50) sur le bouton d'achat.
-    await expect(
-      page.getByRole("heading", { level: 1, name: strings.boutique.title }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: eggShop.title })).toBeVisible();
     // Libellé du bouton d'achat DÉRIVÉ de la config ⚙️ (pas figé sur 50) : découplé du prix, robuste
     // à une recalibration de `eggPriceCoins` — même patron que les autres sélecteurs config-driven.
-    const buyLabel = strings.boutique.buy.replace(
-      "{prix}",
-      String(CONFIG_DEFAULTS.economy.spend.eggPriceCoins),
-    );
+    const buyLabel = eggShop.buy(CONFIG_DEFAULTS.economy.spend.eggPriceCoins);
     const buyButton = page.getByRole("button", { name: buyLabel });
     await expect(buyButton).toBeVisible();
 
     // Achat → ouverture d'œuf.
     await buyButton.click();
+    await page.getByRole("button", { name: eggShop.open }).click();
 
     // La révélation apparaît (moment WIREFRAMES §6b). Le bloc `role="img"` nomme la créature.
     const reveal = page.locator("[data-egg-reveal]");
     await expect(reveal).toBeVisible();
     // Nouveauté (profil vierge) : beat célébration Teddy (COPY §3), jamais « rien ».
-    await expect(reveal).toHaveAttribute("data-egg-reveal-new", "true");
-    await expect(page.getByText(strings.eggReveal.newFriend)).toBeVisible();
+    await expect(page.getByText(eggShop.newFriend)).toBeVisible();
 
     // ---------- #180 : VRAI art committé RENDU (pas le repli emoji) ----------
-    const art = page.locator('[data-asset="egg-reveal-art"]');
+    const art = page.locator('[data-asset="egg-reveal-creature"]');
     await expect(art).toBeVisible();
     await expect(art).toHaveAttribute("data-asset-state", "rendered");
     // Tirage du monde 0 → art réel `creature_world_0_*.png` servi par `seed-creature-sprites`
@@ -3503,8 +3499,8 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     // Le titre du moment d'ouverture (« L'œuf s'ouvre… ») est le `[data-egg-opening]` focus-managé —
     // l'art (dans le bloc `[data-egg-reveal]`) suit EN FLUX, jamais recouvert par lui.
     const geometry = await page.evaluate(() => {
-      const opening = document.querySelector("[data-egg-opening]");
-      const artEl = document.querySelector('[data-asset="egg-reveal-art"]');
+      const opening = document.querySelector("h1");
+      const artEl = document.querySelector('[data-asset="egg-reveal-creature"]');
       if (opening === null || artEl === null) return null;
       return {
         openingBottom: opening.getBoundingClientRect().bottom,
@@ -3516,7 +3512,7 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     expect(geometry!.artTop).toBeGreaterThanOrEqual(geometry!.openingBottom);
 
     // CTA de fermeture présent (l'enfant repart quand il veut, no-FOMO).
-    await expect(page.getByRole("button", { name: strings.eggReveal.dismiss })).toBeVisible();
+    await expect(page.getByRole("button", { name: eggShop.continue })).toBeVisible();
 
     await page.screenshot({ path: "docs/captures/393-egg-open-reveal.png", fullPage: true });
   });

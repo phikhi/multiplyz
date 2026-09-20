@@ -1,0 +1,250 @@
+{
+  "activeDatabase": "data/multiplyz.sqlite",
+  "backup": "data/backups/teddy-before-worlds-20260911T055818Z.sqlite",
+  "backupSha256": "b49aa697b584ffbb1c034e5e5dd6900d6e51e1c81897462efc7d1fb651086bc9",
+  "before": {
+    "__drizzle_migrations": {
+      "rows": 22,
+      "sha256": "7c14d181362e568f1993ed02528216e1c10bfd26fe643fefc0d67d0d5ec5f9cf"
+    },
+    "adventure_sessions": {
+      "rows": 1,
+      "sha256": "27f69b6df5eb874b266e62e3a8c8218cb4b4c09b40a2921743cf17a2f0ded420"
+    },
+    "attempts": {
+      "rows": 322,
+      "sha256": "c0bdca5aaece30de708db990d5bb5641a9d78a7a47a6dcd6dde2c0fa077d13c7"
+    },
+    "characters": {
+      "rows": 41,
+      "sha256": "bf940c5962fc72209f906668223876f08108248512f2f7f103f71d83252443de"
+    },
+    "collection": {
+      "rows": 13,
+      "sha256": "cba9db85d8a45ff9b1accb7d9a085921f769721e96a88ea13f8d50100c29b267"
+    },
+    "cosmetics": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cosmetics_owned": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "daily": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "egg_pity": {
+      "rows": 1,
+      "sha256": "e14d4f13335dc015e4b3be90dd0bc00017e902a46d71fe61fbfe38e423bab334"
+    },
+    "egg_receipts": {
+      "rows": 4,
+      "sha256": "768af9419731c703d47f4ab3cd4917135b7b8020c40fefd571c1d6891b68d917"
+    },
+    "evolution_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "household_settings": {
+      "rows": 1,
+      "sha256": "29785799671bbc9aff91a26e0b45584f92bf4cb7a5176a201639ef21dea26e0f"
+    },
+    "inventory_items": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "jobs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ledger": {
+      "rows": 72,
+      "sha256": "0126465f7753b85f5c0a22cfd4ae1536f2ab25212c0415476094887a86015145"
+    },
+    "mastery": {
+      "rows": 123,
+      "sha256": "a5c78a48675faf55062d65efd0b949f9039279f41b12bde46f58e28d96c5363b"
+    },
+    "pin_attempts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "profiles": {
+      "rows": 1,
+      "sha256": "54a12e14d27658e971239c5d5999a168cc79e91b03d8d4cc3e7dc2dbbdf1884f"
+    },
+    "progress": {
+      "rows": 64,
+      "sha256": "f8c87ad4f79dde16b53b48c21bfc33913920f646c0c8eceb39c184d9d614b001"
+    },
+    "schema_meta": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sessions": {
+      "rows": 10,
+      "sha256": "d1c9a14c49966b17079ae38f3cd818475c4eced2af3bfc7aa81a1cb5052cca12"
+    },
+    "shard_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "socle_worlds": {
+      "rows": 6,
+      "sha256": "8132a9fcf2b0028d4b99003d3bf0fd0371d0371e956205e1e0520f0c2ef40e86"
+    },
+    "teddy_reference_assets": {
+      "rows": 6,
+      "sha256": "146a01c3238d84bce70a2991b31e4dd69faa2036df471da6e87dd38670ad4740"
+    },
+    "wallet": {
+      "rows": 1,
+      "sha256": "07a007b2bc6544e9e77f5520d7577256ced0e96c373c8b629c9fb89389283532"
+    },
+    "worlds": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "integrity": "ok",
+  "activeDatabaseReplaced": false,
+  "seedExecuted": false,
+  "after": {
+    "__drizzle_migrations": {
+      "rows": 22,
+      "sha256": "7c14d181362e568f1993ed02528216e1c10bfd26fe643fefc0d67d0d5ec5f9cf"
+    },
+    "adventure_sessions": {
+      "rows": 1,
+      "sha256": "27f69b6df5eb874b266e62e3a8c8218cb4b4c09b40a2921743cf17a2f0ded420"
+    },
+    "attempts": {
+      "rows": 322,
+      "sha256": "c0bdca5aaece30de708db990d5bb5641a9d78a7a47a6dcd6dde2c0fa077d13c7"
+    },
+    "characters": {
+      "rows": 41,
+      "sha256": "bf940c5962fc72209f906668223876f08108248512f2f7f103f71d83252443de"
+    },
+    "collection": {
+      "rows": 13,
+      "sha256": "cba9db85d8a45ff9b1accb7d9a085921f769721e96a88ea13f8d50100c29b267"
+    },
+    "cosmetics": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cosmetics_owned": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "daily": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "egg_pity": {
+      "rows": 1,
+      "sha256": "e14d4f13335dc015e4b3be90dd0bc00017e902a46d71fe61fbfe38e423bab334"
+    },
+    "egg_receipts": {
+      "rows": 4,
+      "sha256": "768af9419731c703d47f4ab3cd4917135b7b8020c40fefd571c1d6891b68d917"
+    },
+    "evolution_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "household_settings": {
+      "rows": 1,
+      "sha256": "29785799671bbc9aff91a26e0b45584f92bf4cb7a5176a201639ef21dea26e0f"
+    },
+    "inventory_items": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "jobs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ledger": {
+      "rows": 72,
+      "sha256": "0126465f7753b85f5c0a22cfd4ae1536f2ab25212c0415476094887a86015145"
+    },
+    "mastery": {
+      "rows": 123,
+      "sha256": "a5c78a48675faf55062d65efd0b949f9039279f41b12bde46f58e28d96c5363b"
+    },
+    "pin_attempts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "profiles": {
+      "rows": 1,
+      "sha256": "54a12e14d27658e971239c5d5999a168cc79e91b03d8d4cc3e7dc2dbbdf1884f"
+    },
+    "progress": {
+      "rows": 64,
+      "sha256": "f8c87ad4f79dde16b53b48c21bfc33913920f646c0c8eceb39c184d9d614b001"
+    },
+    "schema_meta": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sessions": {
+      "rows": 10,
+      "sha256": "d1c9a14c49966b17079ae38f3cd818475c4eced2af3bfc7aa81a1cb5052cca12"
+    },
+    "shard_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "socle_worlds": {
+      "rows": 6,
+      "sha256": "8132a9fcf2b0028d4b99003d3bf0fd0371d0371e956205e1e0520f0c2ef40e86"
+    },
+    "teddy_reference_assets": {
+      "rows": 6,
+      "sha256": "146a01c3238d84bce70a2991b31e4dd69faa2036df471da6e87dd38670ad4740"
+    },
+    "wallet": {
+      "rows": 1,
+      "sha256": "07a007b2bc6544e9e77f5520d7577256ced0e96c373c8b629c9fb89389283532"
+    },
+    "worlds": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "unchangedTables": [
+    "__drizzle_migrations",
+    "adventure_sessions",
+    "attempts",
+    "characters",
+    "collection",
+    "cosmetics",
+    "cosmetics_owned",
+    "daily",
+    "egg_pity",
+    "egg_receipts",
+    "evolution_receipts",
+    "household_settings",
+    "inventory_items",
+    "jobs",
+    "ledger",
+    "mastery",
+    "pin_attempts",
+    "profiles",
+    "progress",
+    "schema_meta",
+    "sessions",
+    "shard_receipts",
+    "socle_worlds",
+    "teddy_reference_assets",
+    "wallet",
+    "worlds"
+  ],
+  "deliveredBackup": "data/backups/teddy-worlds-delivered-20260911T061302Z.sqlite",
+  "deliveredBackupSha256": "b49aa697b584ffbb1c034e5e5dd6900d6e51e1c81897462efc7d1fb651086bc9"
+}

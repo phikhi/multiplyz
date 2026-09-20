@@ -1,3 +1,4 @@
+import { computeParentOverview, type ParentPeriod } from "./overview";
 /**
  * Pont **DB → agrégats parent** (story 7.2, PLAN §Espace parent). Charge la matière première du
  * moteur — `attempts` + `mastery` (via `loadScope`, PLAN :77/:113) — et délègue aux fonctions
@@ -17,8 +18,8 @@
  *   **inchangés** (la garde **rougit** si une écriture est introduite N'IMPORTE OÙ dans le chemin).
  *
  * **SERVER-ONLY par transitivité** (importe la couche DB + le moteur). Le `profileId` vient
- * **toujours** de la session parent (jamais du client) — résolu par l'appelant (server action de
- * l'écran parent, story 7.7), jamais ici (ce module reste un pont pur, testable sur base réelle).
+ * **toujours** d’un choix de profil du foyer validé côté serveur sous session parent, jamais
+ * d’un identifiant client non vérifié (ce module reste un pont pur, testable sur base réelle).
  */
 
 import { eq } from "drizzle-orm";
@@ -81,7 +82,7 @@ function loadAttemptRecords(db: ReadonlyStatsDb, profileId: number): AttemptReco
  * ADR 0018). **Lecture seule** : aucune écriture DB.
  *
  * @param db connexion applicative (source de vérité serveur).
- * @param profileId profil **de la session parent** (jamais un profil client).
+ * @param profileId profil du foyer validé par la route sous session parent.
  * @param config `⚙️` combinés (`EngineConfig` moteur + `ReportingConfig` ADR 0012 + `RegularityConfig`
  *   ADR 0014).
  * @param now instant serveur injecté (epoch ms, jamais un `Date.now()` interne).
@@ -107,4 +108,20 @@ export function loadParentStats(
     // (`dayTimeZone`) est celui de la régularité (ADR 0014), même découpage, jamais réinventé.
     accuracyDaily: computeAccuracyDailySeries(records, config.regularity.dayTimeZone),
   };
+}
+
+export function loadParentOverview(
+  db: AppDatabase,
+  profileId: number,
+  config: StatsConfig,
+  now: number,
+  period: ParentPeriod,
+) {
+  return computeParentOverview(
+    loadAttemptRecords(db, profileId),
+    loadScope(db, profileId),
+    config,
+    now,
+    period,
+  );
 }

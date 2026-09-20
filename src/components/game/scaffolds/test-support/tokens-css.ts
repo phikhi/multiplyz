@@ -43,9 +43,13 @@ export function themeBlock(theme: Theme): string {
   const start = TOKENS_CSS.indexOf(marker);
   /* v8 ignore next — invariant structurel de tokens.css, non corruptible en test (cf. doc ci-dessus) */
   if (start === -1) throw new Error(`bloc thème "${theme}" introuvable dans tokens.css`);
-  const bodyStart = TOKENS_CSS.indexOf("{", start) + 1;
-  const bodyEnd = TOKENS_CSS.indexOf("\n}", bodyStart);
-  return TOKENS_CSS.slice(bodyStart, bodyEnd);
+  // Les palettes TEDDy ajoutent des blocs du même sélecteur en fin de fichier.
+  // La dernière déclaration gagne, avec repli sur les blocs précédents.
+  return TOKENS_CSS.split(marker)
+    .slice(1)
+    .map((block) => block.slice(0, block.indexOf("\n}")))
+    .reverse()
+    .join("\n");
 }
 
 /**

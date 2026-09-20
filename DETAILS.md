@@ -26,6 +26,7 @@
 - Thème clair/sombre.
 - **Son & musique** : son on/off, musique on/off, **volume** (source de vérité unique ; l'enfant peut muter son/musique sans PIN via le quick-mute in-game — ADR 0017).
 - **Temps d'écran** : nudge doux 15-20 min (défaut) **+ verrou dur optionnel** paramétrable (X min/jour → l'app se verrouille en douceur jusqu'au lendemain).
+- **TEDDy — effet du temps configuré** : suggestion douce en fin de niveau, une fois par jour ; arrêt volontaire enregistré ; plafond appliqué avant un nouveau niveau. Tous réutilisent le temps estimé du suivi parental (amplitude bornée des réponses du jour, hors diagnostic), sans minuterie en arrière-plan. Voir [ADR 0023](docs/adr/0023-premier-voyage-et-pauses.md).
 - **Gérer les profils** : créer / renommer / **supprimer** (purge données) / **réinitialiser le PIN enfant**.
 - **Recalibrer** : relancer un mini-diagnostic (à confirmer). Fusion **MONOTONE** — ne relève/crée jamais vers le bas, la progression acquise n'est jamais perdue (ADR 0016, ENGINE §3, PRODUCT §3.6).
 - **Validation des mondes** : toggle (auto-filtre seul ↔ approbation parent avant affichage, cf. WORLDGEN).

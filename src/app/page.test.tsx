@@ -10,6 +10,7 @@ import { listProfiles } from "@/lib/auth/login";
 vi.mock("@/lib/db", () => ({ getDb: () => ({}) }));
 vi.mock("@/lib/auth/household", () => ({ householdExists: vi.fn() }));
 vi.mock("@/lib/auth/login", () => ({ listProfiles: vi.fn() }));
+vi.mock("@/lib/auth/current-session", () => ({ getCurrentChildSession: async () => null }));
 vi.mock("./onboarding/OnboardingFlow", () => ({
   OnboardingFlow: () => <div data-testid="onboarding-flow" />,
 }));
@@ -28,20 +29,20 @@ afterEach(() => {
 });
 
 describe("HomePage — gating 1er usage", () => {
-  it("aucun foyer → affiche l'onboarding", () => {
+  it("aucun foyer → affiche l'onboarding", async () => {
     householdExistsMock.mockReturnValue(false);
-    render(<HomePage />);
+    render(await HomePage());
     expect(screen.getByTestId("onboarding-flow")).toBeInTheDocument();
     expect(screen.queryByTestId("profile-selector")).not.toBeInTheDocument();
   });
 
-  it("foyer configuré → sélecteur de profil (liste servie par le serveur)", () => {
+  it("foyer configuré → sélecteur de profil (liste servie par le serveur)", async () => {
     householdExistsMock.mockReturnValue(true);
     listProfilesMock.mockReturnValue([
       { id: 1, name: "Léa", avatar: "fox" },
       { id: 2, name: "Tom", avatar: "rabbit" },
     ]);
-    render(<HomePage />);
+    render(await HomePage());
     const selector = screen.getByTestId("profile-selector");
     expect(selector).toBeInTheDocument();
     expect(selector).toHaveAttribute("data-count", "2");

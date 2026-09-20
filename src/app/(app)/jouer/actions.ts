@@ -1,9 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import {
-  getEconomyConfig,
   getEngineConfig,
   getMapConfig,
   getRegularityConfig,
@@ -23,7 +21,8 @@ import {
 } from "@/lib/engine/service";
 import { selectDiagnostic, type DiagnosticItem } from "@/lib/engine/diagnostic";
 import { LEVEL_SIZE } from "@/lib/engine/level";
-import { finishLevel, type FinishLevelError, type GrantedLegendary } from "@/lib/game/finish-level";
+import type { FinishLevelError, GrantedLegendary } from "@/lib/game/finish-level";
+import { loadAdventure } from "@/lib/game/adventure";
 import { baseNodeTypeAt } from "@/lib/game/map";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
@@ -278,70 +277,17 @@ function finishLevelRefusal(error: FinishLevelError | "UNAUTHENTICATED"): Finish
 }
 
 /**
- * Persiste la **fin du niveau courant** pour la session enfant + **crédite les pièces**
- * (MAP §1/§4/§6, ECONOMY §4.1, PRODUCT §2.2/§2.3, ferme #136).
- *
- * **Source de vérité serveur (SYNC §1)** : le client n'envoie **que ses étoiles** (calculées
- * localement, ENGINE §5) — **jamais** de `world_index`/`level_index`. Le serveur **résout
- * lui-même** la cible (`resolveCurrentLevelTarget` : dernier monde débloqué + nœud courant),
- * dérive le **type de nœud** (bonus trésor) de la géométrie, et écrit progression + crédit +
- * ledger dans **une transaction atomique** (`finishLevel`). Rejeu (retry réseau) ⇒ **aucun
- * double effet** : progression monotone + crédit idempotent (`ref_id = level:<world>:<level>`).
- *
- * Le **déblocage** (monde suivant) est **dérivé du progress** — jamais conditionné aux étoiles
- * (MAP §1/§8). Barème = **config versionnée** (`EconomyConfig`), jamais en dur. `{ ok: false }`
- * **neutre** si non authentifié (pas de 500). Horloge serveur injectée (`new Date()`).
- *
- * **Fraîcheur du solde du shell persistant** (story R1.1 #337 rétro → #346, corollaire #180) :
- * un crédit **réellement appliqué** déclenche `revalidatePath("/carte", "layout")`, sans quoi le
- * bandeau `(app)/layout.tsx` resterait figé à sa valeur périmée sur le retour carte (App Router
- * ne re-rend pas un layout de groupe partagé en navigation douce entre routes-sœurs) — cf.
- * commentaire au site d'appel ci-dessous pour le détail du mécanisme.
- *
- * @param stars étoiles obtenues (0..3) — **seule** entrée client, validée par `finishLevel`.
+ * Legacy endpoint now reads a receipt bound to a run id. It never resolves the
+ * newly-current level and never trusts client stars. Completion is exclusively
+ * performed by adventureCommandAction after the last recorded question.
  */
-export async function finishLevelAction(stars: unknown): Promise<FinishLevelActionResult> {
+export async function finishLevelAction(sessionId: unknown): Promise<FinishLevelActionResult> {
   const profileId = await getCurrentChildProfileId();
-  if (profileId === null) {
-    return finishLevelRefusal("UNAUTHENTICATED");
-  }
-  const db = getDb();
-  const mapConfig = getMapConfig();
-  // Cible résolue **serveur** (jamais transmise par le client) : dernier monde débloqué +
-  // nœud courant. `finishLevel` re-garde le déblocage dans sa propre transaction.
-  const target = resolveCurrentLevelTarget(db, profileId, mapConfig.levelsPerWorld);
-  const result = finishLevel(
-    db,
-    profileId,
-    { worldIndex: target.worldIndex, levelIndex: target.levelIndex, stars },
-    mapConfig,
-    getEconomyConfig(),
-    new Date(),
-  );
-  if (!result.ok) {
-    return finishLevelRefusal(result.error);
-  }
-  // **Fraîcheur du solde du shell persistant** (story R1.1 #337 rétro → #346, corollaire #180) :
-  // `(app)/layout.tsx` lit le portefeuille SERVEUR (`loadWallet`) au MONTAGE du layout de
-  // groupe. App Router ne re-rend PAS un layout partagé sur une navigation DOUCE entre
-  // routes-sœurs (`/jouer` → `/carte`, `PlayScreen.handleResultsContinue`) — sans revalidation
-  // explicite, le bandeau resterait figé au solde lu AVANT ce niveau.
-  //
-  // `revalidatePath("/carte", "layout")` cible **le layout de `/carte` + les segments qui lui sont
-  // IMBRIQUÉS** : c'est l'effet directement visé et empiriquement prouvé (E2E `auth.spec.ts` :
-  // au retour `/carte`, le bandeau relit le solde à jour). `/collection` est une route **SŒUR**
-  // (pas sous `/carte`) : elle N'EST PAS couverte par la portée `"layout"` de cet appel. Elle est
-  // néanmoins rafraîchie au prochain accès par un mécanisme Next DISTINCT — tout appel
-  // `revalidatePath`/`revalidateTag` **dans une Server Action** invalide en plus le **Router Cache
-  // client entier** (côté navigateur), pas seulement le segment ciblé côté serveur. On ne
-  // sur-revendique donc pas la portée `"layout"` : le seul effet garanti PAR CET ARGUMENT est le
-  // re-render du groupe-layout de `/carte`.
-  //
-  // Gardé par `coinsApplied` : un rejeu idempotent (retry réseau, aucun crédit appliqué) renvoie le
-  // MÊME solde — inutile de forcer une re-lecture qui ne changerait rien à l'affichage.
-  if (result.coinsApplied) {
-    revalidatePath("/carte", "layout");
-  }
+  if (profileId === null) return finishLevelRefusal("UNAUTHENTICATED");
+  if (typeof sessionId !== "string") return finishLevelRefusal("INVALID_INPUT");
+  const saved = loadAdventure(getDb(), profileId);
+  if (!saved || saved.id !== sessionId || !saved.result) return finishLevelRefusal("INVALID_INPUT");
+  const result = saved.result;
   return {
     ok: true,
     stars: result.stars,

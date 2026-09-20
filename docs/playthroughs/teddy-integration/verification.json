@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "runId": "2798ff54-9354-41ed-a4ea-6588679380ab",
+  "formats": ["pave", "qcm"],
+  "questions": 10,
+  "firstCorrect": 9,
+  "stars": 2,
+  "earned": 20,
+  "balance": 20,
+  "attempts": 10,
+  "ledgerRows": 1,
+  "errors": [],
+  "layouts": [
+    {
+      "width": 1024,
+      "scroll": 1024
+    },
+    {
+      "width": 390,
+      "scroll": 390
+    },
+    {
+      "width": 320,
+      "scroll": 320
+    }
+  ]
+}

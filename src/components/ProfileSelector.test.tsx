@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ProfileSelector } from "./ProfileSelector";
+import { ForestHome } from "./ForestHome";
 import { loginAction } from "@/app/login/actions";
 import { loginParentAction } from "@/app/parent/actions";
 import { strings } from "@/strings";
@@ -12,6 +13,13 @@ import {
 } from "@/components/game/scaffolds/test-support/tokens-css";
 import type { PublicProfile } from "@/lib/auth/login";
 
+const scene = vi.hoisted(() => vi.fn());
+vi.mock("./game/ForestScene", () => ({
+  ForestScene: (props: unknown) => {
+    scene(props);
+    return <div data-testid="home-scene" />;
+  },
+}));
 const push = vi.fn();
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
@@ -42,7 +50,11 @@ beforeEach(() => {
 
 describe("ProfileSelector — sélection + connexion", () => {
   it("affiche les profils servis (prénoms) puis le pavé PIN au choix", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     expect(
       screen.getByRole("heading", { level: 1, name: strings.login.title }),
     ).toBeInTheDocument();
@@ -52,24 +64,31 @@ describe("ProfileSelector — sélection + connexion", () => {
     expect(screen.getByRole("heading", { level: 1, name: pinTitle("Léa") })).toBeInTheDocument();
   });
 
-  it("PIN complet + succès → session posée, redirection vers la carte (hub, story R1.2 #336)", async () => {
+  it("PIN complet + succès → session posée, redirection vers la reprise quotidienne", async () => {
     loginActionMock.mockResolvedValue({ ok: true });
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: profileLabel("Léa") }));
     pressDigits("1234");
 
     await waitFor(() => expect(loginActionMock).toHaveBeenCalledWith(1, "1234"));
-    // Défaut A corrigé (#336, docs/playthroughs/R0-baseline.md) : atterrit sur `/carte` (le hub,
-    // WIREFRAMES §2/§10) — jamais `/jouer` en direct.
-    expect(push).toHaveBeenCalledWith("/carte");
+    // La reprise quotidienne choisit le checkpoint ou le prochain écran côté serveur.
+    expect(push).toHaveBeenCalledWith("/reprendre");
     expect(push).not.toHaveBeenCalledWith("/jouer");
-    expect(refresh).toHaveBeenCalledOnce();
+    expect(push).toHaveBeenCalledTimes(1);
   });
 
   it("PIN faux → message générique no-shame + pavé réinitialisé, pas de redirection", async () => {
     loginActionMock.mockResolvedValue({ ok: false });
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: profileLabel("Léa") }));
     pressDigits("0000");
@@ -82,7 +101,11 @@ describe("ProfileSelector — sélection + connexion", () => {
 
   it("erreur réseau (action rejette) → même message générique", async () => {
     loginActionMock.mockRejectedValue(new Error("réseau"));
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: profileLabel("Léa") }));
     pressDigits("1234");
@@ -92,7 +115,11 @@ describe("ProfileSelector — sélection + connexion", () => {
   });
 
   it("« choisir un autre profil » revient à la liste", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     fireEvent.click(screen.getByRole("button", { name: profileLabel("Léa") }));
     fireEvent.click(screen.getByRole("button", { name: strings.login.back }));
     expect(
@@ -103,7 +130,11 @@ describe("ProfileSelector — sélection + connexion", () => {
 
 describe("ProfileSelector — en-tête de marque + entrée espace parent (story 7.1)", () => {
   it("affiche l'en-tête de marque « multiplyz 🧸 » au-dessus de « Qui joue aujourd'hui ? »", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     // Le wordmark de marque est rendu (BRAND_NAME) + le titre h1 du sélecteur.
     expect(screen.getByText(BRAND_NAME)).toBeInTheDocument();
     expect(
@@ -112,22 +143,34 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
   });
 
   // Teddy en chair et en os accueille l'enfant (story R2.2, #360, ART §2) — sprite `content`.
-  it("Teddy accueille sur l'écran de sélection (sprite `content`, alt consommé)", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
-    const teddy = screen.getByRole("img", { name: strings.login.teddyAlt });
-    expect(teddy.tagName).toBe("IMG");
-    expect(teddy).toHaveAttribute("src", "/generated/socle/teddy/content.png");
-    expect(teddy).toHaveAttribute("data-asset", "teddy-home");
+  it("la scène canonique accueille sur l’écran de sélection", () => {
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
+    expect(screen.getByTestId("home-scene")).toBeInTheDocument();
+    expect(scene).toHaveBeenLastCalledWith(
+      expect.objectContaining({ phase: "arrival", completed: 0 }),
+    );
   });
 
   it("Teddy d'accueil ABSENT du pavé PIN parent (registre neutre, pas la voix enfant)", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
     expect(screen.queryByRole("img", { name: strings.login.teddyAlt })).not.toBeInTheDocument();
   });
 
   it("l'entrée « 🔒 Parent » (nom accessible neutre) ouvre le pavé PIN parent", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
     // Vue pavé PIN parent : titre neutre + consigne (vouvoiement).
     expect(
@@ -135,19 +178,23 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
     ).toBeInTheDocument();
     expect(screen.getByText(strings.parent.pinHint)).toBeInTheDocument();
     // Le pavé enfant n'est PAS présent (pas de profil sélectionné).
-    expect(screen.queryByText(BRAND_NAME)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: strings.login.title })).not.toBeInTheDocument();
   });
 
   it("PIN parent complet + succès → session parent + redirection vers /parent", async () => {
     loginParentActionMock.mockResolvedValue({ ok: true });
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
     pressDigits("9876");
 
     await waitFor(() => expect(loginParentActionMock).toHaveBeenCalledWith("9876"));
     expect(push).toHaveBeenCalledWith("/parent");
-    expect(refresh).toHaveBeenCalledOnce();
+    expect(push).toHaveBeenCalledTimes(1);
     // Ne redirige JAMAIS vers le hub/jeu enfant depuis le flux parent (séparation).
     expect(push).not.toHaveBeenCalledWith("/jouer");
     expect(push).not.toHaveBeenCalledWith("/carte");
@@ -155,7 +202,11 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
 
   it("PIN parent faux → message générique neutre + pavé réinitialisé, pas de redirection", async () => {
     loginParentActionMock.mockResolvedValue({ ok: false });
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
     pressDigits("0000");
@@ -167,7 +218,11 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
 
   it("erreur réseau (action parent rejette) → même message générique neutre", async () => {
     loginParentActionMock.mockRejectedValue(new Error("réseau"));
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
     pressDigits("9876");
@@ -177,16 +232,26 @@ describe("ProfileSelector — en-tête de marque + entrée espace parent (story 
   });
 
   it("« code parent oublié » mène à la récupération (/parent/recuperation)", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
-    fireEvent.click(screen.getByRole("button", { name: strings.parent.forgot }));
-    expect(push).toHaveBeenCalledWith("/parent/recuperation");
+    expect(screen.getByRole("link", { name: strings.parent.forgot })).toHaveAttribute(
+      "href",
+      "/parent/recuperation",
+    );
   });
 
   it("« Retour » depuis le pavé parent revient au sélecteur (en-tête de marque)", () => {
-    render(<ProfileSelector profiles={PROFILES} />);
+    render(
+      <ForestHome>
+        <ProfileSelector profiles={PROFILES} />
+      </ForestHome>,
+    );
     fireEvent.click(screen.getByRole("button", { name: strings.parent.entryLabel }));
-    fireEvent.click(screen.getByRole("button", { name: strings.parent.back }));
+    fireEvent.click(screen.getByRole("button", { name: strings.login.back }));
     expect(
       screen.getByRole("heading", { level: 1, name: strings.login.title }),
     ).toBeInTheDocument();

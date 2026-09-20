@@ -127,6 +127,34 @@
       "when": 1784793804963,
       "tag": "0017_stiff_scourge",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1789055854324,
+      "tag": "0018_teddy_adventure",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1789060858294,
+      "tag": "0019_teddy_egg_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1789062542363,
+      "tag": "0020_teddy_shard_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1789063659742,
+      "tag": "0021_teddy_evolution_receipts",
+      "breakpoints": true
     }
   ]
 }

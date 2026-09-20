@@ -1,8 +1,10 @@
 "use client";
 
-import { useCallback, useState, type CSSProperties } from "react";
+import { useCallback, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ParentMotionControl } from "@/components/ParentMotionControl";
+import { parent as p } from "@/strings/parent";
 import { strings } from "@/strings";
 import type {
   HouseholdSettings,
@@ -21,7 +23,7 @@ import { requestRecalibrationAction, saveSettingsAction } from "./actions";
  * Auto-save par contrôle. Tokens uniquement, cibles ≥ 44 px, feedback **doublé d'icône**
  * (daltonisme), strings centralisées.
  *
- * **Ce qui AGIT** : le thème s'applique **immédiatement** (`data-theme` sur `<html>`, cohérent avec
+ * **Ce qui AGIT** : le thème s'applique après confirmation serveur (`data-theme` sur `<html>`, cohérent avec
  * `app/layout.tsx` côté serveur) ; la validation des mondes persiste et pilote le worker (6.5) ;
  * son/musique/volume (story 8.4 #257) — enregistrés ici, **enforcés** par le moteur audio
  * (`@/lib/sound/**`) au **prochain chargement** de `/jouer` (même contrat de fraîcheur que le
@@ -32,6 +34,11 @@ import { requestRecalibrationAction, saveSettingsAction } from "./actions";
 export interface SettingsFormProps {
   /** Réglages effectifs du foyer (servis par la page serveur). */
   settings: HouseholdSettings;
+  profileId?: number;
+  displayName?: string;
+  profiles?: readonly { id: number; name: string }[];
+  timeExplanation?: string;
+  maxEstimatedMinutes?: number;
   /** Options (min) du nudge doux, calculées serveur depuis les bornes ⚙️ + la valeur courante. */
   nudgeOptions: number[];
   /** Options (min/jour) du verrou dur, calculées serveur depuis les bornes ⚙️ + la valeur courante. */
@@ -68,24 +75,6 @@ function applyThemePreference(theme: ThemePreference): void {
     document.documentElement.dataset.theme = theme;
   }
 }
-
-const mainStyle: CSSProperties = {
-  minHeight: "100dvh",
-  padding: "var(--space-6)",
-};
-
-const cardStyle: CSSProperties = {
-  maxWidth: "var(--max-width-play)",
-  width: "100%",
-  margin: "0 auto",
-  padding: "var(--space-6)",
-  backgroundColor: "var(--card-bg)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--card-shadow)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "var(--space-6)",
-};
 
 // Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran).
 // `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1) : focus programmatique hors ordre
@@ -379,11 +368,17 @@ function volumeLabel(volume: number): string {
 
 export function SettingsForm({
   settings,
+  profileId,
+  displayName,
+  profiles = [],
+  timeExplanation,
+  maxEstimatedMinutes,
   nudgeOptions,
   hardLockOptions,
   volumeOptions,
 }: SettingsFormProps) {
   const router = useRouter();
+  const saving = useRef(false);
   const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
     node?.focus();
   }, []);
@@ -411,47 +406,59 @@ export function SettingsForm({
   const errorText = (code: ErrorCode) => s.errors[code];
 
   const runSave = async (patch: HouseholdSettingsPatch) => {
+    if (saving.current) return;
+    saving.current = true;
     setPending(true);
     setFeedback(null);
     try {
       const result = await saveSettingsAction(patch);
       if (result.ok) {
+        if (patch.theme !== undefined) {
+          setTheme(patch.theme);
+          applyThemePreference(patch.theme);
+        }
+        if (patch.parentWorldValidation !== undefined)
+          setWorldValidation(patch.parentWorldValidation);
+        if (patch.screenTimeNudgeMinutes !== undefined)
+          setNudgeMinutes(patch.screenTimeNudgeMinutes);
+        if (patch.screenTimeHardLockEnabled !== undefined)
+          setHardLockEnabled(patch.screenTimeHardLockEnabled);
+        if (patch.screenTimeHardLockMinutes !== undefined)
+          setHardLockMinutes(patch.screenTimeHardLockMinutes);
+        if (patch.soundEnabled !== undefined) setSoundEnabled(patch.soundEnabled);
+        if (patch.musicEnabled !== undefined) setMusicEnabled(patch.musicEnabled);
+        if (patch.volume !== undefined) setVolume(patch.volume);
         setFeedback({ kind: "success", text: s.saved });
         router.refresh(); // le serveur re-lit les réglages (thème re-stampé app-wide)
       } else {
         setFeedback({ kind: "error", text: errorText(result.code) });
       }
     } catch {
-      setFeedback({ kind: "error", text: errorText("GENERIC") });
+      setFeedback({ kind: "error", text: p.saveFailure });
     } finally {
+      saving.current = false;
       setPending(false);
     }
   };
 
   const onThemeSelect = (next: ThemePreference) => {
-    setTheme(next);
-    applyThemePreference(next); // effet IMMÉDIAT app-wide (data-theme)
     void runSave({ theme: next });
   };
 
   const onWorldValidationSelect = (next: boolean) => {
-    setWorldValidation(next);
     void runSave({ parentWorldValidation: next });
   };
 
   const onNudgeChange = (minutes: number) => {
-    setNudgeMinutes(minutes);
     void runSave({ screenTimeNudgeMinutes: minutes });
   };
 
   const onHardLockToggle = () => {
     const next = !hardLockEnabled;
-    setHardLockEnabled(next);
     void runSave({ screenTimeHardLockEnabled: next });
   };
 
   const onHardLockChange = (minutes: number) => {
-    setHardLockMinutes(minutes);
     void runSave({ screenTimeHardLockMinutes: minutes });
   };
 
@@ -461,18 +468,15 @@ export function SettingsForm({
   // de fraîcheur que le thème (pas de live-sync vers un onglet de jeu déjà ouvert). #164/#292.
   const onSoundToggle = () => {
     const next = !soundEnabled;
-    setSoundEnabled(next);
     void runSave({ soundEnabled: next });
   };
 
   const onMusicToggle = () => {
     const next = !musicEnabled;
-    setMusicEnabled(next);
     void runSave({ musicEnabled: next });
   };
 
   const onVolumeChange = (next: number) => {
-    setVolume(next);
     void runSave({ volume: next });
   };
 
@@ -486,20 +490,23 @@ export function SettingsForm({
     setRecalibrateConfirming(false);
   };
   const submitRecalibrate = async () => {
+    if (saving.current) return;
+    saving.current = true;
     setPending(true);
     setFeedback(null);
     try {
-      const result = await requestRecalibrationAction();
+      const result = await requestRecalibrationAction(profileId);
       if (result.ok) {
         setRecalibrateConfirming(false);
-        setFeedback({ kind: "success", text: s.recalibrate.success });
+        setFeedback({ kind: "success", text: p.recalibrateDone });
         router.refresh();
       } else {
         setFeedback({ kind: "error", text: errorText(result.code) });
       }
     } catch {
-      setFeedback({ kind: "error", text: errorText("GENERIC") });
+      setFeedback({ kind: "error", text: p.saveFailure });
     } finally {
+      saving.current = false;
       setPending(false);
     }
   };
@@ -509,12 +516,28 @@ export function SettingsForm({
   const rc = s.recalibrate;
 
   return (
-    <main className="bg-bg text-text" style={mainStyle}>
-      <div style={cardStyle}>
+    <main className="parent-page parent-settings">
+      <div className="parent-form">
         <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
           {s.title}
         </h1>
-        <p style={introStyle}>{s.intro}</p>
+        <p style={introStyle}>{p.household}</p>
+        <form action="/parent/reglages" className="parent-filters">
+          <label>
+            {p.profile}
+            <select name="profile" defaultValue={profileId}>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="parent-secondary" type="submit">
+            {p.apply}
+          </button>
+        </form>
+        {pending && <p role="status">{p.saving}</p>}
 
         {feedback !== null &&
           (feedback.kind === "success" ? (
@@ -529,6 +552,7 @@ export function SettingsForm({
             </p>
           ))}
 
+        <ParentMotionControl />
         <SegmentedField<ThemePreference>
           legend={s.theme.legend}
           hint={s.theme.hint}
@@ -571,7 +595,11 @@ export function SettingsForm({
               ))}
             </select>
           </label>
-          <p style={hintStyle}>{st.nudgeHint}</p>
+          <p style={hintStyle}>{p.nudgeHint}</p>
+          <p style={hintStyle}>{timeExplanation}</p>
+          {maxEstimatedMinutes !== undefined && nudgeMinutes > maxEstimatedMinutes && (
+            <p className="parent-notice">{p.unreachableTime(maxEstimatedMinutes)}</p>
+          )}
 
           <button
             type="button"
@@ -585,7 +613,12 @@ export function SettingsForm({
             <span aria-hidden="true">{hardLockEnabled ? SWITCH_ON : SWITCH_OFF}</span>
             {st.hardLockToggle}
           </button>
-          <p style={hintStyle}>{st.hardLockHint}</p>
+          <p style={hintStyle}>{p.lockHint}</p>
+          {hardLockEnabled &&
+            maxEstimatedMinutes !== undefined &&
+            hardLockMinutes > maxEstimatedMinutes && (
+              <p className="parent-notice">{p.unreachableTime(maxEstimatedMinutes)}</p>
+            )}
 
           {hardLockEnabled && (
             <label style={selectLabelStyle}>
@@ -656,8 +689,10 @@ export function SettingsForm({
         </fieldset>
 
         <fieldset style={fieldsetStyle}>
-          <legend style={legendStyle}>{rc.legend}</legend>
-          <p style={hintStyle}>{rc.hint}</p>
+          <legend style={legendStyle}>
+            {displayName ? p.recalibrate(displayName) : rc.legend}
+          </legend>
+          <p style={hintStyle}>{p.recalibrateHint}</p>
           {recalibrateConfirming ? (
             <>
               {/* Corps de confirmation : styling warning + 🔄 doublé, mais PAS `role="alert"` (ce
@@ -665,13 +700,14 @@ export function SettingsForm({
                   de feedback en tête → évite deux régions alert concurrentes, cf. ProfileManager). */}
               <p style={warningBoxStyle}>
                 <span aria-hidden="true">{WARN_ICON}</span>
-                {rc.confirmBody}
+                {p.recalibrateHint}
               </p>
               <div style={recalibrateButtonsStyle}>
                 <button
                   ref={recalibrateAnchorRef}
                   type="button"
                   className="mz-focusable"
+                  disabled={pending}
                   onClick={cancelRecalibrate}
                   style={recalibrateCancelStyle}
                 >

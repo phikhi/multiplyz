@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getDb } from "@/lib/db";
 import {
   getEngineConfig,
@@ -8,7 +8,8 @@ import {
 } from "@/config/server-config";
 import { getCurrentParentSession } from "@/lib/auth/current-session";
 import { listManagedProfiles } from "@/lib/parent/profiles";
-import { loadParentStats } from "@/lib/parent/stats-source";
+import { parentPeriod, type ParentPeriod } from "@/lib/parent/overview";
+import { loadParentOverview, loadParentStats } from "@/lib/parent/stats-source";
 import type { StatsConfig } from "@/lib/parent/stats";
 import { loadProgressionSummary, type ProgressionSummary } from "@/lib/parent/progression";
 import { countPendingWorlds } from "@/lib/parent/world-approval";
@@ -36,7 +37,10 @@ export const runtime = "nodejs";
  * `profileId`) — les mondes sont partagés entre profils (WORLDGEN §1, pas de FK profil sur
  * `worlds`), même portée que le buffer lui-même.
  */
-async function loadDashboardProps(profileId: number): Promise<ParentDashboardProps> {
+async function loadDashboardProps(
+  profileId: number,
+  period: ParentPeriod,
+): Promise<ParentDashboardProps> {
   const db = getDb();
   const now = Date.now();
 
@@ -69,6 +73,9 @@ async function loadDashboardProps(profileId: number): Promise<ParentDashboardPro
 
   return {
     displayName,
+    profileId,
+    profiles,
+    overview: loadParentOverview(db, profileId, statsConfig, now, period),
     stats,
     progression,
     respectWindowMinMinutes: statsConfig.regularity.respectWindowMinMinutes,
@@ -82,8 +89,8 @@ async function loadDashboardProps(profileId: number): Promise<ParentDashboardPro
 }
 
 /**
- * **Tableau de bord parent** (story 7.7, WIREFRAMES §7). Charge le **profil de la session
- * parent** (jamais un profil client) et délègue l'assemblage à `loadDashboardProps`, puis rend
+ * **Tableau de bord parent** (story 7.7, WIREFRAMES §7). Charge le profil choisi après vérification de son appartenance au foyer sous session
+ * parent et délègue l'assemblage à `loadDashboardProps`, puis rend
  * `ParentDashboard` (composant de présentation pur, testé isolément).
  *
  * **Garde répétée** (défense en profondeur, même patron que les server actions) : le groupe
@@ -91,13 +98,26 @@ async function loadDashboardProps(profileId: number): Promise<ParentDashboardPro
  * session pour obtenir le `profileId` — un `null` ici (session révoquée entre le layout et la
  * page, course rarissime) redirige à nouveau plutôt que de planter.
  */
-export default async function ParentDashboardPage() {
+export default function ParentDashboardPage(): Promise<React.JSX.Element | null>;
+export default function ParentDashboardPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}): Promise<React.JSX.Element | null>;
+export default async function ParentDashboardPage({
+  searchParams,
+}: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   const session = await getCurrentParentSession();
   if (session === null) {
-    redirect("/");
+    redirect("/parent/connexion");
     return null; // inatteignable en prod (`redirect` lève) ; garde le contrôle de flux testable
   }
 
-  const props = await loadDashboardProps(session.profileId);
+  const query = (await searchParams) ?? {};
+  const profileId = query.profile === undefined ? session.profileId : Number(query.profile);
+  if (
+    !Number.isSafeInteger(profileId) ||
+    !listManagedProfiles(getDb()).some((p) => p.id === profileId)
+  )
+    notFound();
+  const props = await loadDashboardProps(profileId, parentPeriod(query.period));
   return <ParentDashboard {...props} />;
 }

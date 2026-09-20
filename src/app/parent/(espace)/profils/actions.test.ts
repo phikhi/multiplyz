@@ -7,7 +7,12 @@ import {
   resetChildPin,
   ProfileManagementError,
 } from "@/lib/parent/profiles";
-import { deleteProfileAction, renameProfileAction, resetChildPinAction } from "./actions";
+import {
+  createChildProfileAction,
+  deleteProfileAction,
+  renameProfileAction,
+  resetChildPinAction,
+} from "./actions";
 
 // Adaptateurs minces : on pilote la garde (session parent) + la couche métier (mockée), et on
 // vérifie le mapping vers un résultat générique. Le vrai `db` n'est jamais touché (getDb mocké).
@@ -143,4 +148,24 @@ describe("deleteProfileAction", () => {
     await expect(deleteProfileAction(5)).resolves.toEqual({ ok: false, code: "UNAUTHORIZED" });
     expect(deleteMock).not.toHaveBeenCalled(); // mutation-preuve : un enfant ne purge jamais
   });
+});
+
+vi.mock("@/lib/parent/create-profile", () => ({ createChildProfile: vi.fn() }));
+import { createChildProfile } from "@/lib/parent/create-profile";
+it("creates a child through the guarded action and preserves typed failures", async () => {
+  const input = { name: "Fixture", avatar: "fox", pin: "3434" };
+  withoutParentSession();
+  expect(await createChildProfileAction(input)).toEqual({ ok: false, code: "UNAUTHORIZED" });
+  expect(createChildProfile).not.toHaveBeenCalled();
+  withParentSession();
+  vi.mocked(createChildProfile).mockResolvedValue(8);
+  expect(await createChildProfileAction(input)).toEqual({ ok: true });
+  expect(createChildProfile).toHaveBeenCalledWith({ __fakeDb: true }, input);
+  expect(revalidateMock).toHaveBeenCalledWith("/parent/profils");
+  revalidateMock.mockClear();
+  vi.mocked(createChildProfile).mockRejectedValueOnce(new ProfileManagementError("NAME_TAKEN"));
+  expect(await createChildProfileAction(input)).toEqual({ ok: false, code: "NAME_TAKEN" });
+  expect(revalidateMock).not.toHaveBeenCalled();
+  vi.mocked(createChildProfile).mockRejectedValueOnce(new Error("disk failure"));
+  await expect(createChildProfileAction(input)).rejects.toThrow("disk failure");
 });

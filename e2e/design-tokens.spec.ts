@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
+import { BRAND_NAME } from "../src/config/brand";
 
 test.beforeAll(async () => {
   await mkdir("docs/captures", { recursive: true });
@@ -11,7 +12,7 @@ test("design tokens — mode clair (capture)", async ({ page }) => {
 
   // Assert état light avant capture
   await expect(page.locator("html")).not.toHaveAttribute("data-theme", "dark");
-  await expect(page.getByRole("heading", { level: 1, name: "multiplyz" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: BRAND_NAME })).toBeVisible();
 
   await page.screenshot({ path: "docs/captures/11-light.png", fullPage: true });
 });

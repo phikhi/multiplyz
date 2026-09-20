@@ -129,3 +129,14 @@ no characters, no text --ar 16:9
 | Mascotte | **Teddy** (doudou réel, Steiff 80s stylisé kawaii), fil rouge, accessoires selon le monde, **généré depuis photos réelles** |
 | Créatures | **ADN commun** : rondes, grands yeux, 1–2 traits distinctifs |
 | Cohérence IA | Prompt de base verrouillé + Teddy ancré sur photos + style bible + variables only + QA kid-safe + fallback |
+
+
+## 9. Évolution cosmétique — TEDDy
+
+La tranche du 10 septembre 2026 livre deux nouvelles illustrations par compagnon actuel : **41 bébés originaux préservés + 82 variantes ado/adulte**. Le choix utilisateur est le générateur Gemini/Nano Banana existant, ancré à chaque appel sur l’illustration actuelle du compagnon. Les traits distinctifs, couleurs et motifs assurent la continuité ; proportions, appendices et pose dessinent une vraie silhouette de stade. La croissance n’est pas un agrandissement CSS ou une recoloration.
+
+Les dérivés livrés sont des PNG transparents de 768 × 768, inspectés sur fond sombre. Le [dossier de production](assets/creature-stages/README.md) conserve les fichiers finaux, le plan de prompts et le manifeste des empreintes relues ; les six planches comparatives sont dans `docs/playthroughs/teddy-evolution/`. Les défauts de détourage présents dans certains bébés historiques n’ont pas entraîné le remplacement de ces originaux.
+
+Une offre d’évolution exige des références de stades contiguës et distinctes, des fichiers réellement livrés et le chargement du prochain portrait dans le navigateur. La fiche et l’album affichent ensuite l’art du stade possédé. Le catalogue reçoit ces références par publication explicite, sans seed ni réattribution des compagnons. Les futures variantes utilisent le même contrat après inspection ; les arts ne sont pas générés au moment de la dépense.
+
+**Diversité des mondes maintenue** : thèmes, créatures, progression et génération de nouveaux mondes restent ceux du projet. Chaque monde recevra son propre décor et son ambiance ; la forêt commune actuelle reste provisoire et ne sera pas simplement recolorée. Les arts de croissance respectent déjà l’identité des créatures de chaque univers.

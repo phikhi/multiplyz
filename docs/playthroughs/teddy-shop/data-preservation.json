@@ -1,0 +1,33 @@
+{
+  "ok": true,
+  "activeDatabase": "data/multiplyz.sqlite",
+  "backup": "data/backups/teddy-before-shop-20260910T173610Z.sqlite",
+  "backupSha256": "9d4fea9ef6aa00bb52264aef01011c7d8f268f8512f4bcab7cf33d02f854e9db",
+  "existingTablesPreserved": [
+    "adventure_sessions",
+    "attempts",
+    "characters",
+    "collection",
+    "cosmetics",
+    "cosmetics_owned",
+    "daily",
+    "egg_pity",
+    "household_settings",
+    "inventory_items",
+    "jobs",
+    "ledger",
+    "mastery",
+    "pin_attempts",
+    "profiles",
+    "progress",
+    "schema_meta",
+    "sessions",
+    "socle_worlds",
+    "teddy_reference_assets",
+    "wallet",
+    "worlds"
+  ],
+  "addedTable": "egg_receipts",
+  "integrity": "ok",
+  "testSeedExecuted": false
+}

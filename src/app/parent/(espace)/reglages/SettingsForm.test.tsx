@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { strings } from "@/strings";
+import { parent as p } from "@/strings/parent";
 import {
   contrastRatio,
   resolveTokenColor,
@@ -103,31 +104,32 @@ describe("SettingsForm — rendu (liste VERROUILLÉE DETAILS §3, registre neutr
   });
 });
 
-// ───────────────────────────── thème AGIT (data-theme immédiat) ─────────────────────────────
+// ───────────────────────────── thème après confirmation serveur ─────────────────────────────
 
-describe("SettingsForm — thème AGIT immédiatement (data-theme app-wide)", () => {
+describe("SettingsForm — thème enregistré (data-theme app-wide)", () => {
   it("sélectionner « Sombre » ⇒ data-theme=dark + saveSettingsAction({theme:dark}) + refresh + confirmation", async () => {
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: s.theme.dark }));
-    // Effet IMMÉDIAT app-wide (avant même la réponse serveur).
-    expect(document.documentElement.dataset.theme).toBe("dark");
+    // Le thème reste confirmé par le serveur.
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     expect(saveMock).toHaveBeenCalledWith({ theme: "dark" });
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(s.saved));
     expect(refresh).toHaveBeenCalled();
   });
 
-  it("sélectionner « Clair » ⇒ data-theme=light (force clair)", () => {
+  it("sélectionner « Clair » ⇒ data-theme=light (force clair)", async () => {
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: s.theme.light }));
-    expect(document.documentElement.dataset.theme).toBe("light");
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
     expect(saveMock).toHaveBeenCalledWith({ theme: "light" });
   });
 
-  it("sélectionner « Automatique » ⇒ data-theme RETIRÉ (le système décide)", () => {
+  it("sélectionner « Automatique » ⇒ data-theme RETIRÉ (le système décide)", async () => {
     renderForm({ ...SETTINGS, theme: "dark" });
     document.documentElement.dataset.theme = "dark";
     fireEvent.click(screen.getByRole("button", { name: s.theme.system }));
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBeUndefined());
     expect(saveMock).toHaveBeenCalledWith({ theme: "system" });
   });
 });
@@ -171,11 +173,13 @@ describe("SettingsForm — temps d'écran (STOCKÉ seulement, enforcement 7.8 #2
     );
   });
 
-  it("désactiver le verrou dur ⇒ save({enabled:false}) + le sélecteur DISPARAÎT", () => {
+  it("désactiver le verrou dur ⇒ save({enabled:false}) + le sélecteur DISPARAÎT", async () => {
     renderForm({ ...SETTINGS, screenTimeHardLockEnabled: true });
     fireEvent.click(screen.getByRole("switch", { name: s.screenTime.hardLockToggle }));
     expect(saveMock).toHaveBeenCalledWith({ screenTimeHardLockEnabled: false });
-    expect(screen.queryByRole("combobox", { name: s.screenTime.hardLockLabel })).toBeNull();
+    await waitFor(() =>
+      expect(screen.queryByRole("combobox", { name: s.screenTime.hardLockLabel })).toBeNull(),
+    );
   });
 
   it("changer la limite quotidienne (verrou activé) ⇒ save({screenTimeHardLockMinutes})", () => {
@@ -203,13 +207,15 @@ describe("SettingsForm — son/musique/volume (persistance formulaire ; enforcem
     expect(screen.getByRole("combobox", { name: s.sound.volumeLabel })).toHaveValue("70");
   });
 
-  it("désactiver les bruitages ⇒ saveSettingsAction({soundEnabled:false})", () => {
+  it("désactiver les bruitages ⇒ saveSettingsAction({soundEnabled:false})", async () => {
     renderForm();
     fireEvent.click(screen.getByRole("switch", { name: s.sound.soundToggle }));
     expect(saveMock).toHaveBeenCalledWith({ soundEnabled: false });
-    expect(screen.getByRole("switch", { name: s.sound.soundToggle })).toHaveAttribute(
-      "aria-checked",
-      "false",
+    await waitFor(() =>
+      expect(screen.getByRole("switch", { name: s.sound.soundToggle })).toHaveAttribute(
+        "aria-checked",
+        "false",
+      ),
     );
   });
 
@@ -235,13 +241,10 @@ describe("SettingsForm — son/musique/volume (persistance formulaire ; enforcem
     expect(saveMock).toHaveBeenCalledWith({ volume: 25 });
   });
 
-  it("aucun effet audio immédiat DEPUIS CE FORMULAIRE (contrairement au thème) : pas d'appel avant la confirmation serveur", async () => {
+  it("aucun effet audio immédiat depuis ce formulaire : pas d'appel avant la confirmation serveur", async () => {
     renderForm();
     fireEvent.click(screen.getByRole("switch", { name: s.sound.soundToggle }));
-    // Le seul effet synchrone est l'état visuel du switch — aucune API audio/DOM n'est touchée ICI
-    // (ce formulaire ne monte pas `SoundProvider` : l'enforcement réel vit dans `/jouer`, story
-    // 8.4 #257, au prochain chargement — même contrat de fraîcheur que le thème). La confirmation
-    // visible vient du serveur.
+    // Le formulaire attend la confirmation ; le moteur audio consomme ensuite le réglage.
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(s.saved));
   });
 });
@@ -260,7 +263,7 @@ describe("SettingsForm — feedback d'erreur (doublé d'icône ⚠️)", () => {
     saveMock.mockRejectedValue(new Error("network"));
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: s.theme.dark }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(s.errors.GENERIC));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(p.saveFailure));
   });
 });
 
@@ -272,7 +275,7 @@ describe("SettingsForm — recalibrer (story 7.6, ADR 0016)", () => {
   it("rend la section recalibrer (légende + consigne + bouton d'action) — pas de confirmation par défaut", () => {
     renderForm();
     expect(screen.getByRole("button", { name: rc.action })).toBeInTheDocument();
-    expect(screen.getByText(rc.hint)).toBeInTheDocument();
+    expect(screen.getByText(p.recalibrateHint)).toBeInTheDocument();
     // Aucune confirmation ouverte au départ (le bouton de confirmation n'est PAS rendu).
     expect(screen.queryByRole("button", { name: rc.confirm })).toBeNull();
   });
@@ -280,7 +283,7 @@ describe("SettingsForm — recalibrer (story 7.6, ADR 0016)", () => {
   it("cliquer « Recalibrer » OUVRE la confirmation (corps + confirmer/annuler) SANS armer (aucun appel action)", () => {
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: rc.action }));
-    expect(screen.getByText(rc.confirmBody)).toBeInTheDocument();
+    expect(screen.getAllByText(p.recalibrateHint)).toHaveLength(2);
     expect(screen.getByRole("button", { name: rc.confirm })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: rc.cancel })).toBeInTheDocument();
     // Ouvrir n'ARME RIEN : seul « Oui, recalibrer » appelle la server action (destructive-douce).
@@ -291,7 +294,7 @@ describe("SettingsForm — recalibrer (story 7.6, ADR 0016)", () => {
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: rc.action }));
     fireEvent.click(screen.getByRole("button", { name: rc.confirm }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(rc.success));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(p.recalibrateDone));
     expect(recalibrateMock).toHaveBeenCalledTimes(1);
     expect(refresh).toHaveBeenCalled();
     // Panneau de confirmation refermé après succès → le bouton d'action est de nouveau rendu.
@@ -327,7 +330,7 @@ describe("SettingsForm — recalibrer (story 7.6, ADR 0016)", () => {
     renderForm();
     fireEvent.click(screen.getByRole("button", { name: rc.action }));
     fireEvent.click(screen.getByRole("button", { name: rc.confirm }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(s.errors.GENERIC));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(p.saveFailure));
   });
 
   it("aucun bouton de la section recalibrer (action/confirmer/annuler) ne dilue son texte par une `opacity` (rétro #226)", () => {
@@ -404,4 +407,21 @@ describe("SettingsForm — contraste WCAG résolu (tous glyphes rendus, aucune o
       expect(opacity).toBe(1); // texte plein-alpha → le contraste résolu ci-dessus est le pixel réel
     }
   });
+});
+
+it("explains saved time limits that exceed the day's maximum estimate", () => {
+  render(
+    <SettingsForm
+      settings={{ ...SETTINGS, screenTimeHardLockEnabled: true, musicEnabled: false }}
+      nudgeOptions={NUDGE_OPTIONS}
+      hardLockOptions={HARD_LOCK_OPTIONS}
+      volumeOptions={VOLUME_OPTIONS}
+      maxEstimatedMinutes={10}
+    />,
+  );
+  expect(screen.getAllByText(p.unreachableTime(10))).toHaveLength(2);
+  expect(screen.getByRole("switch", { name: s.sound.musicToggle })).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
 });
