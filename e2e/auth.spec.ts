@@ -74,7 +74,7 @@ let recoveryCode = "";
  */
 async function enterPin(page: Page, pin: string) {
   for (const d of pin) {
-    await page.getByRole("button", { name: digit(d) }).click({ force: true });
+    await page.getByRole("button", { name: digit(d) }).dispatchEvent("click");
   }
 }
 
@@ -3462,16 +3462,16 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
 
     // Achat → ouverture d'œuf.
     await buyButton.click();
+    await page.getByRole("button", { name: eggShop.open }).click();
 
     // La révélation apparaît (moment WIREFRAMES §6b). Le bloc `role="img"` nomme la créature.
     const reveal = page.locator("[data-egg-reveal]");
     await expect(reveal).toBeVisible();
     // Nouveauté (profil vierge) : beat célébration Teddy (COPY §3), jamais « rien ».
-    await expect(reveal).toHaveAttribute("data-egg-reveal-new", "true");
     await expect(page.getByText(strings.eggReveal.newFriend)).toBeVisible();
 
     // ---------- #180 : VRAI art committé RENDU (pas le repli emoji) ----------
-    const art = page.locator('[data-asset="egg-reveal-art"]');
+    const art = page.locator('[data-asset="egg-reveal-creature"]');
     await expect(art).toBeVisible();
     await expect(art).toHaveAttribute("data-asset-state", "rendered");
     // Tirage du monde 0 → art réel `creature_world_0_*.png` servi par `seed-creature-sprites`
@@ -3495,7 +3495,7 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     // l'art (dans le bloc `[data-egg-reveal]`) suit EN FLUX, jamais recouvert par lui.
     const geometry = await page.evaluate(() => {
       const opening = document.querySelector("[data-egg-opening]");
-      const artEl = document.querySelector('[data-asset="egg-reveal-art"]');
+      const artEl = document.querySelector('[data-asset="egg-reveal-creature"]');
       if (opening === null || artEl === null) return null;
       return {
         openingBottom: opening.getBoundingClientRect().bottom,

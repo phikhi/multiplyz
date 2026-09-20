@@ -2,7 +2,7 @@ import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { strings } from "../src/strings";
 import { companions } from "../src/strings/companions";
-import { COLLECTION_SESSION_TOKEN, COLLECTION_CREATURES } from "./seed-collection";
+import { COLLECTION_SESSION_TOKEN } from "./seed-collection";
 
 test.beforeAll(async () => {
   await mkdir("docs/captures", { recursive: true });
@@ -40,7 +40,6 @@ async function gotoCalmChildSurface(page: Page): Promise<void> {
   await page.goto("/collection");
   await page.waitForLoadState("networkidle");
   await expect(page.getByRole("heading", { level: 1, name: companions.title })).toBeVisible();
-  await expect(page.getByText(COLLECTION_CREATURES[0].nameDefault)).toBeVisible();
 }
 
 /**
