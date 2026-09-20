@@ -247,29 +247,56 @@ it.each([
   ["changed-raw", "diffère de sa réponse brute"],
   ["no-cutout-failure", "n’est pas reproduite"],
 ])("refuses recovery after %s tampering", async (change, message) => {
-  if (change === "marker") save("renewal/0/growth-started.json", { ...readJson("renewal/0/growth-started.json"), historySha256: "changed" });
-  if (change === "count") save(`renewal/0/${run}-result.json`, { ...readJson(`renewal/0/${run}-result.json`), imagesSaved: 14 });
+  if (change === "marker")
+    save("renewal/0/growth-started.json", {
+      ...readJson("renewal/0/growth-started.json"),
+      historySha256: "changed",
+    });
+  if (change === "count")
+    save(`renewal/0/${run}-result.json`, {
+      ...readJson(`renewal/0/${run}-result.json`),
+      imagesSaved: 14,
+    });
   if (change === "extra-file") save(`renewal/0/${run}-unexpected.json`, {});
   if (change.startsWith("trace-")) {
-    const trace = readFileSync(join(directory, "requests.jsonl"), "utf8").split("\n").map((line) => JSON.parse(line));
+    const trace = readFileSync(join(directory, "requests.jsonl"), "utf8")
+      .split("\n")
+      .map((line) => JSON.parse(line));
     if (change === "trace-length") trace.pop();
     else trace[0].prompts = ["altered"];
-    writeFileSync(join(directory, "requests.jsonl"), trace.map((entry) => JSON.stringify(entry)).join("\n"));
+    writeFileSync(
+      join(directory, "requests.jsonl"),
+      trace.map((entry) => JSON.stringify(entry)).join("\n"),
+    );
   }
-  if (change === "ambiguous-raw") writeFileSync(join(directory, "storage/worldgen/raw/233-1.png"), framed);
-  if (change === "missing-stage") { const draft = readJson(`renewal/0/${run}-draft-1.json`); draft.stageArt[0] = {}; save(`renewal/0/${run}-draft-1.json`, draft); }
-  if (change === "changed-baby") { const draft = readJson(`renewal/0/${run}-draft-0.json`); draft.artRefs[0] = "world/0/changed.png"; save(`renewal/0/${run}-draft-0.json`, draft); }
-  if (change === "changed-raw") writeFileSync(join(directory, "storage/worldgen/raw/233-0.png"), await pixels(220));
-  if (change === "no-cutout-failure") writeFileSync(join(directory, "storage/worldgen/raw/238-0.png"), await pixels(225));
+  if (change === "ambiguous-raw")
+    writeFileSync(join(directory, "storage/worldgen/raw/233-1.png"), framed);
+  if (change === "missing-stage") {
+    const draft = readJson(`renewal/0/${run}-draft-1.json`);
+    draft.stageArt[0] = {};
+    save(`renewal/0/${run}-draft-1.json`, draft);
+  }
+  if (change === "changed-baby") {
+    const draft = readJson(`renewal/0/${run}-draft-0.json`);
+    draft.artRefs[0] = "world/0/changed.png";
+    save(`renewal/0/${run}-draft-0.json`, draft);
+  }
+  if (change === "changed-raw")
+    writeFileSync(join(directory, "storage/worldgen/raw/233-0.png"), await pixels(220));
+  if (change === "no-cutout-failure")
+    writeFileSync(join(directory, "storage/worldgen/raw/238-0.png"), await pixels(225));
   await expect(prepareRenewalGrowthRecovery(directory, growth, crop)).rejects.toThrow(message);
 });
 it.each([
-  ["binding", "Récupération détachée"], ["input", "Source de récupération modifiée"],
-  ["path", "Chemin du groupe récupéré invalide"], ["hash", "Groupe récupéré modifié"],
+  ["binding", "Récupération détachée"],
+  ["input", "Source de récupération modifiée"],
+  ["path", "Chemin du groupe récupéré invalide"],
+  ["hash", "Groupe récupéré modifié"],
   ["arts", "conserver tous les autres arts exacts"],
 ])("refuses a prepared recovery with altered %s", async (change, message) => {
   await prepareRenewalGrowthRecovery(directory, growth, crop);
-  const path = "renewal/0/growth-recovery.json", recipe = readJson(path);
+  const path = "renewal/0/growth-recovery.json",
+    recipe = readJson(path);
   if (change === "binding") recipe.traceSha256 = "changed";
   if (change === "input") recipe.inputs[0].sha256 = "changed";
   if (change === "path") recipe.prepared.path = "../outside.json";
@@ -279,7 +306,15 @@ it.each([
   expect(() => loadRenewalGrowthRecovery(directory, growth)).toThrow(message);
 });
 it("refuses invalid frame coordinates and a frame with no neutral pixels to change", async () => {
-  await expect(removeReviewedNeutralFrame(framed, { left: -1, top: 0, width: 10, height: 10, thickness: 1 })).rejects.toThrow("Cadre de correction invalide");
-  const solid = await sharp({ create: { width: 64, height: 64, channels: 4, background: "#b27248" } }).png().toBuffer();
-  await expect(removeReviewedNeutralFrame(solid, { left: 8, top: 8, width: 48, height: 48, thickness: 2 })).rejects.toThrow("Aucun pixel de cadre corrigé");
+  await expect(
+    removeReviewedNeutralFrame(framed, { left: -1, top: 0, width: 10, height: 10, thickness: 1 }),
+  ).rejects.toThrow("Cadre de correction invalide");
+  const solid = await sharp({
+    create: { width: 64, height: 64, channels: 4, background: "#b27248" },
+  })
+    .png()
+    .toBuffer();
+  await expect(
+    removeReviewedNeutralFrame(solid, { left: 8, top: 8, width: 48, height: 48, thickness: 2 }),
+  ).rejects.toThrow("Aucun pixel de cadre corrigé");
 });

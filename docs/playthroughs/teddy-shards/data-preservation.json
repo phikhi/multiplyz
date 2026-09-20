@@ -2,9 +2,7 @@
   "ok": true,
   "integrity": "ok",
   "unchangedApplicationTables": 23,
-  "changedExistingTables": [
-    "__drizzle_migrations"
-  ],
+  "changedExistingTables": ["__drizzle_migrations"],
   "addedTable": "shard_receipts",
   "addedTableRows": 0,
   "before": {

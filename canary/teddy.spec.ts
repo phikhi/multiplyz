@@ -3,14 +3,23 @@ import { forest } from "../src/strings/forest";
 import { strings } from "../src/strings";
 import { CANARI_PROFILE_NAME, CANARI_PROFILE_PIN } from "../e2e/seed-canari";
 
-test("connexion → carte → passage repris → souvenir → carte → collection", async ({ page, request }, testInfo) => {
+test("connexion → carte → passage repris → souvenir → carte → collection", async ({
+  page,
+  request,
+}, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   expect((await request.get("/api/health")).status()).toBe(200);
   await page.goto("/");
-  await page.getByRole("button", { name: strings.login.profileOption.replace("{prénom}", CANARI_PROFILE_NAME) }).click();
+  await page
+    .getByRole("button", {
+      name: strings.login.profileOption.replace("{prénom}", CANARI_PROFILE_NAME),
+    })
+    .click();
   for (const digit of CANARI_PROFILE_PIN)
-    await page.getByRole("button", { name: strings.pinPad.digit.replace("{d}", digit), exact: true }).click();
+    await page
+      .getByRole("button", { name: strings.pinPad.digit.replace("{d}", digit), exact: true })
+      .click();
   await expect(page).toHaveURL(/\/carte$/);
   await expect(page.locator('[aria-current="step"]')).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("carte.png"), fullPage: true });
@@ -37,10 +46,22 @@ test("connexion → carte → passage repris → souvenir → carte → collecti
     }
     const text = await page.locator(".forest-equation").innerText();
     const operands = text.match(/\d+/g)!.map(Number);
-    const answer = text.includes("+ ?") ? 10 - operands[0] : text.includes("×") ? operands[0] * operands[1] : text.includes("−") ? operands[0] - operands[1] : operands[0] + operands[1];
+    const answer = text.includes("+ ?")
+      ? 10 - operands[0]
+      : text.includes("×")
+        ? operands[0] * operands[1]
+        : text.includes("−")
+          ? operands[0] - operands[1]
+          : operands[0] + operands[1];
     const input = page.getByRole("textbox", { name: forest.answerLabel });
-    if (await input.isVisible()) { await input.fill(String(answer)); await page.getByRole("button", { name: forest.submit }).click(); }
-    else await page.getByRole("group", { name: forest.answerLabel }).getByRole("button", { name: String(answer), exact: true }).click();
+    if (await input.isVisible()) {
+      await input.fill(String(answer));
+      await page.getByRole("button", { name: forest.submit }).click();
+    } else
+      await page
+        .getByRole("group", { name: forest.answerLabel })
+        .getByRole("button", { name: String(answer), exact: true })
+        .click();
     answered++;
     await expect(main).toHaveAttribute("data-phase", "feedback");
   }

@@ -10,7 +10,9 @@ import PlayPage from "./page";
 // (story 8.4, #257). `getDb`/`readHouseholdSettings` mockés (patron `reglages/page.test.tsx`),
 // `pickSoundSettings` reste RÉEL (importé transitivement par `page.tsx`) pour prouver le CÂBLAGE
 // serveur→client, pas seulement l'appel de la fonction.
-vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn(async (): Promise<number | null> => 7) }));
+vi.mock("@/lib/engine/current-profile", () => ({
+  getCurrentChildProfileId: vi.fn(async (): Promise<number | null> => 7),
+}));
 vi.mock("@/lib/game/adventure", () => ({ loadAdventure: () => null }));
 vi.mock("@/lib/engine/service", () => ({
   needsDiagnostic: () => false,

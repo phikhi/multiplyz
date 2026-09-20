@@ -9,7 +9,9 @@ const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("./actions", () => ({ createChildProfileAction: vi.fn() }));
 beforeEach(() => vi.clearAllMocks());
-function enterPin(value: string) { for (const key of value) fireEvent.keyDown(window, { key }); }
+function enterPin(value: string) {
+  for (const key of value) fireEvent.keyDown(window, { key });
+}
 function details() {
   fireEvent.click(screen.getByRole("button", { name: p.create }));
   expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
@@ -36,33 +38,48 @@ it("requires matching codes, then creates exactly the selected profile and reset
   fireEvent.keyDown(window, { key: "Backspace" });
   enterPin("4");
   await act(async () => fireEvent.click(screen.getByRole("button", { name: p.create })));
-  expect(createChildProfileAction).toHaveBeenCalledExactlyOnceWith({ name: "Camille", avatar: AVATARS[1].id, pin: "1234" });
+  expect(createChildProfileAction).toHaveBeenCalledExactlyOnceWith({
+    name: "Camille",
+    avatar: AVATARS[1].id,
+    pin: "1234",
+  });
   expect(screen.getByRole("status")).toHaveTextContent(p.createDone);
   expect(refresh).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("button", { name: p.create }));
   expect(screen.queryByRole("status")).not.toBeInTheDocument();
   expect(screen.getByLabelText(p.name)).toHaveValue("");
 });
-it.each(["server", "network"])("keeps the entered profile and permits retry after %s failure", async (failure) => {
-  const action = vi.mocked(createChildProfileAction);
-  if (failure === "server") action.mockResolvedValue({ ok: false, code: "NAME_TAKEN" });
-  else action.mockRejectedValue(new Error("offline"));
-  render(<AddProfileForm />);
-  details(); enterPin("1234");
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: p.create })));
-  expect(screen.getByRole("alert")).toHaveTextContent(strings.parent.manage.errors[failure === "server" ? "NAME_TAKEN" : "GENERIC"]);
-  expect(screen.getByRole("button", { name: p.create })).toBeEnabled();
-  expect(refresh).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: p.cancel }));
-  fireEvent.click(screen.getByRole("button", { name: p.create }));
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  expect(screen.getByLabelText(p.name)).toHaveValue("");
-});
+it.each(["server", "network"])(
+  "keeps the entered profile and permits retry after %s failure",
+  async (failure) => {
+    const action = vi.mocked(createChildProfileAction);
+    if (failure === "server") action.mockResolvedValue({ ok: false, code: "NAME_TAKEN" });
+    else action.mockRejectedValue(new Error("offline"));
+    render(<AddProfileForm />);
+    details();
+    enterPin("1234");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: p.create })));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      strings.parent.manage.errors[failure === "server" ? "NAME_TAKEN" : "GENERIC"],
+    );
+    expect(screen.getByRole("button", { name: p.create })).toBeEnabled();
+    expect(refresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.cancel }));
+    fireEvent.click(screen.getByRole("button", { name: p.create }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(p.name)).toHaveValue("");
+  },
+);
 it("locks code entry, cancellation and duplicate submission while the server is pending", async () => {
   let resolve!: (value: Awaited<ReturnType<typeof createChildProfileAction>>) => void;
-  vi.mocked(createChildProfileAction).mockReturnValue(new Promise((done) => { resolve = done; }));
+  vi.mocked(createChildProfileAction).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
   render(<AddProfileForm />);
-  details(); enterPin("1234");
+  details();
+  enterPin("1234");
   fireEvent.click(screen.getByRole("button", { name: p.create }));
   fireEvent.click(screen.getByRole("button", { name: p.create }));
   expect(screen.getByRole("button", { name: p.cancel })).toBeDisabled();

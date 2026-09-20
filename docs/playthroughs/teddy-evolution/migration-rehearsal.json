@@ -102,211 +102,47 @@
     }
   },
   "catalogueBefore": [
-    [
-      "creature:0:0",
-      1,
-      null
-    ],
-    [
-      "creature:0:1",
-      1,
-      null
-    ],
-    [
-      "creature:0:2",
-      1,
-      null
-    ],
-    [
-      "creature:0:3",
-      1,
-      null
-    ],
-    [
-      "creature:0:4",
-      1,
-      null
-    ],
-    [
-      "creature:0:5",
-      1,
-      null
-    ],
-    [
-      "creature:1:0",
-      1,
-      null
-    ],
-    [
-      "creature:1:1",
-      1,
-      null
-    ],
-    [
-      "creature:1:2",
-      1,
-      null
-    ],
-    [
-      "creature:1:3",
-      1,
-      null
-    ],
-    [
-      "creature:1:4",
-      1,
-      null
-    ],
-    [
-      "creature:2:0",
-      1,
-      null
-    ],
-    [
-      "creature:2:1",
-      1,
-      null
-    ],
-    [
-      "creature:2:2",
-      1,
-      null
-    ],
-    [
-      "creature:2:3",
-      1,
-      null
-    ],
-    [
-      "creature:2:4",
-      1,
-      null
-    ],
-    [
-      "creature:2:5",
-      1,
-      null
-    ],
-    [
-      "creature:3:0",
-      1,
-      null
-    ],
-    [
-      "creature:3:1",
-      1,
-      null
-    ],
-    [
-      "creature:3:2",
-      1,
-      null
-    ],
-    [
-      "creature:3:3",
-      1,
-      null
-    ],
-    [
-      "creature:3:4",
-      1,
-      null
-    ],
-    [
-      "creature:3:5",
-      1,
-      null
-    ],
-    [
-      "creature:4:0",
-      1,
-      null
-    ],
-    [
-      "creature:4:1",
-      1,
-      null
-    ],
-    [
-      "creature:4:2",
-      1,
-      null
-    ],
-    [
-      "creature:4:3",
-      1,
-      null
-    ],
-    [
-      "creature:4:4",
-      1,
-      null
-    ],
-    [
-      "creature:5:0",
-      1,
-      null
-    ],
-    [
-      "creature:5:1",
-      1,
-      null
-    ],
-    [
-      "creature:5:2",
-      1,
-      null
-    ],
-    [
-      "creature:5:3",
-      1,
-      null
-    ],
-    [
-      "creature:5:4",
-      1,
-      null
-    ],
-    [
-      "creature:5:5",
-      1,
-      null
-    ],
-    [
-      "creature:5:6",
-      1,
-      null
-    ],
-    [
-      "legendary:0",
-      1,
-      null
-    ],
-    [
-      "legendary:1",
-      1,
-      null
-    ],
-    [
-      "legendary:2",
-      1,
-      null
-    ],
-    [
-      "legendary:3",
-      1,
-      null
-    ],
-    [
-      "legendary:4",
-      1,
-      null
-    ],
-    [
-      "legendary:5",
-      1,
-      null
-    ]
+    ["creature:0:0", 1, null],
+    ["creature:0:1", 1, null],
+    ["creature:0:2", 1, null],
+    ["creature:0:3", 1, null],
+    ["creature:0:4", 1, null],
+    ["creature:0:5", 1, null],
+    ["creature:1:0", 1, null],
+    ["creature:1:1", 1, null],
+    ["creature:1:2", 1, null],
+    ["creature:1:3", 1, null],
+    ["creature:1:4", 1, null],
+    ["creature:2:0", 1, null],
+    ["creature:2:1", 1, null],
+    ["creature:2:2", 1, null],
+    ["creature:2:3", 1, null],
+    ["creature:2:4", 1, null],
+    ["creature:2:5", 1, null],
+    ["creature:3:0", 1, null],
+    ["creature:3:1", 1, null],
+    ["creature:3:2", 1, null],
+    ["creature:3:3", 1, null],
+    ["creature:3:4", 1, null],
+    ["creature:3:5", 1, null],
+    ["creature:4:0", 1, null],
+    ["creature:4:1", 1, null],
+    ["creature:4:2", 1, null],
+    ["creature:4:3", 1, null],
+    ["creature:4:4", 1, null],
+    ["creature:5:0", 1, null],
+    ["creature:5:1", 1, null],
+    ["creature:5:2", 1, null],
+    ["creature:5:3", 1, null],
+    ["creature:5:4", 1, null],
+    ["creature:5:5", 1, null],
+    ["creature:5:6", 1, null],
+    ["legendary:0", 1, null],
+    ["legendary:1", 1, null],
+    ["legendary:2", 1, null],
+    ["legendary:3", 1, null],
+    ["legendary:4", 1, null],
+    ["legendary:5", 1, null]
   ],
   "after": {
     "adventure_sessions": {

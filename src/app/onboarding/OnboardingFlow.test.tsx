@@ -317,7 +317,8 @@ describe("OnboardingFlow — CTA désactivé : contraste composité peint (#240/
 });
 
 it("refuses a different parent confirmation, clears it and keeps the chosen PIN", () => {
-  renderFlow(); driveToParentReady();
+  renderFlow();
+  driveToParentReady();
   fireEvent.click(screen.getByRole("button", { name: strings.pinPad.backspace }));
   pressDigits("5");
   fireEvent.click(screen.getByRole("button", { name: nav.create }));

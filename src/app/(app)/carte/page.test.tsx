@@ -40,5 +40,7 @@ it("keeps a closed checkpoint closed and does not invent an active passage", asy
   mocks.current.mockResolvedValue({ status: "ready", map: { worldIndex: 3 } });
   mocks.adventure.mockReturnValue({ id: "finished", phase: "closed" });
   render(await MapPage());
-  expect(JSON.parse(screen.getByTestId("forest-map").getAttribute("data-props")!).adventure).toEqual({ id: "finished", phase: "closed" });
+  expect(
+    JSON.parse(screen.getByTestId("forest-map").getAttribute("data-props")!).adventure,
+  ).toEqual({ id: "finished", phase: "closed" });
 });

@@ -14,14 +14,19 @@ function put(path: string, value: unknown = {}) {
   writeFileSync(file, JSON.stringify(value));
   return file;
 }
-function start() { put("started.json", { at: "2026-09-14", target: 6 }); }
+function start() {
+  put("started.json", { at: "2026-09-14", target: 6 });
+}
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), "teddy-status-history-"));
   db = createDatabase(":memory:");
   runMigrations(db);
   db.$client.pragma("query_only=ON");
 });
-afterEach(() => { db.$client.close(); rmSync(directory, { recursive: true, force: true }); });
+afterEach(() => {
+  db.$client.close();
+  rmSync(directory, { recursive: true, force: true });
+});
 it("reports an unstarted pilot and missing trace without creating any data", () => {
   expect(describePilotStatus(db, directory)).toBe("Pilote préparé ; aucun essai démarré.");
   expect(readPilotTrace(directory)).toEqual([]);
@@ -47,15 +52,24 @@ it("refuses an overflowing sum even when individual reservations are valid", () 
 });
 it("distinguishes provider refusals from successful HTTP replies and ignores unrelated assets", () => {
   start();
-  writeFileSync(join(directory, "requests.jsonl"), [
-    { call: 1, type: "image" }, { call: 1, status: 200, finishReason: "IMAGE_SAFETY" },
-    { call: 2, type: "image" }, { call: 2, status: 200, finishReason: "STOP" },
-    { call: 3, status: 500, finishReason: "ERROR" },
-  ].map((v) => JSON.stringify(v)).join("\n"));
+  writeFileSync(
+    join(directory, "requests.jsonl"),
+    [
+      { call: 1, type: "image" },
+      { call: 1, status: 200, finishReason: "IMAGE_SAFETY" },
+      { call: 2, type: "image" },
+      { call: 2, status: 200, finishReason: "STOP" },
+      { call: 3, status: 500, finishReason: "ERROR" },
+    ]
+      .map((v) => JSON.stringify(v))
+      .join("\n"),
+  );
   put("storage/generated/world/6/notes.json");
   put("storage/generated/world/6/runtime-old-teddy.png");
   put("storage/generated/world/6/runtime-new-teddy.png");
-  put("result.json"); put("preview.html"); put("refinement-started.json");
+  put("result.json");
+  put("preview.html");
+  put("refinement-started.json");
   const status = describePilotStatus(db, directory);
   expect(status).toContain("1 emplacement(s)");
   expect(status).toContain("Appel 1 arrêté par le fournisseur : IMAGE_SAFETY");
@@ -79,31 +93,36 @@ const histories = [
   ["arbelune-study-anatomies", "Correction anatomique de l’étude"],
   ["arbelune-study-inspections", "Inspection des stades extraits"],
 ];
-it.each([false, true])("chooses newest results across every historical phase, optional galleries=%s", (gallery) => {
-  start();
-  for (const [folder] of [...histories, ["inspections"], ["refinements"]]) {
-    put(`${folder}/ignore.json`, { outcome: "ignored" });
-    const old = put(`${folder}/z-old-result.json`, { outcome: "obsolete", reason: "obsolete" });
-    utimesSync(old, 10, 10);
-    const latest = put(`${folder}/a-latest-result.json`, {
-      outcome: "rejected", ...(gallery ? { preview: `${folder}/gallery.html`, reason: "stop-reason" } : {}),
-    });
-    utimesSync(latest, 20, 20);
-  }
-  const status = describePilotStatus(db, directory);
-  for (const [folder, label] of histories) {
-    expect(status).toContain(`${label} : rejected`);
-    expect(status).toContain(`${folder}/a-latest-result.json`);
-    if (gallery) expect(status).toContain(`${folder}/gallery.html`);
-  }
-  expect(status).toContain("Nombre inconnu d’ images contrôlées");
-  expect(status).not.toContain("obsolete");
-  expect(status).not.toContain("z-old-result");
-  if (gallery) expect(status).toContain("stop-reason");
-});
+it.each([false, true])(
+  "chooses newest results across every historical phase, optional galleries=%s",
+  (gallery) => {
+    start();
+    for (const [folder] of [...histories, ["inspections"], ["refinements"]]) {
+      put(`${folder}/ignore.json`, { outcome: "ignored" });
+      const old = put(`${folder}/z-old-result.json`, { outcome: "obsolete", reason: "obsolete" });
+      utimesSync(old, 10, 10);
+      const latest = put(`${folder}/a-latest-result.json`, {
+        outcome: "rejected",
+        ...(gallery ? { preview: `${folder}/gallery.html`, reason: "stop-reason" } : {}),
+      });
+      utimesSync(latest, 20, 20);
+    }
+    const status = describePilotStatus(db, directory);
+    for (const [folder, label] of histories) {
+      expect(status).toContain(`${label} : rejected`);
+      expect(status).toContain(`${folder}/a-latest-result.json`);
+      if (gallery) expect(status).toContain(`${folder}/gallery.html`);
+    }
+    expect(status).toContain("Nombre inconnu d’ images contrôlées");
+    expect(status).not.toContain("obsolete");
+    expect(status).not.toContain("z-old-result");
+    if (gallery) expect(status).toContain("stop-reason");
+  },
+);
 it("empty history folders do not masquerade as completed phases", () => {
   start();
-  for (const [folder] of [...histories, ["inspections"], ["refinements"]]) put(`${folder}/notes.json`);
+  for (const [folder] of [...histories, ["inspections"], ["refinements"]])
+    put(`${folder}/notes.json`);
   expect(describePilotStatus(db, directory)).not.toContain("Dernier bilan");
 });
 it.each([
@@ -114,7 +133,8 @@ it.each([
   ["growth-adolescent-clarification", "Demande clarifiée engagée"],
   ["cast-completion", "Passe des cinq autres lignées engagée"],
 ])("keeps the unfinished %s marker authoritative", (phase, message) => {
-  start(); put(`${phase}-started.json`);
+  start();
+  put(`${phase}-started.json`);
   expect(describePilotStatus(db, directory)).toContain(message);
 });
 it.each([
@@ -125,10 +145,12 @@ it.each([
   ["growth-adolescent-clarification", "Première demande d’ado refusée"],
   ["cast-completion-plan", "Les trois âges de Vrillou sont validés"],
 ])("describes the recorded next step %s without performing it", (phase, message) => {
-  start(); put(`${phase}.json`);
+  start();
+  put(`${phase}.json`);
   expect(describePilotStatus(db, directory)).toContain(message);
 });
 it("ignores artistic approval of a different scope", () => {
-  start(); put("validated-cast-approval.json", { visualApproved: true, scope: "different" });
+  start();
+  put("validated-cast-approval.json", { visualApproved: true, scope: "different" });
   expect(describePilotStatus(db, directory)).not.toContain("Accord artistique enregistré");
 });

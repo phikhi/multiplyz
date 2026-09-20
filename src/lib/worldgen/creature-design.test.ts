@@ -206,8 +206,13 @@ it("rejects unknown habitats and invalid planner credentials before any HTTP cal
   const input = { index: 6, theme: "unknown", history: [], sheets: [] };
   expect(() => creatureDesignRequest(input)).toThrow("Milieu non défini");
   const fetchImpl = vi.fn();
-  for (const [apiKey, model] of [["", "valid"], ["key", "../unsafe"]])
-    expect(() => createCreaturePlanner({ apiKey, model, fetchImpl })).toThrow("Modèle de conception invalide");
+  for (const [apiKey, model] of [
+    ["", "valid"],
+    ["key", "../unsafe"],
+  ])
+    expect(() => createCreaturePlanner({ apiKey, model, fetchImpl })).toThrow(
+      "Modèle de conception invalide",
+    );
   expect(fetchImpl).not.toHaveBeenCalled();
 });
 it.each([
@@ -216,18 +221,26 @@ it.each([
   { status: 200, payload: { promptFeedback: { blockReason: "SAFETY" } } },
   { status: 200, payload: { candidates: [{ finishReason: "STOP" }] } },
   { status: 200, payload: { candidates: [{ finishReason: "STOP", content: { parts: [{}] } }] } },
-])("rejects unavailable or incomplete planner response %# without returning a plan", async ({ status, payload }) => {
-  const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload), { status }));
-  const planner = createCreaturePlanner({ apiKey: "fixture", model: "test-model", fetchImpl });
-  await expect(planner({ index: 6, theme: "magic", history: [], sheets: [] })).rejects.toThrow();
-  expect(fetchImpl).toHaveBeenCalledOnce();
-});
+])(
+  "rejects unavailable or incomplete planner response %# without returning a plan",
+  async ({ status, payload }) => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify(payload), { status }));
+    const planner = createCreaturePlanner({ apiKey: "fixture", model: "test-model", fetchImpl });
+    await expect(planner({ index: 6, theme: "magic", history: [], sheets: [] })).rejects.toThrow();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  },
+);
 it("records non-Error planner failures and preserves the request marker to prevent automatic retries", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "teddy-nonerror-planner-")); directories.push(directory);
-  const planner = vi.fn(async () => { throw "interrupted"; });
+  const directory = mkdtempSync(join(tmpdir(), "teddy-nonerror-planner-"));
+  directories.push(directory);
+  const planner = vi.fn(async () => {
+    throw "interrupted";
+  });
   const input = { index: 6, theme: "magic", history: [], sheets: [] };
   await expect(savedCreatureDesign(directory, input, planner)).rejects.toBe("interrupted");
-  expect(JSON.parse(readFileSync(join(directory, "world-6-failed.json"), "utf8")).reason).toBe("Conception interrompue.");
+  expect(JSON.parse(readFileSync(join(directory, "world-6-failed.json"), "utf8")).reason).toBe(
+    "Conception interrompue.",
+  );
   await expect(savedCreatureDesign(directory, input, planner)).rejects.toThrow("déjà demandée");
   expect(planner).toHaveBeenCalledOnce();
 });

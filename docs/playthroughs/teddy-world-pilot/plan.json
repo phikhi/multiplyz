@@ -7,11 +7,7 @@
   "creatures": 6,
   "images": 21,
   "maxVisionCalls": 21,
-  "stages": [
-    "bébé",
-    "adolescent",
-    "adulte"
-  ],
+  "stages": ["bébé", "adolescent", "adulte"],
   "imageModel": "gemini-2.5-flash-image",
   "qaModel": "gemini-2.5-flash",
   "imageReservationEur": 0.1,

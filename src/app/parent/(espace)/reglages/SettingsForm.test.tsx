@@ -410,7 +410,18 @@ describe("SettingsForm — contraste WCAG résolu (tous glyphes rendus, aucune o
 });
 
 it("explains saved time limits that exceed the day's maximum estimate", () => {
-  render(<SettingsForm settings={{ ...SETTINGS, screenTimeHardLockEnabled: true, musicEnabled: false }} nudgeOptions={NUDGE_OPTIONS} hardLockOptions={HARD_LOCK_OPTIONS} volumeOptions={VOLUME_OPTIONS} maxEstimatedMinutes={10} />);
+  render(
+    <SettingsForm
+      settings={{ ...SETTINGS, screenTimeHardLockEnabled: true, musicEnabled: false }}
+      nudgeOptions={NUDGE_OPTIONS}
+      hardLockOptions={HARD_LOCK_OPTIONS}
+      volumeOptions={VOLUME_OPTIONS}
+      maxEstimatedMinutes={10}
+    />,
+  );
   expect(screen.getAllByText(p.unreachableTime(10))).toHaveLength(2);
-  expect(screen.getByRole("switch", { name: s.sound.musicToggle })).toHaveAttribute("aria-checked", "false");
+  expect(screen.getByRole("switch", { name: s.sound.musicToggle })).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
 });

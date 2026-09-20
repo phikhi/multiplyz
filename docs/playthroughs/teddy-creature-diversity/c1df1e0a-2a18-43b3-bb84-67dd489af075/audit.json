@@ -5,87 +5,41 @@
   "repeatedNames": [
     {
       "name": "Câlin",
-      "worlds": [
-        0,
-        1
-      ]
+      "worlds": [0, 1]
     },
     {
       "name": "Pompon",
-      "worlds": [
-        0,
-        1,
-        2
-      ]
+      "worlds": [0, 1, 2]
     },
     {
       "name": "Guimauve",
-      "worlds": [
-        0,
-        1,
-        2,
-        3
-      ]
+      "worlds": [0, 1, 2, 3]
     },
     {
       "name": "Praline",
-      "worlds": [
-        0,
-        1,
-        2,
-        3,
-        4
-      ]
+      "worlds": [0, 1, 2, 3, 4]
     },
     {
       "name": "Nougat",
-      "worlds": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5
-      ]
+      "worlds": [0, 1, 2, 3, 4, 5]
     },
     {
       "name": "Pistache",
-      "worlds": [
-        2,
-        3,
-        4,
-        5
-      ]
+      "worlds": [2, 3, 4, 5]
     },
     {
       "name": "Coquillette",
-      "worlds": [
-        2,
-        3,
-        4,
-        5
-      ]
+      "worlds": [2, 3, 4, 5]
     },
     {
       "name": "Myrtille",
-      "worlds": [
-        3,
-        4,
-        5
-      ]
+      "worlds": [3, 4, 5]
     }
   ],
   "comparisonCreatures": 47,
   "comparisonAges": 141,
   "comparisonSheets": 12,
-  "proposedNames": [
-    "Vrillou",
-    "Samarine",
-    "Nacélie",
-    "Rosélice",
-    "Spirélis",
-    "Arbélune"
-  ],
+  "proposedNames": ["Vrillou", "Samarine", "Nacélie", "Rosélice", "Spirélis", "Arbélune"],
   "namesAvailable": true,
   "newImagesGenerated": 0,
   "apiCalls": 0,

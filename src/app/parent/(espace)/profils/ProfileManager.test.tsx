@@ -314,8 +314,10 @@ describe("ProfileManager — focus à l'ouverture des panneaux (a11y clavier/SR)
 it("refuses mismatching child PIN confirmation without sending a reset", () => {
   render(<ProfileManager profiles={PROFILES} />);
   fireEvent.click(card("Zoé").getByRole("button", { name: m.resetPin.action }));
-  pressDigits("3333"); fireEvent.click(screen.getByRole("button", { name: p.next }));
-  pressDigits("3334"); fireEvent.click(screen.getByRole("button", { name: p.savePin }));
+  pressDigits("3333");
+  fireEvent.click(screen.getByRole("button", { name: p.next }));
+  pressDigits("3334");
+  fireEvent.click(screen.getByRole("button", { name: p.savePin }));
   expect(screen.getByRole("alert")).toHaveTextContent(p.mismatch);
   expect(resetMock).not.toHaveBeenCalled();
 });

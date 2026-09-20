@@ -7,7 +7,12 @@ import {
   resetChildPin,
   ProfileManagementError,
 } from "@/lib/parent/profiles";
-import { createChildProfileAction, deleteProfileAction, renameProfileAction, resetChildPinAction } from "./actions";
+import {
+  createChildProfileAction,
+  deleteProfileAction,
+  renameProfileAction,
+  resetChildPinAction,
+} from "./actions";
 
 // Adaptateurs minces : on pilote la garde (session parent) + la couche métier (mockée), et on
 // vérifie le mapping vers un résultat générique. Le vrai `db` n'est jamais touché (getDb mocké).

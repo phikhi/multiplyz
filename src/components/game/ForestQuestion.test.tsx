@@ -5,8 +5,19 @@ import { forest } from "@/strings/forest";
 
 const onAnswer = vi.fn();
 const props: ForestQuestionProps = {
-  question: { factKey: "comp10_3", skill: "comp10", operands: [3], format: "qcm", choices: [7, 6, 5, 3], isReask: false },
-  draftKey: "test-question", paused: false, disabled: false, retrying: false, onAnswer,
+  question: {
+    factKey: "comp10_3",
+    skill: "comp10",
+    operands: [3],
+    format: "qcm",
+    choices: [7, 6, 5, 3],
+    isReask: false,
+  },
+  draftKey: "test-question",
+  paused: false,
+  disabled: false,
+  retrying: false,
+  onAnswer,
 };
 let now = 0;
 beforeEach(() => {
@@ -17,7 +28,10 @@ beforeEach(() => {
   vi.spyOn(performance, "now").mockImplementation(() => now);
   vi.spyOn(document, "hidden", "get").mockReturnValue(false);
 });
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 it("answers choices by click and keyboard, and requests help without an invented answer", () => {
   render(<ForestQuestion {...props} />);
@@ -57,7 +71,9 @@ it("does not invent absent QCM choices", () => {
 });
 it("restores and edits a numeric draft, bounds its length, clears it and submits zero", () => {
   localStorage.setItem(props.draftKey, JSON.stringify({ digits: "12", elapsed: 350 }));
-  const view = render(<ForestQuestion {...props} retrying question={{ ...props.question, format: "pave" }} />);
+  const view = render(
+    <ForestQuestion {...props} retrying question={{ ...props.question, format: "pave" }} />,
+  );
   const input = screen.getByRole("textbox", { name: forest.answerLabel });
   expect(input).toHaveFocus();
   expect(input).toHaveValue("12");
@@ -75,7 +91,9 @@ it("restores and edits a numeric draft, bounds its length, clears it and submits
   fireEvent.submit(view.container.querySelector("form")!);
   expect(onAnswer).toHaveBeenLastCalledWith(0, 400);
   expect(JSON.parse(localStorage.getItem(props.draftKey)!)).toEqual({ digits: "0", elapsed: 350 });
-  view.rerender(<ForestQuestion {...props} paused question={{ ...props.question, format: "pave" }} />);
+  view.rerender(
+    <ForestQuestion {...props} paused question={{ ...props.question, format: "pave" }} />,
+  );
   fireEvent.submit(view.container.querySelector("form")!);
   expect(onAnswer).toHaveBeenCalledTimes(1);
 });
@@ -110,7 +128,9 @@ it.each([-100, 90_000_000])("bounds persisted response time %s", (elapsed) => {
 });
 it("keeps answering when local storage is malformed or unavailable", () => {
   localStorage.setItem(props.draftKey, "bad-json");
-  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("denied");
+  });
   render(<ForestQuestion {...props} question={{ ...props.question, format: "pave" }} />);
   fireEvent.click(screen.getByRole("button", { name: "7" }));
   fireEvent.click(screen.getByRole("button", { name: forest.submit }));

@@ -123,7 +123,10 @@ it("refreshes the route if a diagnostic became necessary and respects a saved re
   load.mockResolvedValueOnce({ ok: false, error: "DIAGNOSTIC" });
   const hook = renderHook(() => useAdventure(7));
   await waitFor(() => expect(router.refresh).toHaveBeenCalledOnce());
-  load.mockResolvedValueOnce({ ok: true, adventure: { ...state, phase: "closed", restReason: "suggested" } });
+  load.mockResolvedValueOnce({
+    ok: true,
+    adventure: { ...state, phase: "closed", restReason: "suggested" },
+  });
   await act(async () => hook.result.current.retry());
   expect(router.replace).toHaveBeenCalledWith("/repos");
 });
@@ -132,32 +135,54 @@ it("retains network errors from initial load and prevents concurrent reloads", a
   const hook = renderHook(() => useAdventure(7));
   await waitFor(() => expect(hook.result.current.error).toBe("NETWORK"));
   let finish!: (value: Awaited<ReturnType<typeof resumeAdventureAction>>) => void;
-  load.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
-  act(() => { void hook.result.current.retry(); void hook.result.current.retry(); });
+  load.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  act(() => {
+    void hook.result.current.retry();
+    void hook.result.current.retry();
+  });
   expect(load).toHaveBeenCalledTimes(2);
   await act(async () => finish({ ok: true, adventure: state }));
   expect(hook.result.current.error).toBeNull();
 });
 it("does not load a hook unmounted before its initial microtask", async () => {
-  const hook = renderHook(() => useAdventure(7)); hook.unmount();
-  await act(async () => {}); expect(load).not.toHaveBeenCalled();
-});
-it.each(["read", "write", "remove"])("signals storage %s failure while keeping the server checkpoint authoritative", async (operation) => {
-  if (operation === "read") localStorage.setItem("teddy:pending:7", "bad-json");
   const hook = renderHook(() => useAdventure(7));
-  await waitFor(() => expect(hook.result.current.adventure).toEqual(state));
-  if (operation === "write") vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("denied"); });
-  if (operation === "remove") vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new Error("denied"); });
-  send.mockResolvedValue({ ok: true, adventure: { ...state, revision: 9 } });
-  act(() => hook.result.current.dispatch("close"));
-  await waitFor(() => expect(hook.result.current.adventure?.revision).toBe(9));
-  expect(hook.result.current.storageWarning).toBe(true);
+  hook.unmount();
+  await act(async () => {});
+  expect(load).not.toHaveBeenCalled();
 });
+it.each(["read", "write", "remove"])(
+  "signals storage %s failure while keeping the server checkpoint authoritative",
+  async (operation) => {
+    if (operation === "read") localStorage.setItem("teddy:pending:7", "bad-json");
+    const hook = renderHook(() => useAdventure(7));
+    await waitFor(() => expect(hook.result.current.adventure).toEqual(state));
+    if (operation === "write")
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("denied");
+      });
+    if (operation === "remove")
+      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+        throw new Error("denied");
+      });
+    send.mockResolvedValue({ ok: true, adventure: { ...state, revision: 9 } });
+    act(() => hook.result.current.dispatch("close"));
+    await waitFor(() => expect(hook.result.current.adventure?.revision).toBe(9));
+    expect(hook.result.current.storageWarning).toBe(true);
+  },
+);
 it("does not send the same pending command twice on simultaneous online events", async () => {
   const hook = renderHook(() => useAdventure(7));
   await waitFor(() => expect(hook.result.current.adventure).toEqual(state));
   let finish!: (value: Awaited<ReturnType<typeof adventureCommandAction>>) => void;
-  send.mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+  send.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   act(() => {
     hook.result.current.dispatch("pause");
     window.dispatchEvent(new Event("online"));
@@ -167,15 +192,21 @@ it("does not send the same pending command twice on simultaneous online events",
   await act(async () => finish({ ok: true, adventure: { ...state, paused: true } }));
 });
 
-it.each([false, true])("explicit refresh discards a stale local intention and reloads the server, removal denied=%s", async (denied) => {
-  send.mockResolvedValueOnce({ ok: false, error: "STALE" });
-  const hook = renderHook(() => useAdventure(7));
-  await waitFor(() => expect(hook.result.current.adventure).toEqual(state));
-  act(() => hook.result.current.dispatch("close"));
-  await waitFor(() => expect(hook.result.current.error).toBe("STALE"));
-  if (denied) vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => { throw new Error("denied"); });
-  await act(async () => hook.result.current.refresh());
-  expect(load).toHaveBeenCalledTimes(2);
-  expect(hook.result.current.error).toBeNull();
-  expect(hook.result.current.storageWarning).toBe(denied);
-});
+it.each([false, true])(
+  "explicit refresh discards a stale local intention and reloads the server, removal denied=%s",
+  async (denied) => {
+    send.mockResolvedValueOnce({ ok: false, error: "STALE" });
+    const hook = renderHook(() => useAdventure(7));
+    await waitFor(() => expect(hook.result.current.adventure).toEqual(state));
+    act(() => hook.result.current.dispatch("close"));
+    await waitFor(() => expect(hook.result.current.error).toBe("STALE"));
+    if (denied)
+      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+        throw new Error("denied");
+      });
+    await act(async () => hook.result.current.refresh());
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(hook.result.current.error).toBeNull();
+    expect(hook.result.current.storageWarning).toBe(denied);
+  },
+);

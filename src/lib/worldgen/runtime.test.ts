@@ -811,7 +811,12 @@ describe("storage and fail-closed boundaries", () => {
 
 it("returns 404 for a syntactically valid immutable reference whose file is missing", async () => {
   vi.spyOn(process, "cwd").mockReturnValue(cwd);
-  const result = await GET(new Request("http://unit"), { params: Promise.resolve({ world: "7", file: "runtime-00000000-0000-0000-0000-000000000000-creature-0.png" }) });
+  const result = await GET(new Request("http://unit"), {
+    params: Promise.resolve({
+      world: "7",
+      file: "runtime-00000000-0000-0000-0000-000000000000-creature-0.png",
+    }),
+  });
   expect(result.status).toBe(404);
   expect(await result.text()).toBe("");
 });
