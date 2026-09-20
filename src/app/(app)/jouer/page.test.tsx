@@ -10,6 +10,17 @@ import PlayPage from "./page";
 // (story 8.4, #257). `getDb`/`readHouseholdSettings` mockés (patron `reglages/page.test.tsx`),
 // `pickSoundSettings` reste RÉEL (importé transitivement par `page.tsx`) pour prouver le CÂBLAGE
 // serveur→client, pas seulement l'appel de la fonction.
+vi.mock("@/lib/engine/current-profile", () => ({ getCurrentChildProfileId: vi.fn(async (): Promise<number | null> => 7) }));
+vi.mock("@/lib/game/adventure", () => ({ loadAdventure: () => null }));
+vi.mock("@/lib/engine/service", () => ({
+  needsDiagnostic: () => false,
+  isRecalibrationRequested: () => false,
+}));
+vi.mock("@/components/game/AdventureScreen", () => ({
+  AdventureScreen: (props: { sound: SoundSettings }) => (
+    <div data-testid="play-screen-stub" data-sound={JSON.stringify(props.sound)} />
+  ),
+}));
 const FAKE_DB = { __fakeDb: true };
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => FAKE_DB) }));
 vi.mock("@/lib/parent/settings", async (importActual) => {
@@ -37,25 +48,31 @@ const SETTINGS: HouseholdSettings = {
 };
 
 describe("PlayPage — route /jouer (garde par le layout du groupe (app))", () => {
-  it("monte PlayScreen (écran de jeu nu, #64)", () => {
+  it("monte la forêt intégrée pour le profil existant", async () => {
     readMock.mockReturnValue(SETTINGS);
-    render(<PlayPage />);
+    render(await PlayPage());
     expect(screen.getByTestId("play-screen-stub")).toBeInTheDocument();
   });
 
-  it("lit les réglages via getDb() (source de vérité serveur, story 8.3)", () => {
+  it("lit les réglages via getDb() (source de vérité serveur, story 8.3)", async () => {
     readMock.mockReturnValue(SETTINGS);
-    render(<PlayPage />);
+    render(await PlayPage());
     expect(getDbMock).toHaveBeenCalledTimes(1);
     expect(readMock).toHaveBeenCalledWith(FAKE_DB);
   });
 
-  it("projette UNIQUEMENT les 3 champs son vers PlayScreen (pas le thème/temps d'écran) — câblage story 8.4 #257", () => {
+  it("projette UNIQUEMENT les 3 champs son vers PlayScreen (pas le thème/temps d'écran) — câblage story 8.4 #257", async () => {
     readMock.mockReturnValue(SETTINGS);
-    render(<PlayPage />);
+    render(await PlayPage());
     const sound = JSON.parse(
       screen.getByTestId("play-screen-stub").getAttribute("data-sound") ?? "null",
     );
     expect(sound).toEqual({ soundEnabled: false, musicEnabled: true, volume: 33 });
   });
+});
+
+import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
+it("does not mount an adventure without an authenticated child", async () => {
+  vi.mocked(getCurrentChildProfileId).mockResolvedValueOnce(null);
+  expect(await PlayPage()).toBeNull();
 });

@@ -1,0 +1,19 @@
+{
+  "separateAuthenticatedDevices": true,
+  "pauseReopened": true,
+  "resumeResponseLostAndRetried": true,
+  "sameQuestionsAndAnswers": true,
+  "unauthenticatedReturnRefused": true,
+  "before": {
+    "attempts": 2,
+    "progress": 1,
+    "ledger": 1
+  },
+  "after": {
+    "attempts": 2,
+    "progress": 1,
+    "ledger": 1
+  },
+  "leftPaused": true,
+  "pageErrors": []
+}

@@ -1,0 +1,70 @@
+
+ RUN  v3.2.6 /Users/philippekhill/Sites/TEDDy/app
+
+ ❯ src/lib/game/evolution.test.ts (30 tests | 3 failed | 27 skipped) 37ms
+   ↓ cosmetic evolution, real SQLite > shows configured price, persists two distinct stages and preserves identity and every other game table
+   ↓ cosmetic evolution, real SQLite > keeps the same transition after concurrent requests, lost responses, acknowledgement and later adulthood
+   ↓ cosmetic evolution, real SQLite > does not reset a concurrent nickname, duplicate count, acquisition date or catalogue
+   ↓ cosmetic evolution, real SQLite > refuses insufficient funds (0) before all mutations
+   ↓ cosmetic evolution, real SQLite > refuses insufficient funds (39) before all mutations
+   ↓ cosmetic evolution, real SQLite > uses changed configured prices at runtime and requires new consent
+   ↓ cosmetic evolution, real SQLite > refuses stale or tampered consent (2)
+   ↓ cosmetic evolution, real SQLite > refuses stale or tampered consent (1)
+   ↓ cosmetic evolution, real SQLite > refuses stale or tampered consent (1)
+   ↓ cosmetic evolution, real SQLite > refuses invalid stage 0
+   ↓ cosmetic evolution, real SQLite > refuses invalid stage 3
+   ↓ cosmetic evolution, real SQLite > refuses invalid stage 1.5
+   ↓ cosmetic evolution, real SQLite > isolates possessions, receipts and acknowledgements between profiles
+   ↓ cosmetic evolution, real SQLite > accepts generated-world companions and acquired legendaries without touching their world
+   × cosmetic evolution, real SQLite > rolls back a failure in ledger after the wallet debit 22ms
+     → expected { coins: 83, shards: 100 } to deeply equal { coins: 83, shards: 140 }
+   × cosmetic evolution, real SQLite > rolls back a failure in collection after the wallet debit 8ms
+     → expected { coins: 83, shards: 100 } to deeply equal { coins: 83, shards: 140 }
+   × cosmetic evolution, real SQLite > rolls back a failure in evolution_receipts after the wallet debit 7ms
+     → expected { coins: 83, shards: 100 } to deeply equal { coins: 83, shards: 140 }
+   ↓ cosmetic evolution, real SQLite > rejects missing images before spending and survives broken catalogue metadata
+   ↓ real stage art contract > does not invent stage art from null
+   ↓ real stage art contract > does not invent stage art from broken
+   ↓ real stage art contract > does not invent stage art from []
+   ↓ real stage art contract > does not invent stage art from null
+   ↓ real stage art contract > does not invent stage art from "string"
+   ↓ real stage art contract > does not invent stage art from {"3":"world/0/adult.png"}
+   ↓ real stage art contract > does not invent stage art from {"2":"https://evil/image.png"}
+   ↓ real stage art contract > does not invent stage art from {"2":"world/../image.png"}
+   ↓ real stage art contract > does not invent stage art from {"2":15}
+   ↓ real stage art contract > does not invent stage art from {"2":"socle/creature/creature_world_0_0.png"}
+   ↓ real stage art contract > honours the catalogue cap and rejects identical references across stages
+   ↓ real stage art contract > reads delivered files, refuses repeated bytes, missing files and unsafe paths
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 27 skipped (30)
+   Start at  20:55:43
+   Duration  867ms (transform 115ms, setup 98ms, collect 327ms, tests 37ms, environment 214ms, prepare 36ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/game/evolution.test.ts > cosmetic evolution, real SQLite > rolls back a failure in ledger after the wallet debit
+ FAIL  src/lib/game/evolution.test.ts > cosmetic evolution, real SQLite > rolls back a failure in collection after the wallet debit
+ FAIL  src/lib/game/evolution.test.ts > cosmetic evolution, real SQLite > rolls back a failure in evolution_receipts after the wallet debit
+AssertionError: expected { coins: 83, shards: 100 } to deeply equal { coins: 83, shards: 140 }
+
+- Expected
++ Received
+
+  {
+    "coins": 83,
+-   "shards": 140,
++   "shards": 100,
+  }
+
+ ❯ src/lib/game/evolution.test.ts:251:41
+    249|       );
+    250|       expect(() => grow()).toThrow("growth failure");
+    251|       expect(loadWallet(db, profileId)).toEqual({ coins: 83, shards: 1…
+       |                                         ^
+    252|       expect(db.select().from(collection).get()?.stage).toBe(1);
+    253|       expect(db.select().from(ledger).all()).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+

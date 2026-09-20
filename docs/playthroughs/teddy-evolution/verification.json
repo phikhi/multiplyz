@@ -1,0 +1,127 @@
+{
+  "resumedAfterFirstGrowth": {
+    "coins": 0,
+    "shards": 105,
+    "eggs": 33,
+    "owned": {
+      "id": "2:creature:0:0",
+      "profile_id": 2,
+      "character_id": "creature:0:0",
+      "count": 1,
+      "stage": 2,
+      "nickname": null,
+      "unlocked_at": 1789063110
+    }
+  },
+  "beforeAdultEvolution": {
+    "coins": 0,
+    "shards": 105,
+    "owned": {
+      "id": "2:creature:0:0",
+      "profile_id": 2,
+      "character_id": "creature:0:0",
+      "count": 1,
+      "stage": 2,
+      "nickname": null,
+      "unlocked_at": 1789063110
+    }
+  },
+  "after": {
+    "coins": 0,
+    "shards": 5,
+    "owned": {
+      "id": "2:creature:0:0",
+      "profile_id": 2,
+      "character_id": "creature:0:0",
+      "count": 1,
+      "stage": 3,
+      "nickname": null,
+      "unlocked_at": 1789063110
+    }
+  },
+  "totalNewAttempts": 99,
+  "totalNewLevels": 30,
+  "additionalEggs": 20,
+  "evolutionLedger": [
+    {
+      "amount": 40,
+      "reason": "evolution",
+      "currency": "shards",
+      "ref_id": "[2,\"creature:0:0\",1]"
+    },
+    {
+      "amount": 100,
+      "reason": "evolution",
+      "currency": "shards",
+      "ref_id": "[2,\"creature:0:0\",2]"
+    }
+  ],
+  "teenArt": "/generated/socle/creature/creature_world_0_0-ado.png",
+  "adultArt": "/generated/socle/creature/creature_world_0_0-adulte.png",
+  "geometry": [
+    {
+      "name": "adult-preview-1280",
+      "box": {
+        "x": 360.203125,
+        "y": 493.8125,
+        "width": 384.296875,
+        "height": 384.296875
+      }
+    },
+    {
+      "name": "adult-preview-1024",
+      "box": {
+        "x": 266.328125,
+        "y": 511.78125,
+        "width": 333.5,
+        "height": 333.5
+      }
+    },
+    {
+      "name": "adult-preview-390",
+      "box": {
+        "x": 166.390625,
+        "y": 452.375,
+        "width": 207.59375,
+        "height": 207.59375
+      }
+    },
+    {
+      "name": "adult-preview-320",
+      "box": {
+        "x": 138.390625,
+        "y": 605.96875,
+        "width": 165.609375,
+        "height": 165.609375
+      }
+    },
+    {
+      "name": "adult-1280",
+      "box": {
+        "x": 360.203125,
+        "y": 413.609375,
+        "width": 384.296875,
+        "height": 384.296875
+      }
+    },
+    {
+      "name": "adult-390",
+      "box": {
+        "x": 166.390625,
+        "y": 410.78125,
+        "width": 207.59375,
+        "height": 207.59375
+      }
+    },
+    {
+      "name": "adult-320",
+      "box": {
+        "x": 138.390625,
+        "y": 522.78125,
+        "width": 165.609375,
+        "height": 165.609375
+      }
+    }
+  ],
+  "pageErrors": []
+}

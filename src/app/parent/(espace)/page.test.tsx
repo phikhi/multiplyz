@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { getCurrentParentSession } from "@/lib/auth/current-session";
 import { listManagedProfiles } from "@/lib/parent/profiles";
 import { loadParentStats } from "@/lib/parent/stats-source";
@@ -15,7 +15,12 @@ import ParentDashboardPage from "./page";
 // On stubbe TOUTES les dépendances serveur pour ne prouver ICI que le CÂBLAGE (qui appelle quoi,
 // avec quels arguments, et le repli `SocleUnavailableError`).
 const FAKE_DB = { __fakeDb: true };
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  redirect: vi.fn(),
+  notFound: vi.fn(() => {
+    throw new Error("NOT_FOUND");
+  }),
+}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => FAKE_DB) }));
 vi.mock("@/config/server-config", () => ({
   getEngineConfig: vi.fn(() => ({ engine: true })),
@@ -28,7 +33,10 @@ vi.mock("@/config/server-config", () => ({
 }));
 vi.mock("@/lib/auth/current-session", () => ({ getCurrentParentSession: vi.fn() }));
 vi.mock("@/lib/parent/profiles", () => ({ listManagedProfiles: vi.fn() }));
-vi.mock("@/lib/parent/stats-source", () => ({ loadParentStats: vi.fn() }));
+vi.mock("@/lib/parent/stats-source", () => ({
+  loadParentStats: vi.fn(),
+  loadParentOverview: vi.fn(),
+}));
 vi.mock("@/lib/parent/progression", () => ({ loadProgressionSummary: vi.fn() }));
 vi.mock("@/lib/parent/world-approval", () => ({ countPendingWorlds: vi.fn() }));
 vi.mock("./ParentDashboard", () => ({
@@ -71,7 +79,7 @@ describe("ParentDashboardPage — câblage serveur (story 7.7)", () => {
   it("sans session parent → redirige (défense en profondeur, même garde que le layout)", async () => {
     sessionMock.mockResolvedValue(null);
     await ParentDashboardPage();
-    expect(redirectMock).toHaveBeenCalledWith("/");
+    expect(redirectMock).toHaveBeenCalledWith("/parent/connexion");
     expect(statsMock).not.toHaveBeenCalled();
   });
 
@@ -101,11 +109,11 @@ describe("ParentDashboardPage — câblage serveur (story 7.7)", () => {
     expect(screen.getByTestId("dashboard")).toHaveAttribute("data-name", "Léa");
   });
 
-  it("garde de forme : profil de session absent de `listManagedProfiles` → repli chaîne vide (jamais un plantage)", async () => {
+  it("refuse un profil absent du foyer avant toute lecture de statistiques", async () => {
     profilesMock.mockReturnValue([{ id: 8, name: "Tom", avatar: "cat", isOwner: false }]);
-    const ui = await ParentDashboardPage();
-    render(ui);
-    expect(screen.getByTestId("dashboard")).toHaveAttribute("data-name", "");
+    await expect(ParentDashboardPage()).rejects.toThrow("NOT_FOUND");
+    expect(notFound).toHaveBeenCalledOnce();
+    expect(statsMock).not.toHaveBeenCalled();
   });
 
   it("transmet les bornes ⚙️ de la fenêtre saine au composant de présentation", async () => {

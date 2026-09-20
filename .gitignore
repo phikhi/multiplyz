@@ -4,6 +4,7 @@ node_modules/
 
 # Next.js
 .next/
+.next-daily-check/
 out/
 next-env.d.ts
 *.tsbuildinfo
@@ -55,3 +56,7 @@ multiplyz-ds-*.png
 
 # Outils owner-run non committés (génération assets, montage sign-off)
 scripts/*.local.ts
+
+.next-parent-check/
+
+.next-worlds-check/

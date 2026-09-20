@@ -1,0 +1,25 @@
+{
+  "preparedAt": "2026-09-11T06:54:21.171Z",
+  "source": "/Users/philippekhill/Sites/TEDDy/app/data/multiplyz.sqlite",
+  "snapshot": "/Users/philippekhill/Sites/TEDDy/app/data/teddy-world-pilot/multiplyz.sqlite",
+  "target": 6,
+  "theme": "magic",
+  "creatures": 6,
+  "images": 21,
+  "maxVisionCalls": 21,
+  "stages": [
+    "bébé",
+    "adolescent",
+    "adulte"
+  ],
+  "imageModel": "gemini-2.5-flash-image",
+  "qaModel": "gemini-2.5-flash",
+  "imageReservationEur": 0.1,
+  "qaReservationEur": 0.05,
+  "plannedReservationsEur": 3.15,
+  "reservationCeilingEur": 5,
+  "automaticRetries": 0,
+  "parentApprovalRequired": true,
+  "masterSha256": "6a4bca962e9bf2dadcec99a1d484cac4f88a51c5d3c59ccc226405f87b907264",
+  "status": "prepared-not-generated"
+}

@@ -9,6 +9,45 @@
    ============================================================= */
 
 :root {
+  /* TEDDy: accepted forest palette, fixed reading surfaces in both household themes. */
+  --forest-bg: #173b32;
+  --forest-deep: #12372c;
+  --forest-cream: #fff7e7;
+  --forest-ink: #284d3f;
+  --forest-muted: #47634b;
+  --forest-gold: #efd28e;
+  --forest-gold-edge: #9b7841;
+  --forest-mint: #b8dfbf;
+  --forest-line: #7d9377;
+  --forest-paper: #fffef5;
+  --forest-soft: #e4ecd5;
+  --forest-dot: #4f7957;
+  --forest-added: #906b25;
+  --forest-star: #806020;
+  --forest-scrim: #09251fe8;
+  --forest-shadow: 0 18px 60px #06251d44;
+  --forest-panel-width: 420px;
+  --forest-node-size: 54px;
+  --forest-companion-size: 150px;
+  --companion-album-width: 1160px;
+  --companion-art-size: min(100%, 200px);
+  --companion-portrait-size: min(100%, 440px);
+  --companion-encounter-size: min(100%, 440px);
+  --companion-halo: radial-gradient(ellipse, #b8dfbf40, #efd28e12 50%, transparent 72%);
+  --companion-album-bg: radial-gradient(ellipse at top right, #46644488, transparent 65%);
+  --companion-silhouette-filter: brightness(0) saturate(100%) invert(77%) sepia(15%) saturate(518%) hue-rotate(64deg);
+  --forest-stage-height: 225px;
+  --forest-viewport-min: 740px;
+  --shard-card-width: 240px;
+  --egg-shell-width: min(56vw, 230px);
+  --egg-shell-radius: 52% 52% 46% 46% / 64% 64% 38% 38%;
+  --egg-shell-bg: radial-gradient(ellipse at 34% 25%, #fffef5, #fff7e7 40%, #efd28e 78%, #9b7841);
+  --egg-shell-shadow: inset -12px -15px 25px #9b784150, 0 18px 50px #09251f60;
+  --egg-nest-bg: radial-gradient(ellipse at 50% 76%, #efd28e35, #b8dfbf18 40%, transparent 65%);
+  --egg-shop-scrim: linear-gradient(90deg, #09251fdd, #09251f80 55%, #09251faa);
+  --egg-float-distance: -8px;
+  --egg-float-duration: 5s;
+
   /* ---------- COULEURS — fonds ---------- */
   --color-bg-primary:        #FAF7FF; /* fond principal (lavande crème) */
   --color-bg-secondary:      #FFFFFF; /* cartes / surfaces */
@@ -770,4 +809,67 @@
     --duration-slow:    0ms;
     --duration-slower:  0ms;
   }
+}
+
+/* TEDDy — carnet parent. Scoped aliases preserve the child scenes. */
+:root {
+  --parent-paper: #fbf5e7;
+  --parent-ground: #ebeadd;
+  --parent-ink: #243c41;
+  --parent-muted: #4e6364;
+  --parent-line: #788d86;
+  --parent-soft: #e0e8db;
+  --parent-accent: #285951;
+  --parent-accent-ink: #fbf5e7;
+  --parent-gold: #f7cd81;
+  --parent-night: #142e34;
+  --parent-mint: #bce8cc;
+  --parent-width: 1180px;
+  --parent-stat-size: clamp(1.75rem, 3vw, 2.5rem);
+  --parent-title-size: clamp(2rem, 4vw, 3.25rem);
+  --parent-preview-height: 240px;
+}
+:root[data-theme="dark"] {
+  --parent-paper: #203940;
+  --parent-ground: #12292e;
+  --parent-ink: #fbf5e7;
+  --parent-muted: #cad7cd;
+  --parent-line: #89a69c;
+  --parent-soft: #304c50;
+  --parent-accent: #bce8cc;
+  --parent-accent-ink: #142e34;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --parent-paper: #203940;
+    --parent-ground: #12292e;
+    --parent-ink: #fbf5e7;
+    --parent-muted: #cad7cd;
+    --parent-line: #89a69c;
+    --parent-soft: #304c50;
+    --parent-accent: #bce8cc;
+    --parent-accent-ink: #142e34;
+  }
+}
+.parent-shell, .parent-recovery {
+  --color-bg-primary: var(--parent-ground);
+  --color-bg-secondary: var(--parent-paper);
+  --color-bg-tertiary: var(--parent-soft);
+  --color-text-primary: var(--parent-ink);
+  --color-text-secondary: var(--parent-muted);
+  --color-text-inverse: var(--parent-accent-ink);
+  --color-border-primary: var(--parent-line);
+  --color-border-focus: var(--parent-accent);
+  --color-accent-primary: var(--parent-accent);
+  --card-bg: var(--parent-paper);
+  --keypad-key-bg: var(--parent-soft);
+  --keypad-key-text: var(--parent-ink);
+  --shadow-focus: 0 0 0 3px var(--parent-accent);
+}
+
+/* World scenery keeps a fixed, readable HUD over every environment. */
+:root {
+  --world-scene-shade: #14212e80;
+  --world-scene-floor-shade: #14212eaa;
+  --world-preview-bar: #142e34;
 }

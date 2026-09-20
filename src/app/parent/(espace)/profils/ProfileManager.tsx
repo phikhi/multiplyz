@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AddProfileForm } from "./AddProfileForm";
+import { parent as copy } from "@/strings/parent";
 import { strings } from "@/strings";
 import { AVATARS } from "@/config/avatars";
 import { NAME_MAX_LENGTH, PIN_LENGTH } from "@/lib/auth/validation";
@@ -42,24 +44,6 @@ function fill(template: string, token: string, value: string): string {
 function avatarEmoji(id: string): string {
   return AVATARS.find((option) => option.id === id)?.emoji ?? NONE;
 }
-
-const mainStyle = {
-  minHeight: "100dvh",
-  padding: "var(--space-6)",
-} as const;
-
-const cardStyle = {
-  maxWidth: "var(--max-width-play)",
-  width: "100%",
-  margin: "0 auto",
-  padding: "var(--space-6)",
-  backgroundColor: "var(--card-bg)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--card-shadow)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "var(--space-5)",
-} as const;
 
 // Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran).
 // `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1) : le focus est programmatique, hors
@@ -278,6 +262,8 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
   const [active, setActive] = useState<{ id: number; mode: Mode } | null>(null);
   const [renameValue, setRenameValue] = useState(NONE);
   const [pinValue, setPinValue] = useState(NONE);
+  const [pinConfirm, setPinConfirm] = useState(NONE);
+  const [confirmingPin, setConfirmingPin] = useState(false);
   const [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: FeedbackKind; text: string } | null>(null);
 
@@ -286,6 +272,8 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
   const reset = () => {
     setActive(null);
     setPinValue(NONE);
+    setPinConfirm(NONE);
+    setConfirmingPin(false);
     setRenameValue(NONE);
   };
 
@@ -297,6 +285,8 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
   const openResetPin = (p: ManagedProfile) => {
     setFeedback(null);
     setPinValue(NONE);
+    setPinConfirm(NONE);
+    setConfirmingPin(false);
     setActive({ id: p.id, mode: "resetPin" });
   };
   const openDelete = (p: ManagedProfile) => {
@@ -334,6 +324,14 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
   };
 
   const submitResetPin = async (id: number) => {
+    if (!confirmingPin) {
+      setConfirmingPin(true);
+      return;
+    }
+    if (pinValue !== pinConfirm) {
+      setFeedback({ kind: "error", text: copy.mismatch });
+      return;
+    }
     setPending(true);
     setFeedback(null);
     try {
@@ -362,11 +360,11 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
   };
 
   const canRename = renameValue.trim().length > 0;
-  const canSubmitPin = pinValue.length === PIN_LENGTH;
+  const canSubmitPin = (confirmingPin ? pinConfirm : pinValue).length === PIN_LENGTH;
 
   return (
-    <main className="bg-bg text-text" style={mainStyle}>
-      <div style={cardStyle}>
+    <main className="parent-page parent-profils">
+      <div className="parent-form">
         <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
           {m.title}
         </h1>
@@ -420,6 +418,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                   <button
                     type="button"
                     className="mz-focusable"
+                    disabled={pending}
                     onClick={cancel}
                     style={ghostButtonStyle}
                   >
@@ -439,12 +438,19 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
             ) : isActive(p.id, "resetPin") ? (
               <div style={panelStyle}>
                 <p style={introStyle}>{fill(m.resetPin.hint, "{prénom}", p.name)}</p>
-                <PinPad value={pinValue} onChange={setPinValue} label={m.resetPin.label} />
+                <p>{confirmingPin ? copy.confirmPin : copy.childPin}</p>
+                <PinPad
+                  value={confirmingPin ? pinConfirm : pinValue}
+                  onChange={confirmingPin ? setPinConfirm : setPinValue}
+                  label={confirmingPin ? copy.confirmPin : copy.childPin}
+                  disabled={pending}
+                />
                 <div style={panelButtonsStyle}>
                   <button
                     ref={panelAnchorRef}
                     type="button"
                     className="mz-focusable"
+                    disabled={pending}
                     onClick={cancel}
                     style={ghostButtonStyle}
                   >
@@ -457,7 +463,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     onClick={() => submitResetPin(p.id)}
                     style={!canSubmitPin || pending ? disabledButtonStyle : primaryButtonStyle}
                   >
-                    {m.resetPin.save}
+                    {confirmingPin ? copy.savePin : copy.next}
                   </button>
                 </div>
               </div>
@@ -475,6 +481,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                     ref={panelAnchorRef}
                     type="button"
                     className="mz-focusable"
+                    disabled={pending}
                     onClick={cancel}
                     style={ghostButtonStyle}
                   >
@@ -498,6 +505,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                   <button
                     type="button"
                     className="mz-focusable"
+                    disabled={pending}
                     onClick={() => openRename(p)}
                     style={ghostButtonStyle}
                   >
@@ -506,6 +514,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                   <button
                     type="button"
                     className="mz-focusable"
+                    disabled={pending}
                     onClick={() => openResetPin(p)}
                     style={ghostButtonStyle}
                   >
@@ -514,8 +523,8 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
                   <button
                     type="button"
                     className="mz-focusable"
-                    disabled={p.isOwner}
-                    aria-disabled={p.isOwner}
+                    disabled={p.isOwner || pending}
+                    aria-disabled={p.isOwner || pending}
                     onClick={() => openDelete(p)}
                     style={p.isOwner ? disabledButtonStyle : ghostButtonStyle}
                   >
@@ -528,6 +537,7 @@ export function ProfileManager({ profiles }: ProfileManagerProps) {
           </section>
         ))}
 
+        {active === null && <AddProfileForm />}
         <Link href="/parent" style={backLinkStyle} className="mz-focusable">
           {m.back}
         </Link>

@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "worldIndex": 6,
+  "theme": "magic",
+  "habitat": "Suspended botanical gardens connected by vines, rain basins, floating seeds and warm luminous pollen. Invent living inhabitants adapted to catching updrafts, tending roots, carrying pollen or collecting dew. Magic follows a specific ecological function; avoid generic dragons, unicorns, stars or cloud blobs repeated from earlier worlds.",
+  "creatures": [
+    {
+      "name": "Vrillou",
+      "story": "Vrillou rattache les petites racines quand le vent les décroche.",
+      "anatomy": "A low, wedge-headed climbing lizard with four broad leaf-shaped adhesive feet and one coiling tendril tail; soft moss green and pale bark belly.",
+      "signature": "Flattened leaf pads and a single prehensile tail with a naturally split tip.",
+      "adaptation": "The wide feet grip wet suspended roots; the tail secures the body while a foot guides a loose root.",
+      "role": "Reconnects young roots along the hanging garden's living bridges.",
+      "adolescent": "The torso becomes visibly longer than the head, the four limbs lengthen and the existing leaf pads unfold; retain the same tail and split tip.",
+      "adult": "A long flexible low body with a small relative head, arched mature shoulders and broad existing feet; the same tail forms a strong open coil. No extra limbs or horns."
+    },
+    {
+      "name": "Samarine",
+      "story": "Samarine transporte le pollen d’un jardin suspendu à l’autre.",
+      "anatomy": "A living paired maple seed with two curved sail lobes joined by one plump central seed; tiny kind face on the seed and no legs. Honey brown veins and fresh lime edges. Follow the approved baby image, whose two sails are nearly symmetrical.",
+      "signature": "A two-bladed samara silhouette with the central rounded seed and two naturally veined sails, preserving the balance visible in the approved baby.",
+      "adaptation": "Its two natural seed sails rotate in warm updrafts; shallow grooves on the seed retain pollen.",
+      "role": "Carries pollen across the gaps between floating gardens.",
+      "adolescent": "The central seed lengthens and develops a clear narrow waist; the same two folded sails become curved juvenile blades with more visible structural veins.",
+      "adult": "A long tapered central seed with a much smaller relative face area, a deep mature waist and two long rigid sickle sails; preserve the approved balance of the two sails and the exact two-lobe body plan."
+    },
+    {
+      "name": "Nacélie",
+      "story": "Nacélie garde une réserve de rosée pour les pousses les plus hautes.",
+      "anatomy": "A living split seed pod with two upright hollow ivory oval halves facing each other, one integrated face on the front half and a shared short green stem with curling rootlets underneath. Keep the vertical body layout of the approved baby.",
+      "signature": "Two facing upright seed chambers with an open vertical gap, joined to the same green stem and curling root base; no animal head or external boat.",
+      "adaptation": "The living hollow seed chambers retain dew while the shared root base anchors beneath aerial branches.",
+      "role": "Stores water beside young shoots in the highest gardens.",
+      "adolescent": "The two UPRIGHT pod halves lengthen vertically into juvenile oval chambers with deeper inner rims; the existing green stem lengthens and its same rootlets spread. The face becomes smaller relative to the chambers. Never rotate the body into horizontal boats or add roots.",
+      "adult": "Two tall elongated UPRIGHT mature chambers flank the same slender green connecting stem; deeper open interiors and the same rootlets become strong curved anchors. Retain the vertical central gap and much smaller facial area. No horizontal boats or extra limbs."
+    },
+    {
+      "name": "Rosélice",
+      "story": "Rosélice tend des fils tout fins qui recueillent les gouttes du matin.",
+      "anatomy": "A friendly slender canopy-weaving insect with an arched ochre stem-like torso, a small round head and six jointed legs ending in broad spoon-shaped pads; no wings.",
+      "signature": "A high open arch supported by six thin jointed legs with rounded spoon pads, rather than a compact beetle body.",
+      "adaptation": "The long stance spans gaps between twigs; the spoon pads guide dew-catching threads without sharp claws.",
+      "role": "Weaves fine dew nets beneath the floating flower beds.",
+      "adolescent": "The torso lengthens into a clear arch and develops a narrow waist; all six legs become longer and their existing spoon pads broaden. Keep it wingless.",
+      "adult": "A long elevated thoracic arch with a small relative head, a slim curved abdomen and six tall gracefully bent legs; preserve the same spoon pads and exact appendage count."
+    },
+    {
+      "name": "Spirélis",
+      "story": "Spirélis filtre doucement l’eau avant qu’elle ne retourne aux racines.",
+      "anatomy": "A creeping garden mollusc with a broad folded muscular skirt-like foot, a friendly integrated head with two feelers and one porous terracotta shell open in a deep U at the top. The approved foot has several rounded folds; its actual image defines the outline, not an exact three-lobe rule.",
+      "signature": "A deeply open horseshoe shell, cream body, two feelers and the broad scalloped skirt-foot shown in the approved baby. Preserve its existing shell spots and foot folds.",
+      "adaptation": "The porous shell channels mineral-rich droplets to the broad absorbing foot while it clings beneath damp root beds.",
+      "role": "Filters the gardens' returning water and distributes it along hanging roots.",
+      "adolescent": "Lengthen the low body behind its face and develop its existing scalloped foot folds into longer spreading pads. The same U-shaped shell gains taller thin side walls with the open gap retained. Do not add or remove foot lobes to fit a written count; match the baby image.",
+      "adult": "A long low mature body and wide spreading foot with the same existing folds, a much smaller relative face and two feelers. The same porous horseshoe shell develops tall open walls. Preserve shell spots, open gap and all actual foot structures from the baby and adolescent."
+    },
+    {
+      "name": "Arbélune",
+      "story": "Arbélune rapproche les îlots pour que les plus petits puissent traverser.",
+      "anatomy": "A living arboreal bridge creature: one broad hollow wooden arch carried by six thick root feet, with a gentle integrated face at the centre of the arch; warm russet bark and pale living wood, no humanoid torso.",
+      "signature": "A clear see-through bridge-shaped body above six rooted supports; neither dragon, bear nor crowned forest spirit.",
+      "adaptation": "Its flexible central wooden arch spreads weight over separate root islands while the six feet anchor without breaking young plants.",
+      "role": "The rare guardian joins distant garden islands into a temporary living crossing.",
+      "adolescent": "The initially low arch becomes a longer curved span with a clearly open centre; the six thick roots lengthen into bent supports and the face becomes smaller relative to the wooden body.",
+      "adult": "A wide tall mature wooden arch on six strong spreading root supports, with a small serene face integrated in the long span. Preserve one central opening, six supports and the same bark pattern; no crown or new branches."
+    }
+  ]
+}

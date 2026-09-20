@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { OnboardingFlow } from "./OnboardingFlow";
 import { createHouseholdAction } from "./actions";
 import { strings } from "@/strings";
+import { daily } from "@/strings/daily";
 import { AVATARS } from "@/config/avatars";
 import {
   contrastRatio,
@@ -11,6 +13,22 @@ import {
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
 
+const style = document.createElement("style");
+// jsdom ne résout pas var() dans les raccourcis background ; injecter les couleurs réelles.
+style.textContent = (
+  readFileSync("src/app/forest.css", "utf8") + readFileSync("src/app/daily.css", "utf8")
+).replace(/var\(--(forest-(?:paper|gold|ink|muted))\)/g, (_, token: string) =>
+  resolveTokenColor("light", token),
+);
+beforeAll(() => document.head.append(style));
+afterAll(() => style.remove());
+function renderFlow() {
+  return render(
+    <div className="forest daily-home">
+      <OnboardingFlow />
+    </div>,
+  );
+}
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("./actions", () => ({ createHouseholdAction: vi.fn() }));
@@ -36,7 +54,11 @@ function driveToParentReady() {
   fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
   fireEvent.click(screen.getByRole("button", { name: nav.next })); // → childPin
   pressDigits("1234");
+  fireEvent.click(screen.getByRole("button", { name: nav.next })); // → confirmChild
+  pressDigits("1234");
   fireEvent.click(screen.getByRole("button", { name: nav.next })); // → parentPin
+  pressDigits("9876");
+  fireEvent.click(screen.getByRole("button", { name: nav.next })); // → confirmParent
   pressDigits("9876");
 }
 
@@ -47,7 +69,7 @@ beforeEach(() => {
 
 describe("OnboardingFlow — gating par étape (affordance client)", () => {
   it("« Continuer » désactivé tant que prénom OU avatar manquent", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     const next = () => screen.getByRole("button", { name: nav.next });
     expect(next()).toBeDisabled(); // rien saisi
 
@@ -63,7 +85,7 @@ describe("OnboardingFlow — gating par étape (affordance client)", () => {
   });
 
   it("code enfant : suivant désactivé tant que < 4 chiffres", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
     fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
@@ -76,11 +98,15 @@ describe("OnboardingFlow — gating par étape (affordance client)", () => {
   });
 
   it("code parent : « C'est parti » désactivé tant que < 4 chiffres", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
     fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
     pressDigits("1234");
+    fireEvent.click(screen.getByRole("button", { name: nav.next }));
+    pressDigits("1234");
+    fireEvent.click(screen.getByRole("button", { name: nav.next }));
+    pressDigits("9876");
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
     expect(screen.getByRole("button", { name: nav.create })).toBeDisabled();
     pressDigits("9876");
@@ -90,7 +116,7 @@ describe("OnboardingFlow — gating par étape (affordance client)", () => {
 
 describe("OnboardingFlow — navigation arrière", () => {
   it("retour ramène code enfant → profil, code parent → code enfant", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
     fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     fireEvent.click(screen.getByRole("button", { name: nav.next }));
@@ -114,7 +140,7 @@ describe("OnboardingFlow — navigation arrière", () => {
 
 describe("OnboardingFlow — focus & annonce (a11y)", () => {
   it("place le focus sur le titre de l'étape courante (montage + transition)", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     // Au montage, le titre de la 1ʳᵉ étape reçoit le focus.
     expect(document.activeElement).toBe(
       screen.getByRole("heading", { name: strings.onboarding.profile.title }),
@@ -133,14 +159,15 @@ describe("OnboardingFlow — focus & annonce (a11y)", () => {
   // STACK-TRAP #222 (rétro 7.1/7.5/7.9) : focus programmatique hors ordre clavier (tabIndex=-1)
   // → l'anneau UA natif serait un artefact sans valeur a11y. ROUGIT si `outline:"none"` disparaît.
   it("le titre focus-managé n'a AUCUN anneau UA (outline:none documenté)", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     const heading = screen.getByRole("heading", { name: strings.onboarding.profile.title });
-    expect(heading.style.outline).toBe("none");
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    expect(heading).toHaveFocus();
   });
 
   it("annonce le code de secours dans une région live (role=status)", async () => {
     actionMock.mockResolvedValue({ ok: true, recoveryCode: "ABCD2345" });
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
@@ -152,7 +179,7 @@ describe("OnboardingFlow — focus & annonce (a11y)", () => {
 describe("OnboardingFlow — soumission", () => {
   it("succès → code de secours affiché une fois → prêt → refresh", async () => {
     actionMock.mockResolvedValue({ ok: true, recoveryCode: "ABCD2345" });
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
@@ -164,6 +191,8 @@ describe("OnboardingFlow — soumission", () => {
       parentPin: "9876",
     });
 
+    expect(screen.getByRole("button", { name: strings.onboarding.recovery.done })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: daily.recoveryChecked }));
     fireEvent.click(screen.getByRole("button", { name: strings.onboarding.recovery.done }));
     fireEvent.click(screen.getByRole("button", { name: strings.onboarding.ready.cta }));
     expect(refresh).toHaveBeenCalledOnce();
@@ -171,18 +200,16 @@ describe("OnboardingFlow — soumission", () => {
 
   it("foyer déjà configuré (rejeu) → écran prêt, pas de code", async () => {
     actionMock.mockResolvedValue({ ok: true, alreadyConfigured: true });
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
-    expect(
-      await screen.findByRole("heading", { name: strings.onboarding.ready.title }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(daily.configured)).toBeInTheDocument();
   });
 
   it("erreur PIN → reste sur code parent avec alerte (posture croissance)", async () => {
     actionMock.mockResolvedValue({ ok: false, code: "PARENT_PIN_SAME" });
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
@@ -195,7 +222,7 @@ describe("OnboardingFlow — soumission", () => {
 
   it("prénom pris → renvoie à l'étape profil avec alerte", async () => {
     actionMock.mockResolvedValue({ ok: false, code: "NAME_TAKEN" });
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
@@ -209,7 +236,7 @@ describe("OnboardingFlow — soumission", () => {
 
   it("échec réseau (rejet) → alerte générique, reste sur code parent", async () => {
     actionMock.mockRejectedValue(new Error("network"));
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
@@ -223,7 +250,7 @@ describe("OnboardingFlow — soumission", () => {
         resolveAction = resolve;
       }),
     );
-    render(<OnboardingFlow />);
+    renderFlow();
     driveToParentReady();
     fireEvent.click(screen.getByRole("button", { name: nav.create }));
 
@@ -245,45 +272,55 @@ describe("OnboardingFlow — CTA désactivé : contraste composité peint (#240/
   const THEMES: Theme[] = ["light", "dark"];
 
   it("« Continuer » désactivé : texte peint ≥4.5:1, aucune opacity diluante, fond atténué + aria-disabled", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     // Étape profil, rien saisi → « Continuer » DÉSACTIVÉ (canContinueProfile=false).
     const cta = screen.getByRole("button", { name: nav.next });
     expect(cta).toBeDisabled();
 
-    const opacity = cta.style.opacity === "" ? 1 : Number(cta.style.opacity);
+    const opacity =
+      getComputedStyle(cta).opacity === "" ? 1 : Number(getComputedStyle(cta).opacity);
     expect(opacity).toBe(1); // garde directe : aucune opacity diluante sur le CTA plein-texte
-    expect(cta).toHaveAttribute("aria-disabled", "true");
-    expect(cta.style.cursor).toBe("not-allowed");
+    expect(cta).toHaveAttribute("disabled");
+    expect(getComputedStyle(cta).cursor).toBe("not-allowed");
     // Registre neutre désactivé (jamais le fond accent plein sous lequel le texte inverse dilué
     // tombait sous 4.5:1) — ROUGIT si le fond désactivé repasse à `--color-accent-primary`.
-    expect(cta.style.backgroundColor).toBe("var(--color-bg-tertiary)");
-    expect(cta.style.color).toBe("var(--color-text-secondary)");
+    expect(cta).toHaveStyle({ backgroundColor: resolveTokenColor("light", "forest-paper") });
+    expect(cta).toHaveStyle({ color: resolveTokenColor("light", "forest-muted") });
 
     for (const theme of THEMES) {
-      const text = resolveTokenColor(theme, "color-text-secondary");
-      const bg = resolveTokenColor(theme, "color-bg-tertiary");
+      const text = resolveTokenColor(theme, "forest-muted");
+      const bg = resolveTokenColor(theme, "forest-paper");
       const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
       expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
     }
   });
 
   it("« Continuer » ACTIF : registre accent plein (texte inverse sur accent), pas le fond désactivé", () => {
-    render(<OnboardingFlow />);
+    renderFlow();
     // Saisir prénom + avatar → « Continuer » ACTIF.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Léa" } });
     fireEvent.click(screen.getByRole("button", { name: avatarLabel }));
     const cta = screen.getByRole("button", { name: nav.next });
     expect(cta).toBeEnabled();
     // ROUGIT si le style désactivé (neutre) fuit sur l'état actif : l'actif reste plein-accent.
-    expect(cta.style.backgroundColor).toBe("var(--color-accent-primary)");
-    expect(cta.style.color).toBe("var(--color-text-inverse)");
+    expect(cta).toHaveStyle({ backgroundColor: resolveTokenColor("light", "forest-gold") });
+    expect(cta).toHaveStyle({ color: resolveTokenColor("light", "forest-ink") });
     for (const theme of THEMES) {
       expect(
         contrastRatio(
-          resolveTokenColor(theme, "color-text-inverse"),
-          resolveTokenColor(theme, "color-accent-primary"),
+          resolveTokenColor(theme, "forest-ink"),
+          resolveTokenColor(theme, "forest-gold"),
         ),
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
+});
+
+it("refuses a different parent confirmation, clears it and keeps the chosen PIN", () => {
+  renderFlow(); driveToParentReady();
+  fireEvent.click(screen.getByRole("button", { name: strings.pinPad.backspace }));
+  pressDigits("5");
+  fireEvent.click(screen.getByRole("button", { name: nav.create }));
+  expect(screen.getByRole("alert")).toHaveTextContent(daily.mismatch);
+  expect(actionMock).not.toHaveBeenCalled();
 });

@@ -1,0 +1,253 @@
+{
+  "version": 1,
+  "status": "editorial-proposal-no-images",
+  "worlds": [
+    {
+      "worldIndex": 0,
+      "theme": "forest",
+      "setting": "Passage des lucioles — voûtes de branches, champignons et racines humides",
+      "creatures": [
+        {
+          "name": "Mycélou",
+          "anatomy": "Petit mycélium vivant en éventail, à lamelles souples et pied court ramifié",
+          "role": "Recycle les feuilles mortes au pied des géants"
+        },
+        {
+          "name": "Tavelle",
+          "anatomy": "Coléoptère bas à élytres rainurés et six pattes fouisseuses en petites pelles",
+          "role": "Aère les sols entre les racines"
+        },
+        {
+          "name": "Orsil",
+          "anatomy": "Arpenteur à corps annelé horizontal, quatre paires de pattes coussinées et mandibules douces",
+          "role": "Transporte les fibres pour tapisser les troncs creux"
+        },
+        {
+          "name": "Pivertin",
+          "anatomy": "Petit oiseau vertical à deux ailes courtes, bec mousse et queue en éventail rigide",
+          "role": "Ouvre de petits abris dans le bois déjà tendre"
+        },
+        {
+          "name": "Fougrette",
+          "anatomy": "Fronde vivante en crosse déroulée, aux folioles latérales et à un pied fibreux",
+          "role": "Retient les gouttes sous la canopée"
+        },
+        {
+          "name": "Lucéran",
+          "anatomy": "Insecte à deux longues ailes translucides et abdomen lumineux segmenté",
+          "role": "Guide les pollinisateurs entre les fleurs nocturnes"
+        },
+        {
+          "name": "Tormille",
+          "anatomy": "Gardien quadrupède trapu, corps de souche creuse allongée et quatre épaisses pattes d’écorce",
+          "role": "Protège les petits abris du sous-bois"
+        }
+      ]
+    },
+    {
+      "worldIndex": 1,
+      "theme": "magic",
+      "setting": "Jardins suspendus — fleurs de cristal et tours, faune différente des racines et réserves de rosée du monde 6",
+      "creatures": [
+        {
+          "name": "Véliane",
+          "anatomy": "Créature aérienne à disque lenticulaire, bord souple plissé et quatre rubans de stabilisation",
+          "role": "Distribue la poussière fertile entre les îlots"
+        },
+        {
+          "name": "Oscille",
+          "anatomy": "Gousse pendulaire vivante suspendue à une seule tige torsadée, avec deux valves étroites",
+          "role": "Accorde les vibrations qui ouvrent les fleurs de cristal"
+        },
+        {
+          "name": "Calibrune",
+          "anatomy": "Petit fuseau vivant à trois ailettes hélicoïdales et noyau central allongé",
+          "role": "Traverse les courants verticaux pour porter les semences"
+        },
+        {
+          "name": "Prismelle",
+          "anatomy": "Organisme minéral doux en rosette basse de prismes arrondis, avec un pied annulaire",
+          "role": "Concentre la lumière diffuse au pied des fleurs"
+        },
+        {
+          "name": "Eolune",
+          "anatomy": "Ruban vivant ondulant à corps continu, deux extrémités élargies et petites crêtes dorsales",
+          "role": "Apaise les rafales autour des jeunes plants"
+        },
+        {
+          "name": "Altéon",
+          "anatomy": "Gardien flottant en calice floral ouvert, cinq grands pétales porteurs et un long pistil souple",
+          "role": "Abaisse doucement les graines vers les nouveaux îlots"
+        }
+      ]
+    },
+    {
+      "worldIndex": 2,
+      "theme": "snow",
+      "setting": "Lanternes du grand blanc — congères, sapins, glace et abris sous la neige",
+      "creatures": [
+        {
+          "name": "Duvorin",
+          "anatomy": "Mammifère fouisseur compact sans oreilles saillantes, museau en coin et deux grandes pattes avant arrondies",
+          "role": "Creuse des galeries qui gardent la chaleur"
+        },
+        {
+          "name": "Patinelle",
+          "anatomy": "Créature basse à corps fuselé et deux longues semelles latérales aplaties, sans roue",
+          "role": "Glisse sur la croûte de neige sans la briser"
+        },
+        {
+          "name": "Nivéo",
+          "anatomy": "Oiseau ramassé à poitrine isolante, ailes très courtes et larges pieds frangés",
+          "role": "Tasse les bordures des abris après les chutes de neige"
+        },
+        {
+          "name": "Peltrise",
+          "anatomy": "Insecte sous-nival à dos bombé couvert de fins poils isolants et six courtes pattes",
+          "role": "Recycle les aiguilles de sapin dans les poches tièdes"
+        },
+        {
+          "name": "Cristou",
+          "anatomy": "Microcolonie vivante en coussin poreux à cinq tubes arrondis et socle souple",
+          "role": "Retient l’eau de fonte sans geler entièrement"
+        },
+        {
+          "name": "Ourlane",
+          "anatomy": "Mammifère allongé à ventre large, queue plate et petites oreilles repliées",
+          "role": "Relie les mares de dégel par des passages abrités"
+        },
+        {
+          "name": "Boréalin",
+          "anatomy": "Gardien massif à corps ovoïde horizontal, quatre larges pieds et une grande collerette isolante",
+          "role": "Maintient un refuge chaud lors des vents froids"
+        }
+      ]
+    },
+    {
+      "worldIndex": 3,
+      "theme": "candy",
+      "setting": "Promenade des délices — biscuit, caramel, fruits gélifiés et roseaux de sucre",
+      "creatures": [
+        {
+          "name": "Gaufrel",
+          "anatomy": "Être de gaufrette formé de deux plaques articulées avec six pieds en miettes liées",
+          "role": "Stabilise les berges friables des ruisseaux"
+        },
+        {
+          "name": "Molassa",
+          "anatomy": "Créature de caramel en long ruban torsadé, à tête intégrée et extrémité en ventouse",
+          "role": "Répare les fissures entre les dalles de biscuit"
+        },
+        {
+          "name": "Pectine",
+          "anatomy": "Corps de gelée souple en trois segments oblongs et quatre petits lobes locomoteurs",
+          "role": "Transporte les pépins vers les bosquets fruités"
+        },
+        {
+          "name": "Friselot",
+          "anatomy": "Créature de sucre filé en fuseau ajouré à deux longues palettes souples",
+          "role": "Démêle les roseaux pour laisser circuler le vent"
+        },
+        {
+          "name": "Croustillin",
+          "anatomy": "Petit être en croissant feuilleté, à plis porteurs et queue courte en spirale ouverte",
+          "role": "Ramasse les miettes et enrichit les jeunes pousses"
+        },
+        {
+          "name": "Berligo",
+          "anatomy": "Créature à noyau en berlingot arrondi et trois pieds élastiques en réglisse",
+          "role": "Répartit les gouttelettes de sirop sur les terrasses"
+        },
+        {
+          "name": "Melloria",
+          "anatomy": "Gardien fait de quatre grandes feuilles de pâte superposées autour d’un cœur souple, porté par un pied large",
+          "role": "Ombrage les bosquets pour éviter que la gelée ne fonde"
+        }
+      ]
+    },
+    {
+      "worldIndex": 4,
+      "theme": "forest",
+      "setting": "Clairière des lanternes — saules, bassins et fleurs, distincte du sous-bois du monde 0",
+      "creatures": [
+        {
+          "name": "Salicou",
+          "anatomy": "Amphibien large et aplati à quatre pieds palmés et une courte crête souple",
+          "role": "Circule entre les bassins et entretient leurs passages"
+        },
+        {
+          "name": "Hydrelle",
+          "anatomy": "Insecte patineur très bas à six longues pattes latérales terminées en coussinets hydrofuges",
+          "role": "Rassemble les fragments flottants à la surface des mares"
+        },
+        {
+          "name": "Mousselin",
+          "anatomy": "Organisme végétal en coussin de mousse sphérique fendu, à plusieurs radicelles souples",
+          "role": "Filtre l’eau qui s’écoule sous les saules"
+        },
+        {
+          "name": "Becaline",
+          "anatomy": "Petit échassier à deux longues jambes, bec courbe court et ailes repliées",
+          "role": "Dépose les graines le long des berges"
+        },
+        {
+          "name": "Lentille",
+          "anatomy": "Colonie flottante en chaîne de quatre disques foliaires reliés, visage sur le plus grand disque",
+          "role": "Protège les jeunes pousses aquatiques des courants"
+        },
+        {
+          "name": "Vannor",
+          "anatomy": "Gardien large à corps de panier tressé vivant, quatre racines portantes et deux longues frondes latérales",
+          "role": "Offre un abri ombragé près des lanternes"
+        }
+      ]
+    },
+    {
+      "worldIndex": 5,
+      "theme": "ocean",
+      "setting": "Jardin des perles — entièrement sous l’eau, récifs, sable, algues et grottes marines",
+      "creatures": [
+        {
+          "name": "Ondilo",
+          "anatomy": "Poisson fusiforme à nageoire dorsale continue, deux pectorales courtes et queue bifide",
+          "role": "Guide les bancs entre les coraux"
+        },
+        {
+          "name": "Coralline",
+          "anatomy": "Polype fixé à pied charnu cylindrique et couronne de huit tentacules arrondis",
+          "role": "Filtre les particules portées par le courant"
+        },
+        {
+          "name": "Nautilon",
+          "anatomy": "Céphalopode à coquille en spirale aplatie et huit petits bras souples autour du visage",
+          "role": "Nettoie les anfractuosités sans abîmer les coraux"
+        },
+        {
+          "name": "Lamérie",
+          "anatomy": "Limace marine longue à deux rangées de papilles foliacées, sans coquille",
+          "role": "Broute les algues sur les pierres du récif"
+        },
+        {
+          "name": "Rémora",
+          "anatomy": "Petite raie à grand disque rhomboïde, bouche douce dessous et queue fine sans aiguillon",
+          "role": "Remue doucement le sable pour aérer les herbiers"
+        },
+        {
+          "name": "Sablune",
+          "anatomy": "Crustacé fouisseur à carapace ovale, dix petites pattes et deux antennes en éventail",
+          "role": "Creuse les petits chenaux sous les coquillages"
+        },
+        {
+          "name": "Auréole",
+          "anatomy": "Méduse à ombrelle haute, quatre bras buccaux frisés et couronne de fins tentacules",
+          "role": "Distribue les nutriments entre les eaux calmes"
+        },
+        {
+          "name": "Pélagor",
+          "anatomy": "Gardien marin long à corps souple annelé, quatre grandes nageoires en palettes et deux branchies plumeuses latérales",
+          "role": "Relie les refuges du récif en guidant les courants"
+        }
+      ]
+    }
+  ]
+}

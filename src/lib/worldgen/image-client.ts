@@ -116,9 +116,10 @@ function extractImage(body: GenerateContentResponse): Buffer {
     throw new ImageGenerationError(`génération refusée (prompt bloqué : ${blockReason})`);
   }
   const candidate = body.candidates?.[0];
-  // Réponse censurée par le filtre de sécurité (finishReason SAFETY) — refus définitif.
-  if (candidate?.finishReason === "SAFETY") {
-    throw new ImageGenerationError("génération refusée (finishReason: SAFETY)");
+  // HTTP 200 can contain a refusal/incomplete generation, even alongside partial pixels.
+  // Preserve the provider code; none of these responses are automatically retried.
+  if (candidate?.finishReason && candidate.finishReason !== "STOP") {
+    throw new ImageGenerationError(`génération arrêtée (finishReason: ${candidate.finishReason})`);
   }
   const base64 = candidate?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
   if (!base64) {

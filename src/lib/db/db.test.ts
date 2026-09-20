@@ -215,6 +215,10 @@ describe("runMigrations", () => {
     // recréée) ; économie de dépense 0016 : cosmetics/cosmetics_owned/inventory_items/daily —
     // `cosmetics_owned` référence `cosmetics` par FK, donc drop dans cet ordre ; pitié d'œuf 0017 :
     // egg_pity (sans dépendant, drop libre).
+    seed.run(sql`DROP TABLE evolution_receipts`);
+    seed.run(sql`DROP TABLE shard_receipts`);
+    seed.run(sql`DROP TABLE adventure_sessions`);
+    seed.run(sql`DROP TABLE egg_receipts`);
     seed.run(sql`DROP TABLE egg_pity`);
     seed.run(sql`DROP TABLE cosmetics_owned`);
     seed.run(sql`DROP TABLE cosmetics`);
@@ -291,6 +295,10 @@ describe("runMigrations", () => {
     // inventory_items/daily) et 0017 (pitié d'œuf : egg_pity) → on drope ces tables + la colonne
     // pour que leur `CREATE TABLE` / `ADD COLUMN` rejoue (DROP TABLE household_settings couvre 0013
     // ET 0015 ; drop `cosmetics_owned` avant `cosmetics` — FK).
+    seed.run(sql`DROP TABLE evolution_receipts`);
+    seed.run(sql`DROP TABLE shard_receipts`);
+    seed.run(sql`DROP TABLE adventure_sessions`);
+    seed.run(sql`DROP TABLE egg_receipts`);
     seed.run(sql`DROP TABLE egg_pity`);
     seed.run(sql`DROP TABLE cosmetics_owned`);
     seed.run(sql`DROP TABLE cosmetics`);

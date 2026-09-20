@@ -1,0 +1,68 @@
+{
+  "continuedAfterDiagnostic": true,
+  "profileCount": 1,
+  "diagnosticQuestions": 18,
+  "diagnosticMasteryCount": 18,
+  "firstLevelQuestions": 2,
+  "progressCount": 1,
+  "attemptCount": 2,
+  "ledgerCount": 1,
+  "pauseResumedSameQuestion": true,
+  "responseLossReplayedOnce": true,
+  "codesStoredLocally": false,
+  "geometry": [
+    {
+      "name": "home-1280",
+      "viewport": {
+        "width": 1280,
+        "height": 800
+      },
+      "main": {
+        "x": 0,
+        "y": 86,
+        "width": 1280,
+        "height": 634.78125
+      }
+    },
+    {
+      "name": "home-1024",
+      "viewport": {
+        "width": 1024,
+        "height": 800
+      },
+      "main": {
+        "x": 0,
+        "y": 86,
+        "width": 1024,
+        "height": 634.78125
+      }
+    },
+    {
+      "name": "home-390",
+      "viewport": {
+        "width": 390,
+        "height": 800
+      },
+      "main": {
+        "x": 0,
+        "y": 86,
+        "width": 390,
+        "height": 630.78125
+      }
+    },
+    {
+      "name": "home-320",
+      "viewport": {
+        "width": 320,
+        "height": 800
+      },
+      "main": {
+        "x": 0,
+        "y": 86,
+        "width": 320,
+        "height": 720.96875
+      }
+    }
+  ],
+  "pageErrors": []
+}

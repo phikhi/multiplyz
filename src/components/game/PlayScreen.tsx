@@ -147,7 +147,13 @@ const FALLBACK_STAR_THRESHOLDS: EngineConfig["starThresholds"] = [0.6, 0.85, 1];
  * `setChildMusicEnabledAction`, narrow, no-PIN) est fire-and-forget (no-fail : une erreur réseau
  * ne bloque jamais l'enfant, l'état optimiste local reste la source d'affichage immédiate).
  */
-export function PlayScreen({ sound = DEFAULT_SOUND_SETTINGS }: { readonly sound?: SoundSettings }) {
+export function PlayScreen({
+  sound = DEFAULT_SOUND_SETTINGS,
+  diagnosticOnly = false,
+}: {
+  readonly sound?: SoundSettings;
+  readonly diagnosticOnly?: boolean;
+}) {
   const [settings, setSettings] = useState<SoundSettings>(sound);
 
   const setSoundEnabled = useCallback((enabled: boolean) => {
@@ -176,13 +182,13 @@ export function PlayScreen({ sound = DEFAULT_SOUND_SETTINGS }: { readonly sound?
   return (
     <SoundSettingsControlProvider value={soundControl}>
       <SoundProvider settings={settings}>
-        <PlayScreenInner />
+        <PlayScreenInner diagnosticOnly={diagnosticOnly} />
       </SoundProvider>
     </SoundSettingsControlProvider>
   );
 }
 
-function PlayScreenInner() {
+function PlayScreenInner({ diagnosticOnly }: { diagnosticOnly: boolean }) {
   const router = useRouter();
   const [screen, setScreen] = useState<ScreenState>({ kind: "loading" });
   const [starThresholds, setStarThresholds] = useState(FALLBACK_STAR_THRESHOLDS);
@@ -200,6 +206,10 @@ function PlayScreenInner() {
     }
     if (plan.items.length > 0) {
       setScreen({ kind: "diagnostic-intro", items: plan.items });
+      return;
+    }
+    if (diagnosticOnly) {
+      router.refresh();
       return;
     }
     const result = await startLevelAction();
@@ -225,7 +235,7 @@ function PlayScreenInner() {
       isDiagnostic: false,
       starThresholds: result.starThresholds,
     });
-  }, []);
+  }, [diagnosticOnly, router]);
 
   /** Retry explicite (bouton « Réessayer » / enchaînement niveau suivant) : re-montre le chargement. */
   const retryLoadLevel = useCallback(() => {

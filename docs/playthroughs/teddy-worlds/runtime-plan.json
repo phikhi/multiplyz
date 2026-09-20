@@ -1,0 +1,16 @@
+{
+  "mode": "lecture seule",
+  "socle": 6,
+  "dernierMondeReserve": 5,
+  "cibles": [
+    6,
+    7
+  ],
+  "plafondMensuelEur": 20,
+  "prerequisManquants": [
+    "GEMINI_API_KEY",
+    "WORLDGEN_QA_MODEL",
+    "WORLDGEN_IMAGE_RESERVATION_EUR",
+    "WORLDGEN_QA_RESERVATION_EUR"
+  ]
+}

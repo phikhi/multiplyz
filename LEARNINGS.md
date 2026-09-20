@@ -1652,3 +1652,26 @@ Les 3 autres leçons (garde exécutable sur playbook-en-prose #3, calibration TT
 - #124 tenu : l'atomicité du batch multi-UPDATE homogène par PK **n'a aucun rollback non-vacuous constructible** (aucune 2ᵉ écriture ne peut échouer après la 1ʳᵉ) → commentaire honnête « atomicité par construction, NON mutation-prouvée #124 », jamais « #122 testé ». `db.transaction` gardé (mort-de-process mid-batch).
 - Bonus observé au diagnostic : Zoé avait aussi **tiré 4 communes/rares aux œufs** (R4.2) — toutes en **vrai art natif** → la boucle SPEND complète (earn→œuf→créature réelle) est vécue par l'enfant. #180 confirmé bout-en-bout sur la vraie DB.
 - Action : PR #402 mergée `e3f9eb3` (Closes #401). Pas de promotion CLAUDE.md (le backfill idempotent + discovered-issue sont déjà des disciplines en dur ; le gap était « noter ≠ filer » = feed-forward). **Feed-forward transverse** : à chaque clôture de story/épic, tout caveat d'idempotence/migration relevé en review qui laisse des lignes pré-existantes périmées → FILER en `discovered` + backfill, jamais seulement noter. Reste R4 : R4.3 #394, R4.4 #395, R4.5 #396.
+
+### 2026-09-10 — TEDDy, rencontre et compagnons — livraison locale sans PR
+
+- **Navigation après récompense** : un lien direct vers la fiche laisse la session au résultat et retarde l’accès au monde suivant. Acquitter le reçu par la commande fiable existante, conserver la destination dans l’intention locale, puis naviguer après confirmation serveur. Vérifié avec réponse perdue, fermeture et reprise.
+- **Identité de collection** : construire le reçu depuis la possession et le catalogue enregistrés préserve l’art, l’histoire et le surnom existants. Ne pas reconstruire un descripteur par défaut au moment d’afficher une récompense déjà possédée.
+- **Contraste sur scène 3D** : un bon token de texte ne suffit pas si la caméra place ensuite un portail lumineux derrière lui. Le titre de rencontre utilise un fond opaque ; le focus de l’album est mesuré sur les pixels voisins réels.
+- **Preuve navigateur** : un parcours long sous recompilation à chaud a rencontré un manifeste Next vide. La passe finale sur build stable a joué 113 calculs et vérifié la boucle jusqu’au monde suivant. Rapport : [TEDDy-compagnons](docs/playthroughs/TEDDy-compagnons.md). Les 2 547 tests passent ; couverture globale et canari historique restent ouverts avant PR.
+
+### 2026-09-10 — TEDDy, boutique et reçu d’œuf — livraison locale sans PR
+
+- **Idempotence et expérience** : empêcher un second débit ne suffit pas à retrouver une rencontre. Persister le résultat dans la transaction de l’achat ; lier également les intentions concurrentes au tirage canonique, sinon un ancien identifiant peut devenir une nouvelle dépense après acquittement par l’autre onglet.
+- **Navigation réelle** : le parcours compilé a constaté qu’un `router.refresh()` immédiat après `router.replace()` annulait le changement de route. Garder le refresh seulement pour le retour interne à la boutique. Le test de mock prouve l’appel ; seul le navigateur confirme l’arrivée.
+- **Solde figé** : le reçu garde le solde après achat ; le nommer explicitement comme historique, puisque l’enfant peut gagner d’autres pièces avant d’ouvrir son œuf.
+- **Focus après retry** : un nouvel essai peut garder la même phase tout en retirant le bouton focalisé. Exercer ce cas en focalisant réellement « Réessayer », puis vérifier le transfert au titre.
+- **Migration sans seed** : sauvegarde SQLite cohérente, migration du schéma seul, comparaison de toutes les lignes des 22 tables existantes ; aucune donnée familiale remplacée. Tranche vérifiée avec 80 calculs et quatre achats sur la base dédiée. Voir [TEDDy-boutique](docs/playthroughs/TEDDy-boutique.md). Couverture globale et canari historique restent séparés avant PR.
+
+
+### 2026-09-10 — TEDDy, achat ciblé avec éclats — livraison locale sans PR
+
+- **Reçu et intention concurrente** : réutiliser le contrat d’œuf pour conserver l’acquisition ciblée et les alias des autres onglets. Une intention préparée avant le premier achat ne doit pas devenir une deuxième dépense après acquittement. Contrôlé avec deux contextes Chromium, réponses perdues et fermeture.
+- **Catalogue ciblé** : possession du profil + monde accessible + rareté commune/rare ; le drapeau d’éligibilité aux œufs ne restreint pas l’achat ciblé. Exercer une créature d’un monde généré dans les tests, pour empêcher une future limite aux seuls mondes initiaux.
+- **Annulation réelle** : provoquer une panne d’insertion du journal, de la possession et du reçu après débit ; retirer la transaction fait échouer ces tests. Restaurer la source et repasser les contrôles avant livraison.
+- **Données** : migration du schéma seul après sauvegarde cohérente et essai sur copie ; empreintes des 23 tables applicatives inchangées. Parcours de 146 calculs et 9 œufs sur une continuation isolée de l’essai boutique ; aucune injection de gains. Voir [TEDDy-eclats](docs/playthroughs/TEDDy-eclats.md). Anciens tests et couverture globale restent différés séparément.

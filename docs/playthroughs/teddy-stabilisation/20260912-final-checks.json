@@ -1,0 +1,45 @@
+{
+  "numTotalTestSuites": 849,
+  "numPassedTestSuites": 849,
+  "numFailedTestSuites": 0,
+  "numTotalTests": 2971,
+  "numPassedTests": 2971,
+  "numFailedTests": 0,
+  "coverage": {
+    "lines": {
+      "total": 23455,
+      "covered": 22528,
+      "skipped": 0,
+      "pct": 96.04
+    },
+    "statements": {
+      "total": 23455,
+      "covered": 22528,
+      "skipped": 0,
+      "pct": 96.04
+    },
+    "functions": {
+      "total": 1149,
+      "covered": 1108,
+      "skipped": 0,
+      "pct": 96.43
+    },
+    "branches": {
+      "total": 6283,
+      "covered": 5885,
+      "skipped": 0,
+      "pct": 93.66
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "coverageGatePassed": false,
+  "thresholdsChanged": false,
+  "databasePathDuringTests": ":memory:",
+  "maxWorkers": 2,
+  "browserCanaryRun": false
+}

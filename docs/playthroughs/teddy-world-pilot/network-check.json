@@ -1,0 +1,15 @@
+{
+  "family": {
+    "worlds": 0,
+    "jobs": 0,
+    "characters": 41
+  },
+  "pilot": {
+    "worlds": 0,
+    "jobs": 0,
+    "characters": 41
+  },
+  "generationStarted": false,
+  "networkError": "ENOTFOUND",
+  "paidCalls": 0
+}

@@ -1,0 +1,54 @@
+
+ RUN  v3.2.6 /Users/philippekhill/Sites/TEDDy/app
+
+ ❯ src/lib/game/shard-shop.test.ts (14 tests | 3 failed) 124ms
+   ✓ targeted shard purchases, real SQLite > lists only missing non-legendary companions from accessible worlds, with configured prices 23ms
+   ✓ targeted shard purchases, real SQLite > spends exactly once, grants the chosen companion and leaves coins, stars and pity alone 10ms
+   ✓ targeted shard purchases, real SQLite > binds concurrent intentions to the pending acquisition, even with different targets and replay after acknowledgement 8ms
+   ✓ targeted shard purchases, real SQLite > retains the exact receipt when the balance, catalogue and configuration later change 8ms
+   ✓ targeted shard purchases, real SQLite > refuses unknown, locked and legendary characters, including mislabelled egg eligibility 7ms
+   ✓ targeted shard purchases, real SQLite > refuses an already owned target under a new key, without duplicate compensation 8ms
+   ✓ targeted shard purchases, real SQLite > refuses insufficient funds but accepts the exact balance 7ms
+   × targeted shard purchases, real SQLite > rolls back all writes if INSERT collection fails after the wallet debit 11ms
+     → expected { coins: 77, shards: 540 } to deeply equal { coins: 77, shards: 600 }
+   × targeted shard purchases, real SQLite > rolls back all writes if INSERT shard_receipts fails after the wallet debit 7ms
+     → expected { coins: 77, shards: 540 } to deeply equal { coins: 77, shards: 600 }
+   × targeted shard purchases, real SQLite > rolls back all writes if INSERT ledger fails after the wallet debit 6ms
+     → expected { coins: 77, shards: 540 } to deeply equal { coins: 77, shards: 600 }
+   ✓ targeted shard purchases, real SQLite > isolates profiles, replays and acknowledgements, and deletes receipts with their profile 8ms
+   ✓ targeted shard purchases, real SQLite > uses generated-world catalogue entries once progression opens their world, without an egg-pool requirement 6ms
+   ✓ targeted shard purchases, real SQLite > returns an empty list for a partial or completed accessible catalogue 7ms
+   ✓ targeted shard purchases, real SQLite > never spends for a legacy ledger replay without a receipt 6ms
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 11 passed (14)
+   Start at  19:57:28
+   Duration  1.26s (transform 154ms, setup 132ms, collect 385ms, tests 124ms, environment 342ms, prepare 46ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/game/shard-shop.test.ts > targeted shard purchases, real SQLite > rolls back all writes if INSERT collection fails after the wallet debit
+ FAIL  src/lib/game/shard-shop.test.ts > targeted shard purchases, real SQLite > rolls back all writes if INSERT shard_receipts fails after the wallet debit
+ FAIL  src/lib/game/shard-shop.test.ts > targeted shard purchases, real SQLite > rolls back all writes if INSERT ledger fails after the wallet debit
+AssertionError: expected { coins: 77, shards: 540 } to deeply equal { coins: 77, shards: 600 }
+
+- Expected
++ Received
+
+  {
+    "coins": 77,
+-   "shards": 600,
++   "shards": 540,
+  }
+
+ ❯ src/lib/game/shard-shop.test.ts:170:34
+    168|       );
+    169|       expect(() => buy("one")).toThrow("write failed");
+    170|       expect(loadWallet(db, id)).toEqual({ coins: 77, shards: 600 });
+       |                                  ^
+    171|       expect(db.select().from(ledger).all()).toEqual([]);
+    172|       expect(db.select().from(collection).all()).toEqual([]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+

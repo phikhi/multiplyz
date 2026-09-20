@@ -1,0 +1,35 @@
+{
+  "servedAndDecoded": 82,
+  "hashesMatch": true,
+  "legendaryPreview": "legendary:0",
+  "geometry": [
+    {
+      "name": "legendary-preview-1280",
+      "box": {
+        "x": 360.203125,
+        "y": 539,
+        "width": 384.296875,
+        "height": 384.296875
+      }
+    },
+    {
+      "name": "legendary-preview-390",
+      "box": {
+        "x": 166.390625,
+        "y": 452.375,
+        "width": 207.59375,
+        "height": 207.59375
+      }
+    },
+    {
+      "name": "legendary-preview-320",
+      "box": {
+        "x": 138.390625,
+        "y": 605.96875,
+        "width": 165.609375,
+        "height": 165.609375
+      }
+    }
+  ],
+  "pageErrors": []
+}

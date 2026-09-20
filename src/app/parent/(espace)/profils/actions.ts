@@ -1,5 +1,6 @@
 "use server";
 
+import { createChildProfile, type NewChildProfile } from "@/lib/parent/create-profile";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/db";
 import { getCurrentParentSession } from "@/lib/auth/current-session";
@@ -91,4 +92,18 @@ export async function deleteProfileAction(profileId: number): Promise<ProfileAct
   const result = toResult(() => deleteProfile(getDb(), profileId));
   if (result.ok) revalidatePath(PROFILS_PATH);
   return result;
+}
+
+export async function createChildProfileAction(
+  input: NewChildProfile,
+): Promise<ProfileActionResult> {
+  if (!(await hasParentSession())) return { ok: false, code: "UNAUTHORIZED" };
+  try {
+    await createChildProfile(getDb(), input);
+    revalidatePath(PROFILS_PATH);
+    return { ok: true };
+  } catch (error) {
+    if (error instanceof ProfileManagementError) return { ok: false, code: error.code };
+    throw error;
+  }
 }

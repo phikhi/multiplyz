@@ -1,0 +1,30 @@
+{
+  "ok": true,
+  "unchangedTables": [
+    "adventure_sessions",
+    "attempts",
+    "characters",
+    "collection",
+    "cosmetics",
+    "cosmetics_owned",
+    "daily",
+    "egg_pity",
+    "egg_receipts",
+    "household_settings",
+    "inventory_items",
+    "jobs",
+    "ledger",
+    "mastery",
+    "pin_attempts",
+    "profiles",
+    "progress",
+    "schema_meta",
+    "sessions",
+    "socle_worlds",
+    "teddy_reference_assets",
+    "wallet",
+    "worlds"
+  ],
+  "addedTable": "shard_receipts",
+  "integrity": "ok"
+}

@@ -1,0 +1,1588 @@
+{
+  "at": "2026-09-11T08:59:32.623Z",
+  "mode": "editorial-renewal-plan-no-api",
+  "published": false,
+  "databaseWritten": false,
+  "generatedImages": 0,
+  "currentReservedEur": 4.2,
+  "ceilingEur": 10,
+  "pilotGrowthPlannedEur": 2.1,
+  "renewal": {
+    "creatures": 41,
+    "images": 123,
+    "babyInspections": 41,
+    "finalInspections": 123,
+    "plannedEur": 20.5,
+    "includesRetries": false,
+    "includesPaidPlanning": false
+  },
+  "plannedCumulativeEur": 26.8,
+  "fitsCurrentCeiling": false,
+  "worlds": [
+    {
+      "worldIndex": 0,
+      "theme": "forest",
+      "label": "Forêt enchantée",
+      "setting": "Passage des lucioles — voûtes de branches, champignons et racines humides",
+      "creatures": [
+        {
+          "id": "creature:0:0",
+          "speciesKey": "creature_world_0_0",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:0:0",
+            "worldIndex": 0,
+            "speciesKey": "creature_world_0_0",
+            "nameDefault": "Bulle",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_0_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_0_0-ado.png\",\"3\":\"socle/creature/creature_world_0_0-adulte.png\"}",
+            "story": "Un petit copain tout rond qui adore les câlins — Teddy dit qu'il ronronne comme un pot de miel."
+          },
+          "proposed": {
+            "name": "Mycélou",
+            "anatomy": "Petit mycélium vivant en éventail, à lamelles souples et pied court ramifié",
+            "role": "Recycle les feuilles mortes au pied des géants"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_0_0.png",
+              "sha256": "eb13f5d9550b309a16ec1e4d49ecba32d39782994218d60aecca2f63785072e5"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_0-ado.png",
+              "sha256": "f331c6c0c1ffaeb839a2c1cb93b185794b9dd4d86a7ff8f782ed60c827dba13a"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_0-adulte.png",
+              "sha256": "d8d0571ff8d5fba08f268c5a6d45c08278912695443d27cf74cd308c206c3719"
+            }
+          ]
+        },
+        {
+          "id": "creature:0:1",
+          "speciesKey": "creature_world_0_1",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:0:1",
+            "worldIndex": 0,
+            "speciesKey": "creature_world_0_1",
+            "nameDefault": "Câlin",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_0_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_0_1-ado.png\",\"3\":\"socle/creature/creature_world_0_1-adulte.png\"}",
+            "story": "Timide au début, mais dès qu'il te connaît, il ne te lâche plus d'une semelle."
+          },
+          "proposed": {
+            "name": "Tavelle",
+            "anatomy": "Coléoptère bas à élytres rainurés et six pattes fouisseuses en petites pelles",
+            "role": "Aère les sols entre les racines"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_0_1.png",
+              "sha256": "b51e3a1cfa6aa848b469b3683b619915f20da4b17c664da97d3992fad7f5667e"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_1-ado.png",
+              "sha256": "6fbed961d3eee3603e28c2df6a072f6ccac42506b277017ccbc90199f565e67b"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_1-adulte.png",
+              "sha256": "f03defd490fa71470b2a0385ebf370a8c6bd73687d0bbd7a53820340c7129d8b"
+            }
+          ]
+        },
+        {
+          "id": "creature:0:2",
+          "speciesKey": "creature_world_0_2",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:0:2",
+            "worldIndex": 0,
+            "speciesKey": "creature_world_0_2",
+            "nameDefault": "Pompon",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_0_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_0_2-ado.png\",\"3\":\"socle/creature/creature_world_0_2-adulte.png\"}",
+            "story": "Il collectionne les jolis cailloux brillants et t'en offre un quand tu réussis."
+          },
+          "proposed": {
+            "name": "Orsil",
+            "anatomy": "Arpenteur à corps annelé horizontal, quatre paires de pattes coussinées et mandibules douces",
+            "role": "Transporte les fibres pour tapisser les troncs creux"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_0_2.png",
+              "sha256": "2686b9c29c0c66e28e422aaf721afe967f919c51c9dae22724221ba8da4fea00"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_2-ado.png",
+              "sha256": "2b21ac219876cf0442320e9ab1b3315c7b15adc8f513884111c61aeb1dfebf9e"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_2-adulte.png",
+              "sha256": "bdd4e79e0233abdd10c4ed32b935c87a6a875e9b8379c9218e3aab2b66db1d42"
+            }
+          ]
+        },
+        {
+          "id": "creature:0:3",
+          "speciesKey": "creature_world_0_3",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:0:3",
+            "worldIndex": 0,
+            "speciesKey": "creature_world_0_3",
+            "nameDefault": "Guimauve",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_0_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_0_3-ado.png\",\"3\":\"socle/creature/creature_world_0_3-adulte.png\"}",
+            "story": "Toujours de bonne humeur, il fait des galipettes pour te faire rire."
+          },
+          "proposed": {
+            "name": "Pivertin",
+            "anatomy": "Petit oiseau vertical à deux ailes courtes, bec mousse et queue en éventail rigide",
+            "role": "Ouvre de petits abris dans le bois déjà tendre"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_0_3.png",
+              "sha256": "b8416c32e77ebd36b08a6298fbe0b0d2261b797c88da3131a3479c0e1f73a9ac"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_3-ado.png",
+              "sha256": "fe3f9ee63831351e7f62872647110280443e2996d0598789318ea6397be31a05"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_3-adulte.png",
+              "sha256": "2c98873cfe4b424d7df237a6528138c2e4c1ef2bb570ebe794adc33c5559a435"
+            }
+          ]
+        },
+        {
+          "id": "creature:0:4",
+          "speciesKey": "creature_world_0_4",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:0:4",
+            "worldIndex": 0,
+            "speciesKey": "creature_world_0_4",
+            "nameDefault": "Praline",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_0_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_0_4-ado.png\",\"3\":\"socle/creature/creature_world_0_4-adulte.png\"}",
+            "story": "Il dormait bien caché dans ce monde en t'attendant, toi précisément."
+          },
+          "proposed": {
+            "name": "Fougrette",
+            "anatomy": "Fronde vivante en crosse déroulée, aux folioles latérales et à un pied fibreux",
+            "role": "Retient les gouttes sous la canopée"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_0_4.png",
+              "sha256": "f8bf74fc37d5b251aba2b43263f22c032dcd8a3bcefd8b0162cfcefacb4fc7f8"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_4-ado.png",
+              "sha256": "268ad560858ab31d57d8bc43fec605c378788a0bfa4f1bad9179abd033a5b315"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_4-adulte.png",
+              "sha256": "0452a06e254aa8d4269cfd544513ccb00055bf95e569464e73ed49f450fed898"
+            }
+          ]
+        },
+        {
+          "id": "creature:0:5",
+          "speciesKey": "creature_world_0_5",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:0:5",
+            "worldIndex": 0,
+            "speciesKey": "creature_world_0_5",
+            "nameDefault": "Nougat",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_0_5.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_0_5-ado.png\",\"3\":\"socle/creature/creature_world_0_5-adulte.png\"}",
+            "story": "Un cœur gros comme ça : il partage tout, même son goûter préféré."
+          },
+          "proposed": {
+            "name": "Lucéran",
+            "anatomy": "Insecte à deux longues ailes translucides et abdomen lumineux segmenté",
+            "role": "Guide les pollinisateurs entre les fleurs nocturnes"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_0_5.png",
+              "sha256": "00be37788dfb3f0451e362717a6d93b1513eaca7be88c1aceb75fd81d4fa21b4"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_5-ado.png",
+              "sha256": "90c11ee46f3bc5d74f8a978212846a22bcb2ecbd05edf08e645a615e55d148be"
+            },
+            {
+              "ref": "socle/creature/creature_world_0_5-adulte.png",
+              "sha256": "3ce0975bd2a8e21753765aca194c208ac2be8a01b971709a2b7d3d0356daeb2e"
+            }
+          ]
+        },
+        {
+          "id": "legendary:0",
+          "speciesKey": "legendary_world_0",
+          "rarity": "legendary",
+          "inEggPool": false,
+          "before": {
+            "id": "legendary:0",
+            "worldIndex": 0,
+            "speciesKey": "legendary_world_0",
+            "nameDefault": "Braisille",
+            "rarity": "legendary",
+            "maxStage": 3,
+            "inEggPool": false,
+            "artRef": "socle/creature/legendary_world_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/legendary_world_0-ado.png\",\"3\":\"socle/creature/legendary_world_0-adulte.png\"}",
+            "story": "La gardienne légendaire de ce monde — elle veillait sur le boss."
+          },
+          "proposed": {
+            "name": "Tormille",
+            "anatomy": "Gardien quadrupède trapu, corps de souche creuse allongée et quatre épaisses pattes d’écorce",
+            "role": "Protège les petits abris du sous-bois"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/legendary_world_0.png",
+              "sha256": "0a73c2367fbcdb153a256deeeb9cf6e70fc0fca6bc661c761f50e939ca28044e"
+            },
+            {
+              "ref": "socle/creature/legendary_world_0-ado.png",
+              "sha256": "f3c03c4a844a401aa7b8b03db487fa7a55e559612fdf83e32e851b537b78d7f9"
+            },
+            {
+              "ref": "socle/creature/legendary_world_0-adulte.png",
+              "sha256": "b665e1e20544c7b6194a2fa2d9d3f5e0051372cbccab27a56406fd21dfa6dbdc"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "worldIndex": 1,
+      "theme": "magic",
+      "label": "Royaume magique",
+      "setting": "Jardins suspendus — fleurs de cristal et tours, faune différente des racines et réserves de rosée du monde 6",
+      "creatures": [
+        {
+          "id": "creature:1:0",
+          "speciesKey": "creature_world_1_0",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:1:0",
+            "worldIndex": 1,
+            "speciesKey": "creature_world_1_0",
+            "nameDefault": "Câlin",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_1_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_1_0-ado.png\",\"3\":\"socle/creature/creature_world_1_0-adulte.png\"}",
+            "story": "Timide au début, mais dès qu'il te connaît, il ne te lâche plus d'une semelle."
+          },
+          "proposed": {
+            "name": "Véliane",
+            "anatomy": "Créature aérienne à disque lenticulaire, bord souple plissé et quatre rubans de stabilisation",
+            "role": "Distribue la poussière fertile entre les îlots"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_1_0.png",
+              "sha256": "50721a850f005549f4dc88b35dd51152a815d418e00b88fb91cf53ae9b6ebbc8"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_0-ado.png",
+              "sha256": "de5ad2d372c6ad0c0869a2a9dc139484592df6b336d02c6a445129cfb7843d7c"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_0-adulte.png",
+              "sha256": "4f751ae74613c467b08e570409b52287e3e1e1bdee5e38c536e521e6fbbb062d"
+            }
+          ]
+        },
+        {
+          "id": "creature:1:1",
+          "speciesKey": "creature_world_1_1",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:1:1",
+            "worldIndex": 1,
+            "speciesKey": "creature_world_1_1",
+            "nameDefault": "Pompon",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_1_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_1_1-ado.png\",\"3\":\"socle/creature/creature_world_1_1-adulte.png\"}",
+            "story": "Il collectionne les jolis cailloux brillants et t'en offre un quand tu réussis."
+          },
+          "proposed": {
+            "name": "Oscille",
+            "anatomy": "Gousse pendulaire vivante suspendue à une seule tige torsadée, avec deux valves étroites",
+            "role": "Accorde les vibrations qui ouvrent les fleurs de cristal"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_1_1.png",
+              "sha256": "14e1a8a42b7e3ecca1298cb866ab720754fa308027c8038190e4621a948a931a"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_1-ado.png",
+              "sha256": "f659b14f9c0ef9eb3b30ef5583b7379c90f1a0d8b9e78784e86979d3227a4b48"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_1-adulte.png",
+              "sha256": "05d68e69c9fed5192c11969ea5e4ad5e0483f9ff6c0440e724ae00f72f63d181"
+            }
+          ]
+        },
+        {
+          "id": "creature:1:2",
+          "speciesKey": "creature_world_1_2",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:1:2",
+            "worldIndex": 1,
+            "speciesKey": "creature_world_1_2",
+            "nameDefault": "Guimauve",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_1_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_1_2-ado.png\",\"3\":\"socle/creature/creature_world_1_2-adulte.png\"}",
+            "story": "Toujours de bonne humeur, il fait des galipettes pour te faire rire."
+          },
+          "proposed": {
+            "name": "Calibrune",
+            "anatomy": "Petit fuseau vivant à trois ailettes hélicoïdales et noyau central allongé",
+            "role": "Traverse les courants verticaux pour porter les semences"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_1_2.png",
+              "sha256": "504d35f91eea842e02254bb4278369605fedb2a013c630e3c14b567964bcfc72"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_2-ado.png",
+              "sha256": "d4cc2c1994e56c5106b275a23a3a99c9c2e5d1fe8e48de18a4e5e54eae4eeaf8"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_2-adulte.png",
+              "sha256": "18a9a1c858a2ad4cbb7663a98bd9a14bd5697dfa79362b3768fd8e44d4327b67"
+            }
+          ]
+        },
+        {
+          "id": "creature:1:3",
+          "speciesKey": "creature_world_1_3",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:1:3",
+            "worldIndex": 1,
+            "speciesKey": "creature_world_1_3",
+            "nameDefault": "Praline",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_1_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_1_3-ado.png\",\"3\":\"socle/creature/creature_world_1_3-adulte.png\"}",
+            "story": "Il dormait bien caché dans ce monde en t'attendant, toi précisément."
+          },
+          "proposed": {
+            "name": "Prismelle",
+            "anatomy": "Organisme minéral doux en rosette basse de prismes arrondis, avec un pied annulaire",
+            "role": "Concentre la lumière diffuse au pied des fleurs"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_1_3.png",
+              "sha256": "6be8c2c85eaccf40af72d6b421b9a08799ccd67a91cdd9597c6c96eecbb6a927"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_3-ado.png",
+              "sha256": "6bc0b189f4cb62195a676d72b6e6ed226a8492d3c95fc8f5e6ecbef9605f7394"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_3-adulte.png",
+              "sha256": "532d06b26f9bc29e0f770134d8fbf3f1093f7f4179350951e7fa155e831f53aa"
+            }
+          ]
+        },
+        {
+          "id": "creature:1:4",
+          "speciesKey": "creature_world_1_4",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:1:4",
+            "worldIndex": 1,
+            "speciesKey": "creature_world_1_4",
+            "nameDefault": "Nougat",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_1_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_1_4-ado.png\",\"3\":\"socle/creature/creature_world_1_4-adulte.png\"}",
+            "story": "Un cœur gros comme ça : il partage tout, même son goûter préféré."
+          },
+          "proposed": {
+            "name": "Eolune",
+            "anatomy": "Ruban vivant ondulant à corps continu, deux extrémités élargies et petites crêtes dorsales",
+            "role": "Apaise les rafales autour des jeunes plants"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_1_4.png",
+              "sha256": "99b6b34a96adfd72e492c0ada3e4c4f0bdd0037a36b950c1f55d9f3dabcc7ff0"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_4-ado.png",
+              "sha256": "1f6477ca7de905134f8395b59b4778fff008bb919636eef63e87161eb6d9f4e4"
+            },
+            {
+              "ref": "socle/creature/creature_world_1_4-adulte.png",
+              "sha256": "bf042a0a159ab56d5411023477ba4f5d24831c4f820c5c94a41ba1cedbc88ece"
+            }
+          ]
+        },
+        {
+          "id": "legendary:1",
+          "speciesKey": "legendary_world_1",
+          "rarity": "legendary",
+          "inEggPool": false,
+          "before": {
+            "id": "legendary:1",
+            "worldIndex": 1,
+            "speciesKey": "legendary_world_1",
+            "nameDefault": "Aquagon",
+            "rarity": "legendary",
+            "maxStage": 3,
+            "inEggPool": false,
+            "artRef": "socle/creature/legendary_world_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/legendary_world_1-ado.png\",\"3\":\"socle/creature/legendary_world_1-adulte.png\"}",
+            "story": "Une créature rare des profondeurs, enfin libre grâce à toi."
+          },
+          "proposed": {
+            "name": "Altéon",
+            "anatomy": "Gardien flottant en calice floral ouvert, cinq grands pétales porteurs et un long pistil souple",
+            "role": "Abaisse doucement les graines vers les nouveaux îlots"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/legendary_world_1.png",
+              "sha256": "9c69db07e5d374e9f4b6bede3d0ac30276cd29bf809ed15d2331903f9c1cdfd3"
+            },
+            {
+              "ref": "socle/creature/legendary_world_1-ado.png",
+              "sha256": "62c2e15f63b346289600a5a5b8c9ba91264bbb7bbc1b167bd0d8ae217d9e9268"
+            },
+            {
+              "ref": "socle/creature/legendary_world_1-adulte.png",
+              "sha256": "678359e22d48e91d4f0296b27d0419af5079ad5fcc43256c1bfb1f19d61e2f03"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "worldIndex": 2,
+      "theme": "snow",
+      "label": "Vallée enneigée",
+      "setting": "Lanternes du grand blanc — congères, sapins, glace et abris sous la neige",
+      "creatures": [
+        {
+          "id": "creature:2:0",
+          "speciesKey": "creature_world_2_0",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:2:0",
+            "worldIndex": 2,
+            "speciesKey": "creature_world_2_0",
+            "nameDefault": "Pompon",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_2_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_2_0-ado.png\",\"3\":\"socle/creature/creature_world_2_0-adulte.png\"}",
+            "story": "Il collectionne les jolis cailloux brillants et t'en offre un quand tu réussis."
+          },
+          "proposed": {
+            "name": "Duvorin",
+            "anatomy": "Mammifère fouisseur compact sans oreilles saillantes, museau en coin et deux grandes pattes avant arrondies",
+            "role": "Creuse des galeries qui gardent la chaleur"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_2_0.png",
+              "sha256": "790198f510b16b0791f8b85e6d43cb1c47a1c602b6eb514baf8d4a5849d4b5b7"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_0-ado.png",
+              "sha256": "ca9de5dfb03b1bd5a0d6c4a3a3b5ce1f7c1f1c0bb62c9ec8b74880923cc6d392"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_0-adulte.png",
+              "sha256": "90adbb2de8c85ae904c9b77c62fc6ad2b8c29b519b21020dd9988924c395c469"
+            }
+          ]
+        },
+        {
+          "id": "creature:2:1",
+          "speciesKey": "creature_world_2_1",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:2:1",
+            "worldIndex": 2,
+            "speciesKey": "creature_world_2_1",
+            "nameDefault": "Guimauve",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_2_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_2_1-ado.png\",\"3\":\"socle/creature/creature_world_2_1-adulte.png\"}",
+            "story": "Toujours de bonne humeur, il fait des galipettes pour te faire rire."
+          },
+          "proposed": {
+            "name": "Patinelle",
+            "anatomy": "Créature basse à corps fuselé et deux longues semelles latérales aplaties, sans roue",
+            "role": "Glisse sur la croûte de neige sans la briser"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_2_1.png",
+              "sha256": "84b9f069d038f4e7f906251eb16bb2f06ce35e0536a16cdeed35e9fd5c0d30e2"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_1-ado.png",
+              "sha256": "baf274bea71015fb2fe175826d85402b386651cba84325aae3f8f5d20fc14d5b"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_1-adulte.png",
+              "sha256": "1793746433e5f6edafdfb086c2df632f3df1053dbdd423632c3d28215cb613d6"
+            }
+          ]
+        },
+        {
+          "id": "creature:2:2",
+          "speciesKey": "creature_world_2_2",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:2:2",
+            "worldIndex": 2,
+            "speciesKey": "creature_world_2_2",
+            "nameDefault": "Praline",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_2_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_2_2-ado.png\",\"3\":\"socle/creature/creature_world_2_2-adulte.png\"}",
+            "story": "Il dormait bien caché dans ce monde en t'attendant, toi précisément."
+          },
+          "proposed": {
+            "name": "Nivéo",
+            "anatomy": "Oiseau ramassé à poitrine isolante, ailes très courtes et larges pieds frangés",
+            "role": "Tasse les bordures des abris après les chutes de neige"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_2_2.png",
+              "sha256": "428400a171f91e7d8d05a656254287aa4113604566cca6fa2c8bc28912ba9948"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_2-ado.png",
+              "sha256": "b21007fd657960d6f3745a68dfd910b75238ddc8e6c38d8d1d35779a15647019"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_2-adulte.png",
+              "sha256": "303d82fec468cc1eb8ee4406c0467290dd9ee23780600f27d8c80c8b5ff33b87"
+            }
+          ]
+        },
+        {
+          "id": "creature:2:3",
+          "speciesKey": "creature_world_2_3",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:2:3",
+            "worldIndex": 2,
+            "speciesKey": "creature_world_2_3",
+            "nameDefault": "Nougat",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_2_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_2_3-ado.png\",\"3\":\"socle/creature/creature_world_2_3-adulte.png\"}",
+            "story": "Un cœur gros comme ça : il partage tout, même son goûter préféré."
+          },
+          "proposed": {
+            "name": "Peltrise",
+            "anatomy": "Insecte sous-nival à dos bombé couvert de fins poils isolants et six courtes pattes",
+            "role": "Recycle les aiguilles de sapin dans les poches tièdes"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_2_3.png",
+              "sha256": "795b7479e042a263692bfe2e2748112265ccdf64823d2db2259a4d078fa63865"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_3-ado.png",
+              "sha256": "c8b64b6374601a7602cebd2ac058e31ec22ab6438577026b2753abdeebf07171"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_3-adulte.png",
+              "sha256": "11c18a2c1c7ad92bb1dccd341400dae4ecfb3daaca4d8981d5da9e39fbcc2e51"
+            }
+          ]
+        },
+        {
+          "id": "creature:2:4",
+          "speciesKey": "creature_world_2_4",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:2:4",
+            "worldIndex": 2,
+            "speciesKey": "creature_world_2_4",
+            "nameDefault": "Pistache",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_2_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_2_4-ado.png\",\"3\":\"socle/creature/creature_world_2_4-adulte.png\"}",
+            "story": "Curieux de tout, il te suit partout pour découvrir de nouvelles aventures."
+          },
+          "proposed": {
+            "name": "Cristou",
+            "anatomy": "Microcolonie vivante en coussin poreux à cinq tubes arrondis et socle souple",
+            "role": "Retient l’eau de fonte sans geler entièrement"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_2_4.png",
+              "sha256": "9b84e1f1a84441805325d87fdda4757ff502d7712291035d9d8a998fb5e0c1fb"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_4-ado.png",
+              "sha256": "e922076d0f7d2f93ffe95f471d7f97125e274d7e13244b0ccd7f4aec87d5bc24"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_4-adulte.png",
+              "sha256": "a0df81fff5815c0321e8838c3fb74c5e8361432f8294e07a9538910336bc41d0"
+            }
+          ]
+        },
+        {
+          "id": "creature:2:5",
+          "speciesKey": "creature_world_2_5",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:2:5",
+            "worldIndex": 2,
+            "speciesKey": "creature_world_2_5",
+            "nameDefault": "Coquillette",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_2_5.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_2_5-ado.png\",\"3\":\"socle/creature/creature_world_2_5-adulte.png\"}",
+            "story": "Un vrai petit soleil — quand il sourit, tout le monde sourit avec lui."
+          },
+          "proposed": {
+            "name": "Ourlane",
+            "anatomy": "Mammifère allongé à ventre large, queue plate et petites oreilles repliées",
+            "role": "Relie les mares de dégel par des passages abrités"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_2_5.png",
+              "sha256": "661a2394221463ec524d08ce4d5a2a79411cbb79f96d182584b71ab13843b703"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_5-ado.png",
+              "sha256": "31bb381fe29f20b143119ab4095de2a2c3e6942f8e7fc5d463fb0b06b7248009"
+            },
+            {
+              "ref": "socle/creature/creature_world_2_5-adulte.png",
+              "sha256": "d0c37ee82f3ae214343b581165fd045fd703c0f5bbe107d17c27691b946ec0fe"
+            }
+          ]
+        },
+        {
+          "id": "legendary:2",
+          "speciesKey": "legendary_world_2",
+          "rarity": "legendary",
+          "inEggPool": false,
+          "before": {
+            "id": "legendary:2",
+            "worldIndex": 2,
+            "speciesKey": "legendary_world_2",
+            "nameDefault": "Sylvelune",
+            "rarity": "legendary",
+            "maxStage": 3,
+            "inEggPool": false,
+            "artRef": "socle/creature/legendary_world_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/legendary_world_2-ado.png\",\"3\":\"socle/creature/legendary_world_2-adulte.png\"}",
+            "story": "Elle dormait au sommet du monde en attendant une championne."
+          },
+          "proposed": {
+            "name": "Boréalin",
+            "anatomy": "Gardien massif à corps ovoïde horizontal, quatre larges pieds et une grande collerette isolante",
+            "role": "Maintient un refuge chaud lors des vents froids"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/legendary_world_2.png",
+              "sha256": "994cb4a56fbe65e5ddd6ce2921f3a44716ac432cc50b9f1e657994e0b9893c45"
+            },
+            {
+              "ref": "socle/creature/legendary_world_2-ado.png",
+              "sha256": "336d52d7a9e1037d3494dd53dc4f16210b3cb180b8e1ed70ca60453568bbf9eb"
+            },
+            {
+              "ref": "socle/creature/legendary_world_2-adulte.png",
+              "sha256": "f8c8260879e0f7a11db56114d1f9a1207b11dd76cdfc902a4ebb60886690f63f"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "worldIndex": 3,
+      "theme": "candy",
+      "label": "Pays des bonbons",
+      "setting": "Promenade des délices — biscuit, caramel, fruits gélifiés et roseaux de sucre",
+      "creatures": [
+        {
+          "id": "creature:3:0",
+          "speciesKey": "creature_world_3_0",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:3:0",
+            "worldIndex": 3,
+            "speciesKey": "creature_world_3_0",
+            "nameDefault": "Guimauve",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_3_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_3_0-ado.png\",\"3\":\"socle/creature/creature_world_3_0-adulte.png\"}",
+            "story": "Toujours de bonne humeur, il fait des galipettes pour te faire rire."
+          },
+          "proposed": {
+            "name": "Gaufrel",
+            "anatomy": "Être de gaufrette formé de deux plaques articulées avec six pieds en miettes liées",
+            "role": "Stabilise les berges friables des ruisseaux"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_3_0.png",
+              "sha256": "7dcdcd56ad98cd997e388f0282877e0b14c67492963785668a26f093c428c5f0"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_0-ado.png",
+              "sha256": "c6dc9d644323e51976dedcc006e0ef9ce125715f3e2eb9e6e1fc7614b0d494c0"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_0-adulte.png",
+              "sha256": "593511835e12ca3a15fa8d843a3ae2d2b0fd729d371eb7101c6359bc84a3d229"
+            }
+          ]
+        },
+        {
+          "id": "creature:3:1",
+          "speciesKey": "creature_world_3_1",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:3:1",
+            "worldIndex": 3,
+            "speciesKey": "creature_world_3_1",
+            "nameDefault": "Praline",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_3_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_3_1-ado.png\",\"3\":\"socle/creature/creature_world_3_1-adulte.png\"}",
+            "story": "Il dormait bien caché dans ce monde en t'attendant, toi précisément."
+          },
+          "proposed": {
+            "name": "Molassa",
+            "anatomy": "Créature de caramel en long ruban torsadé, à tête intégrée et extrémité en ventouse",
+            "role": "Répare les fissures entre les dalles de biscuit"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_3_1.png",
+              "sha256": "fe04ce83e97d9b5d7e5dc2808c62218f31e3aa61595c606fe3ed80950d748caa"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_1-ado.png",
+              "sha256": "0d50faa5efeeccda0c3637eab3c059b2b5f5a7de7a8996f274c1a77a25d29101"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_1-adulte.png",
+              "sha256": "725eb1f5dceda305086407c3c76ab0190760d2e95829fb2ce92d097846068f14"
+            }
+          ]
+        },
+        {
+          "id": "creature:3:2",
+          "speciesKey": "creature_world_3_2",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:3:2",
+            "worldIndex": 3,
+            "speciesKey": "creature_world_3_2",
+            "nameDefault": "Nougat",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_3_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_3_2-ado.png\",\"3\":\"socle/creature/creature_world_3_2-adulte.png\"}",
+            "story": "Un cœur gros comme ça : il partage tout, même son goûter préféré."
+          },
+          "proposed": {
+            "name": "Pectine",
+            "anatomy": "Corps de gelée souple en trois segments oblongs et quatre petits lobes locomoteurs",
+            "role": "Transporte les pépins vers les bosquets fruités"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_3_2.png",
+              "sha256": "596a7562ab12055ddb4bac4e7b44e34b4daf47edec44bfd52fce5b071c757256"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_2-ado.png",
+              "sha256": "29a550ae74f0cae648b3b8aca9e71251afe66ad5f62caecee19a6bd190dcaf35"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_2-adulte.png",
+              "sha256": "d76056a572770b64b93cae81f64e6dc50cd90263d38aaa8f3e637b03c4c74efc"
+            }
+          ]
+        },
+        {
+          "id": "creature:3:3",
+          "speciesKey": "creature_world_3_3",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:3:3",
+            "worldIndex": 3,
+            "speciesKey": "creature_world_3_3",
+            "nameDefault": "Pistache",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_3_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_3_3-ado.png\",\"3\":\"socle/creature/creature_world_3_3-adulte.png\"}",
+            "story": "Curieux de tout, il te suit partout pour découvrir de nouvelles aventures."
+          },
+          "proposed": {
+            "name": "Friselot",
+            "anatomy": "Créature de sucre filé en fuseau ajouré à deux longues palettes souples",
+            "role": "Démêle les roseaux pour laisser circuler le vent"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_3_3.png",
+              "sha256": "be6184af1b426cccf74069806c45f3f48650c8973e3243b90cc52aa5770d7da9"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_3-ado.png",
+              "sha256": "369110bcf912609b11a91e6caa43a47a59e33781fb642c0104816727e693c454"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_3-adulte.png",
+              "sha256": "4da3e4f71dbbe1e1ea6e84c13cd74f798efdf98769c2beb6408cf9b7091ff253"
+            }
+          ]
+        },
+        {
+          "id": "creature:3:4",
+          "speciesKey": "creature_world_3_4",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:3:4",
+            "worldIndex": 3,
+            "speciesKey": "creature_world_3_4",
+            "nameDefault": "Coquillette",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_3_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_3_4-ado.png\",\"3\":\"socle/creature/creature_world_3_4-adulte.png\"}",
+            "story": "Un vrai petit soleil — quand il sourit, tout le monde sourit avec lui."
+          },
+          "proposed": {
+            "name": "Croustillin",
+            "anatomy": "Petit être en croissant feuilleté, à plis porteurs et queue courte en spirale ouverte",
+            "role": "Ramasse les miettes et enrichit les jeunes pousses"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_3_4.png",
+              "sha256": "2f4afa60efdad2a5ab000126620e60a2a09e62f240a3402aa68fd12c3b9d0773"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_4-ado.png",
+              "sha256": "26bc3d658bacdad0d62de2cc196b3c8e6842457c943390789bb262e458cc6f36"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_4-adulte.png",
+              "sha256": "b4f1d111fa0e133ddf1e307fdb60fc0e0d3eee38d770e9f550415c821cfe58d6"
+            }
+          ]
+        },
+        {
+          "id": "creature:3:5",
+          "speciesKey": "creature_world_3_5",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:3:5",
+            "worldIndex": 3,
+            "speciesKey": "creature_world_3_5",
+            "nameDefault": "Myrtille",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_3_5.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_3_5-ado.png\",\"3\":\"socle/creature/creature_world_3_5-adulte.png\"}",
+            "story": "Un petit copain tout rond qui adore les câlins — Teddy dit qu'il ronronne comme un pot de miel."
+          },
+          "proposed": {
+            "name": "Berligo",
+            "anatomy": "Créature à noyau en berlingot arrondi et trois pieds élastiques en réglisse",
+            "role": "Répartit les gouttelettes de sirop sur les terrasses"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_3_5.png",
+              "sha256": "db827608e72ec2f6b107aa8d380c0d58141358d33ff34a360bd8861bbc59ccb8"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_5-ado.png",
+              "sha256": "5cb553aa39431ab86a6fcb099bbb57df114e1ddf0fa208e803d1224583816f10"
+            },
+            {
+              "ref": "socle/creature/creature_world_3_5-adulte.png",
+              "sha256": "f86deb2f621e32e06ba63b9b97e5d7680706007bfa6f8db77117f45a11da6181"
+            }
+          ]
+        },
+        {
+          "id": "legendary:3",
+          "speciesKey": "legendary_world_3",
+          "rarity": "legendary",
+          "inEggPool": false,
+          "before": {
+            "id": "legendary:3",
+            "worldIndex": 3,
+            "speciesKey": "legendary_world_3",
+            "nameDefault": "Astrogriffe",
+            "rarity": "legendary",
+            "maxStage": 3,
+            "inEggPool": false,
+            "artRef": "socle/creature/legendary_world_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/legendary_world_3-ado.png\",\"3\":\"socle/creature/legendary_world_3-adulte.png\"}",
+            "story": "Née d'une étoile filante, elle a choisi de te suivre."
+          },
+          "proposed": {
+            "name": "Melloria",
+            "anatomy": "Gardien fait de quatre grandes feuilles de pâte superposées autour d’un cœur souple, porté par un pied large",
+            "role": "Ombrage les bosquets pour éviter que la gelée ne fonde"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/legendary_world_3.png",
+              "sha256": "f0ec7498e22ba9d00c39c9bddd7d9ab0ea13c3a315c17f8b72509ca67da69dc1"
+            },
+            {
+              "ref": "socle/creature/legendary_world_3-ado.png",
+              "sha256": "2ce9a87c846309383fafdf7f2e282f60c6ad49c1a1a91e841b7ab43c0fc46bd8"
+            },
+            {
+              "ref": "socle/creature/legendary_world_3-adulte.png",
+              "sha256": "aa13645a6f1bdaf19deee82867f1946934b55c4e267b27a50901db34c1bd0118"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "worldIndex": 4,
+      "theme": "forest",
+      "label": "Forêt enchantée",
+      "setting": "Clairière des lanternes — saules, bassins et fleurs, distincte du sous-bois du monde 0",
+      "creatures": [
+        {
+          "id": "creature:4:0",
+          "speciesKey": "creature_world_4_0",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:4:0",
+            "worldIndex": 4,
+            "speciesKey": "creature_world_4_0",
+            "nameDefault": "Praline",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_4_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_4_0-ado.png\",\"3\":\"socle/creature/creature_world_4_0-adulte.png\"}",
+            "story": "Il dormait bien caché dans ce monde en t'attendant, toi précisément."
+          },
+          "proposed": {
+            "name": "Salicou",
+            "anatomy": "Amphibien large et aplati à quatre pieds palmés et une courte crête souple",
+            "role": "Circule entre les bassins et entretient leurs passages"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_4_0.png",
+              "sha256": "a63d8dd5c813e833f8483c61062ddf888a6e6796efc7873396cda6207d657912"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_0-ado.png",
+              "sha256": "34439524c3d6cb5d88414c685292e322af4e23dd5975a46eab55ee505db8d1e2"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_0-adulte.png",
+              "sha256": "7d3c6c49056153661134f8c60821d654e6d4f33644cc67540db816fca7946e33"
+            }
+          ]
+        },
+        {
+          "id": "creature:4:1",
+          "speciesKey": "creature_world_4_1",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:4:1",
+            "worldIndex": 4,
+            "speciesKey": "creature_world_4_1",
+            "nameDefault": "Nougat",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_4_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_4_1-ado.png\",\"3\":\"socle/creature/creature_world_4_1-adulte.png\"}",
+            "story": "Un cœur gros comme ça : il partage tout, même son goûter préféré."
+          },
+          "proposed": {
+            "name": "Hydrelle",
+            "anatomy": "Insecte patineur très bas à six longues pattes latérales terminées en coussinets hydrofuges",
+            "role": "Rassemble les fragments flottants à la surface des mares"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_4_1.png",
+              "sha256": "12e5bc965af79feee9f92d6f8161cb81191b26dc8c00625dbd19c7254b4144d4"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_1-ado.png",
+              "sha256": "0b6904a63b58df9471936ba1a0512bc30c85127ffeae5cf5b1480424d82a7dfb"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_1-adulte.png",
+              "sha256": "9282e18390f8800bc6414679db66c5a4a878c1819917c9aed046d79fc236790b"
+            }
+          ]
+        },
+        {
+          "id": "creature:4:2",
+          "speciesKey": "creature_world_4_2",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:4:2",
+            "worldIndex": 4,
+            "speciesKey": "creature_world_4_2",
+            "nameDefault": "Pistache",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_4_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_4_2-ado.png\",\"3\":\"socle/creature/creature_world_4_2-adulte.png\"}",
+            "story": "Curieux de tout, il te suit partout pour découvrir de nouvelles aventures."
+          },
+          "proposed": {
+            "name": "Mousselin",
+            "anatomy": "Organisme végétal en coussin de mousse sphérique fendu, à plusieurs radicelles souples",
+            "role": "Filtre l’eau qui s’écoule sous les saules"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_4_2.png",
+              "sha256": "1e6d79391a037392599e7df7ce50bb93f755f2d760238d7f0f6b478baf40c43b"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_2-ado.png",
+              "sha256": "d34b99949a1c7985d3c4bc3734d100797eeb00fee5a1a9d60b647ea56e81108c"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_2-adulte.png",
+              "sha256": "c2d145cbd9bac66d3d8606c57be77a4e2ae8b968ebf999802ce258a2e42e1690"
+            }
+          ]
+        },
+        {
+          "id": "creature:4:3",
+          "speciesKey": "creature_world_4_3",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:4:3",
+            "worldIndex": 4,
+            "speciesKey": "creature_world_4_3",
+            "nameDefault": "Coquillette",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_4_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_4_3-ado.png\",\"3\":\"socle/creature/creature_world_4_3-adulte.png\"}",
+            "story": "Un vrai petit soleil — quand il sourit, tout le monde sourit avec lui."
+          },
+          "proposed": {
+            "name": "Becaline",
+            "anatomy": "Petit échassier à deux longues jambes, bec courbe court et ailes repliées",
+            "role": "Dépose les graines le long des berges"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_4_3.png",
+              "sha256": "f8f712023b07e64bbba09a1c28d91f81ee4fb72c79f8d6f041df587d5c9d0010"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_3-ado.png",
+              "sha256": "f1088a88fa2888bd09df48aaf88511c71bcdd9ba2a33ba9db6d845bd9d76d67b"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_3-adulte.png",
+              "sha256": "1d11d366d4bdc9bdfc0f48e0f0b1cfc84151e161688093fca0f83d955862303e"
+            }
+          ]
+        },
+        {
+          "id": "creature:4:4",
+          "speciesKey": "creature_world_4_4",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:4:4",
+            "worldIndex": 4,
+            "speciesKey": "creature_world_4_4",
+            "nameDefault": "Myrtille",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_4_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_4_4-ado.png\",\"3\":\"socle/creature/creature_world_4_4-adulte.png\"}",
+            "story": "Un petit copain tout rond qui adore les câlins — Teddy dit qu'il ronronne comme un pot de miel."
+          },
+          "proposed": {
+            "name": "Lentille",
+            "anatomy": "Colonie flottante en chaîne de quatre disques foliaires reliés, visage sur le plus grand disque",
+            "role": "Protège les jeunes pousses aquatiques des courants"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_4_4.png",
+              "sha256": "0769c6da0fe0c4b34b247de60e2c6c1e68c7b6cf46706f6a456f8a80d3aef0b6"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_4-ado.png",
+              "sha256": "1be4023d83e84268b4fabc5702dd712a3dd3bcd0ccdf53f1655eca7ff9267329"
+            },
+            {
+              "ref": "socle/creature/creature_world_4_4-adulte.png",
+              "sha256": "ff719a35cd46ce64219f0e1db0d20e23eb7c345f0bdb0eaeeffd25909e7dd3ec"
+            }
+          ]
+        },
+        {
+          "id": "legendary:4",
+          "speciesKey": "legendary_world_4",
+          "rarity": "legendary",
+          "inEggPool": false,
+          "before": {
+            "id": "legendary:4",
+            "worldIndex": 4,
+            "speciesKey": "legendary_world_4",
+            "nameDefault": "Ombreneige",
+            "rarity": "legendary",
+            "maxStage": 3,
+            "inEggPool": false,
+            "artRef": "socle/creature/legendary_world_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/legendary_world_4-ado.png\",\"3\":\"socle/creature/legendary_world_4-adulte.png\"}",
+            "story": "Un esprit de givre au grand cœur, timide mais fidèle."
+          },
+          "proposed": {
+            "name": "Vannor",
+            "anatomy": "Gardien large à corps de panier tressé vivant, quatre racines portantes et deux longues frondes latérales",
+            "role": "Offre un abri ombragé près des lanternes"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/legendary_world_4.png",
+              "sha256": "8612817bf66ad3bfd086b5b4b685ba33b7d6567e03b6c3c8aaa37a27ce7e8e0f"
+            },
+            {
+              "ref": "socle/creature/legendary_world_4-ado.png",
+              "sha256": "6176257849667798109fe65de07cb3722ce0ce30c2349ffdbb6cda1b905fb037"
+            },
+            {
+              "ref": "socle/creature/legendary_world_4-adulte.png",
+              "sha256": "514bf4e1bd10f48cfa20b34ff5940655843d0c1e6b0d95469344c7e1def39bf6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "worldIndex": 5,
+      "theme": "ocean",
+      "label": "Océan scintillant",
+      "setting": "Jardin des perles — entièrement sous l’eau, récifs, sable, algues et grottes marines",
+      "creatures": [
+        {
+          "id": "creature:5:0",
+          "speciesKey": "creature_world_5_0",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:0",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_0",
+            "nameDefault": "Nougat",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_0.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_0-ado.png\",\"3\":\"socle/creature/creature_world_5_0-adulte.png\"}",
+            "story": "Un cœur gros comme ça : il partage tout, même son goûter préféré."
+          },
+          "proposed": {
+            "name": "Ondilo",
+            "anatomy": "Poisson fusiforme à nageoire dorsale continue, deux pectorales courtes et queue bifide",
+            "role": "Guide les bancs entre les coraux"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_0.png",
+              "sha256": "041b7378f48aaf958b543121486e8b316df00d6edb528b7d25424f0a6b0dc1c6"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_0-ado.png",
+              "sha256": "6c7755c65fcd0c948954d11092cd54aecdb8f4f4dbb558b5e58e3f89eec9d0ff"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_0-adulte.png",
+              "sha256": "3bc0c0c2628dd0ee9178751c571b864c4825bc253537e848bc49a5dda9523937"
+            }
+          ]
+        },
+        {
+          "id": "creature:5:1",
+          "speciesKey": "creature_world_5_1",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:1",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_1",
+            "nameDefault": "Pistache",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_1.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_1-ado.png\",\"3\":\"socle/creature/creature_world_5_1-adulte.png\"}",
+            "story": "Curieux de tout, il te suit partout pour découvrir de nouvelles aventures."
+          },
+          "proposed": {
+            "name": "Coralline",
+            "anatomy": "Polype fixé à pied charnu cylindrique et couronne de huit tentacules arrondis",
+            "role": "Filtre les particules portées par le courant"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_1.png",
+              "sha256": "60a0eeff1b0ec736992b932df3edd9cbdca3d468ad5ba93d4bd148e83e162521"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_1-ado.png",
+              "sha256": "e685fee0cf3cb1840bc6808eb3e532cdb3f4d163c1fe41f2e9e9bccbb8579279"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_1-adulte.png",
+              "sha256": "7b1e65091569b8744394f4266fd985c8cab526d8a664dd61d307b6411e14a7cb"
+            }
+          ]
+        },
+        {
+          "id": "creature:5:2",
+          "speciesKey": "creature_world_5_2",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:2",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_2",
+            "nameDefault": "Coquillette",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_2.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_2-ado.png\",\"3\":\"socle/creature/creature_world_5_2-adulte.png\"}",
+            "story": "Un vrai petit soleil — quand il sourit, tout le monde sourit avec lui."
+          },
+          "proposed": {
+            "name": "Nautilon",
+            "anatomy": "Céphalopode à coquille en spirale aplatie et huit petits bras souples autour du visage",
+            "role": "Nettoie les anfractuosités sans abîmer les coraux"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_2.png",
+              "sha256": "0cb57df979829d64d96276a4290b7e574bea1f3c0212bb417d281a92dfe2afdd"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_2-ado.png",
+              "sha256": "7b2698f2b9b190f7df12797879d1a7a8b6b74dc4a1043013bd13183dd801b14e"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_2-adulte.png",
+              "sha256": "27df41238c0b5b4b7608221dd4b7f85dab5ab07efaf53503f6dc66cdddb52b92"
+            }
+          ]
+        },
+        {
+          "id": "creature:5:3",
+          "speciesKey": "creature_world_5_3",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:3",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_3",
+            "nameDefault": "Myrtille",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_3.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_3-ado.png\",\"3\":\"socle/creature/creature_world_5_3-adulte.png\"}",
+            "story": "Un petit copain tout rond qui adore les câlins — Teddy dit qu'il ronronne comme un pot de miel."
+          },
+          "proposed": {
+            "name": "Lamérie",
+            "anatomy": "Limace marine longue à deux rangées de papilles foliacées, sans coquille",
+            "role": "Broute les algues sur les pierres du récif"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_3.png",
+              "sha256": "ee06dffae599e9c9ec58aae722bc68570e43bc7be822d48da4c33a1feb20c917"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_3-ado.png",
+              "sha256": "faa1ec49a271f9b7eaa3629164615982782e154eec0441e4a2d42dd4ea2839ea"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_3-adulte.png",
+              "sha256": "48388c4f377ec562288cf1b70bc8077c3fb589eb6b9b135c00000bd853bc453d"
+            }
+          ]
+        },
+        {
+          "id": "creature:5:4",
+          "speciesKey": "creature_world_5_4",
+          "rarity": "common",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:4",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_4",
+            "nameDefault": "Réglisse",
+            "rarity": "common",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_4.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_4-ado.png\",\"3\":\"socle/creature/creature_world_5_4-adulte.png\"}",
+            "story": "Timide au début, mais dès qu'il te connaît, il ne te lâche plus d'une semelle."
+          },
+          "proposed": {
+            "name": "Rémora",
+            "anatomy": "Petite raie à grand disque rhomboïde, bouche douce dessous et queue fine sans aiguillon",
+            "role": "Remue doucement le sable pour aérer les herbiers"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_4.png",
+              "sha256": "9bb46266164f9dec1a4caa9c290b4e69d640f7cfaca94d6ee1ca785c0923565e"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_4-ado.png",
+              "sha256": "356d53bec6587bc161a3dc0583a94976111db8b02fd2cd1fb8d87fd4e6cb07ae"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_4-adulte.png",
+              "sha256": "d9239aab34af2e31dbbf0b34a1d5a8924b994e5da593f3a5d8785e845f58a50f"
+            }
+          ]
+        },
+        {
+          "id": "creature:5:5",
+          "speciesKey": "creature_world_5_5",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:5",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_5",
+            "nameDefault": "Framboise",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_5.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_5-ado.png\",\"3\":\"socle/creature/creature_world_5_5-adulte.png\"}",
+            "story": "Il collectionne les jolis cailloux brillants et t'en offre un quand tu réussis."
+          },
+          "proposed": {
+            "name": "Sablune",
+            "anatomy": "Crustacé fouisseur à carapace ovale, dix petites pattes et deux antennes en éventail",
+            "role": "Creuse les petits chenaux sous les coquillages"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_5.png",
+              "sha256": "ecfa90d179de332348edb501f920a32e2f9ab90f30ac367dcb1c9c0dd0a8d1f2"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_5-ado.png",
+              "sha256": "a67a97a35ad1800aed689ecb3b1a934ff2506c640925585842d26d774be414c4"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_5-adulte.png",
+              "sha256": "5f61b86e3ef3673907febb8bd4cc7ae32f33e5daba9c684aa43a9461dbbb4d84"
+            }
+          ]
+        },
+        {
+          "id": "creature:5:6",
+          "speciesKey": "creature_world_5_6",
+          "rarity": "rare",
+          "inEggPool": true,
+          "before": {
+            "id": "creature:5:6",
+            "worldIndex": 5,
+            "speciesKey": "creature_world_5_6",
+            "nameDefault": "Chamallow",
+            "rarity": "rare",
+            "maxStage": 3,
+            "inEggPool": true,
+            "artRef": "socle/creature/creature_world_5_6.png",
+            "artRefStages": "{\"2\":\"socle/creature/creature_world_5_6-ado.png\",\"3\":\"socle/creature/creature_world_5_6-adulte.png\"}",
+            "story": "Toujours de bonne humeur, il fait des galipettes pour te faire rire."
+          },
+          "proposed": {
+            "name": "Auréole",
+            "anatomy": "Méduse à ombrelle haute, quatre bras buccaux frisés et couronne de fins tentacules",
+            "role": "Distribue les nutriments entre les eaux calmes"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/creature_world_5_6.png",
+              "sha256": "390013ca070307b12eab749236f5678905022d1fe5803d3d9ec16e3188736768"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_6-ado.png",
+              "sha256": "29d9f56ca9b18b38e0cc0ecc0cb3cace26a6a64b45ee3504c0e38343c3afce44"
+            },
+            {
+              "ref": "socle/creature/creature_world_5_6-adulte.png",
+              "sha256": "e5d6e3b2e138d259324b7997c18835a448d737a677ecd282eef3f2da03be4f4f"
+            }
+          ]
+        },
+        {
+          "id": "legendary:5",
+          "speciesKey": "legendary_world_5",
+          "rarity": "legendary",
+          "inEggPool": false,
+          "before": {
+            "id": "legendary:5",
+            "worldIndex": 5,
+            "speciesKey": "legendary_world_5",
+            "nameDefault": "Solflamme",
+            "rarity": "legendary",
+            "maxStage": 3,
+            "inEggPool": false,
+            "artRef": "socle/creature/legendary_world_5.png",
+            "artRefStages": "{\"2\":\"socle/creature/legendary_world_5-ado.png\",\"3\":\"socle/creature/legendary_world_5-adulte.png\"}",
+            "story": "Le soleil de ce monde a pris vie pour te remercier."
+          },
+          "proposed": {
+            "name": "Pélagor",
+            "anatomy": "Gardien marin long à corps souple annelé, quatre grandes nageoires en palettes et deux branchies plumeuses latérales",
+            "role": "Relie les refuges du récif en guidant les courants"
+          },
+          "preservedArts": [
+            {
+              "ref": "socle/creature/legendary_world_5.png",
+              "sha256": "cdc117f9686c0b7c17a9d9d8715b56e8203f047d486e6ff020bc386c625013d8"
+            },
+            {
+              "ref": "socle/creature/legendary_world_5-ado.png",
+              "sha256": "436d33e19d092e27dff6b730d92b9db897eaad9670c332d3e2f7c3b4e4ea749f"
+            },
+            {
+              "ref": "socle/creature/legendary_world_5-adulte.png",
+              "sha256": "a7a63c24fbc2bc6539547260e30606d5bdd5d58486bcdbcb7932c55b70d0af57"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

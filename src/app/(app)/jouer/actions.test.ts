@@ -11,7 +11,7 @@ import {
   type SubmitAttemptInput,
 } from "@/lib/engine/service";
 import { selectDiagnostic } from "@/lib/engine/diagnostic";
-import { finishLevel, type FinishLevelResult } from "@/lib/game/finish-level";
+import { finishLevel } from "@/lib/game/finish-level";
 import type { RewardBreakdown } from "@/lib/game/reward";
 import { getUnlockedWorldCount, resolveCurrentLevelTarget } from "@/lib/game/unlock";
 import { evaluateScreenTimeLock } from "@/lib/parent/screen-time-lock";
@@ -90,6 +90,8 @@ vi.mock("@/lib/engine/service", () => ({
   seedRecalibration: vi.fn(),
 }));
 vi.mock("@/lib/engine/diagnostic", () => ({ selectDiagnostic: vi.fn() }));
+const adventureMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/game/adventure", () => ({ loadAdventure: adventureMock }));
 vi.mock("@/lib/game/finish-level", () => ({ finishLevel: vi.fn() }));
 vi.mock("@/lib/game/unlock", () => ({
   getUnlockedWorldCount: vi.fn(),
@@ -376,154 +378,41 @@ describe("seedDiagnosticAction", () => {
   });
 });
 
-describe("finishLevelAction", () => {
-  /** Membre « succès » du résultat service (branche `ok: true`). */
-  type FinishSuccess = Extract<FinishLevelResult, { ok: true }>;
-
-  /** Résultat succès factice du service (avec gains) — surchargeable par test. */
-  function successResult(overrides: Partial<FinishSuccess> = {}): FinishSuccess {
-    return {
-      ok: true,
-      stars: 2,
-      unlockedNextWorld: false,
-      reward: FAKE_REWARD,
-      balance: { coins: 20, shards: 0 },
-      coinsApplied: true,
-      legendary: null,
-      legendaryAdded: false,
-      ...overrides,
-    };
-  }
-
-  it("non authentifié → { ok: false, error: UNAUTHENTICATED }, aucune résolution ni écriture", async () => {
+describe("finishLevelAction — legacy receipt only", () => {
+  it("requires the child session", async () => {
     profileMock.mockResolvedValue(null);
-    await expect(finishLevelAction(2)).resolves.toEqual({
-      ok: false,
-      stars: null,
-      unlockedNextWorld: false,
-      reward: null,
-      coins: null,
-      coinsApplied: false,
-      legendary: null,
-      legendaryAdded: false,
-      error: "UNAUTHENTICATED",
-    });
-    expect(resolveTargetMock).not.toHaveBeenCalled();
+    expect(await finishLevelAction("run")).toMatchObject({ ok: false, error: "UNAUTHENTICATED" });
+  });
+  it("rejects legacy client scores and never finishes the newly unlocked level", async () => {
+    profileMock.mockResolvedValue(7);
+    expect(await finishLevelAction(3)).toMatchObject({ ok: false, error: "INVALID_INPUT" });
     expect(finishLevelMock).not.toHaveBeenCalled();
+    expect(resolveTargetMock).not.toHaveBeenCalled();
   });
-
-  it("refus service → { ok: false, error } (mappe le refus, pas de 500, tous gains à null)", async () => {
+  it("reads only the matching saved receipt and refuses unknown or unfinished runs", async () => {
     profileMock.mockResolvedValue(7);
-    resolveTargetMock.mockReturnValue(FAKE_TARGET);
-    finishLevelMock.mockReturnValue({ ok: false, error: "LEVEL_LOCKED" });
-    await expect(finishLevelAction(2)).resolves.toEqual({
-      ok: false,
-      stars: null,
-      unlockedNextWorld: false,
-      reward: null,
-      coins: null,
-      coinsApplied: false,
-      legendary: null,
-      legendaryAdded: false,
-      error: "LEVEL_LOCKED",
-    });
-  });
-
-  it("succès non-boss → gains renvoyés ; CIBLE résolue SERVEUR (jamais du client) + barème + Date injectés", async () => {
-    profileMock.mockResolvedValue(7);
-    resolveTargetMock.mockReturnValue(FAKE_TARGET);
-    finishLevelMock.mockReturnValue(successResult());
-    // Le client n'envoie QUE ses étoiles (jamais un world/level_index, SYNC §1).
-    await expect(finishLevelAction(2)).resolves.toEqual({
-      ok: true,
-      stars: 2,
-      unlockedNextWorld: false,
-      reward: FAKE_REWARD,
-      coins: 20,
-      coinsApplied: true,
-      legendary: null,
-      legendaryAdded: false,
-      error: null,
-    });
-    // La cible est résolue serveur depuis le profil de session + levelsPerWorld.
-    expect(resolveTargetMock).toHaveBeenCalledTimes(1);
-    const [tDb, tProfile, tLevels] = resolveTargetMock.mock.calls[0];
-    expect(tDb).toBe("DB");
-    expect(tProfile).toBe(7);
-    expect(tLevels).toBe(FAKE_MAP_CONFIG.levelsPerWorld);
-    // `finishLevel` reçoit la cible résolue serveur + les étoiles du client + les 2 configs.
-    expect(finishLevelMock).toHaveBeenCalledTimes(1);
-    const [dbArg, profileArg, inputArg, mapArg, ecoArg, nowArg] = finishLevelMock.mock.calls[0];
-    expect(dbArg).toBe("DB");
-    expect(profileArg).toBe(7); // profil de session, jamais du client
-    expect(inputArg).toEqual({ worldIndex: 0, levelIndex: 3, stars: 2 }); // cible serveur + étoiles client
-    expect(mapArg).toBe(FAKE_MAP_CONFIG);
-    expect(ecoArg).toBe(FAKE_ECONOMY_CONFIG);
-    expect(nowArg).toBeInstanceOf(Date);
-  });
-
-  it("succès boss → { unlockedNextWorld: true } + légendaire surfacée (story 5.6)", async () => {
-    profileMock.mockResolvedValue(7);
-    resolveTargetMock.mockReturnValue({ worldIndex: 0, levelIndex: 10 });
-    finishLevelMock.mockReturnValue(
-      successResult({
-        stars: 1,
+    for (const saved of [null, { id: "other", result: {} }, { id: "run", result: null }]) {
+      adventureMock.mockReturnValue(saved);
+      expect(await finishLevelAction("run")).toMatchObject({ ok: false, error: "INVALID_INPUT" });
+    }
+    adventureMock.mockReturnValue({
+      id: "run",
+      result: {
+        ok: true,
+        stars: 2,
         unlockedNextWorld: true,
         reward: FAKE_REWARD,
+        balance: { coins: 37, shards: 0 },
+        coinsApplied: true,
         legendary: FAKE_LEGENDARY,
         legendaryAdded: true,
-      }),
-    );
-    const res = await finishLevelAction(1);
-    expect(res.ok).toBe(true);
-    expect(res.unlockedNextWorld).toBe(true);
-    expect(res.coins).toBe(20);
-    // La légendaire garantie du boss est transmise au client (nom + histoire + art placeholder).
-    expect(res.legendary).toEqual(FAKE_LEGENDARY);
-    expect(res.legendaryAdded).toBe(true);
-  });
-
-  it("rejeu (coinsApplied false) → solde inchangé renvoyé, coinsApplied false (idempotence exposée)", async () => {
-    profileMock.mockResolvedValue(7);
-    resolveTargetMock.mockReturnValue(FAKE_TARGET);
-    finishLevelMock.mockReturnValue(
-      successResult({ coinsApplied: false, balance: { coins: 20, shards: 0 } }),
-    );
-    const res = await finishLevelAction(2);
-    expect(res.coinsApplied).toBe(false);
-    expect(res.coins).toBe(20); // solde inchangé (pas de double crédit)
-    // AUCUNE revalidation sur un rejeu idempotent : le solde n'a pas changé, rien à
-    // rafraîchir côté shell (#346, cf. test dédié ci-dessous pour le cas crédité).
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  // Fraîcheur du solde du shell persistant après un gain (story R1.1 #337 rétro → #346,
-  // corollaire #180) : `(app)/layout.tsx` lit le portefeuille au montage, mais React ne
-  // re-rend PAS un layout de groupe partagé sur une navigation DOUCE entre routes-sœurs
-  // (`/jouer` → `/carte`) — sans cette revalidation explicite, le bandeau resterait figé à
-  // sa valeur PÉRIMÉE (empiriquement confirmé E2E : `auth.spec.ts`, rouge sans cet appel,
-  // vert avec). Mutation-preuve : retirer `revalidatePath(...)` du corps de l'action laisse
-  // ce test rouge (assertion `toHaveBeenCalledWith` exacte, pas `objectContaining`).
-  it("succès + crédit APPLIQUÉ → revalidatePath('/carte', 'layout') (fraîcheur du shell, #346)", async () => {
-    profileMock.mockResolvedValue(7);
-    resolveTargetMock.mockReturnValue(FAKE_TARGET);
-    finishLevelMock.mockReturnValue(successResult({ coinsApplied: true }));
-    await finishLevelAction(2);
-    expect(revalidatePathMock).toHaveBeenCalledTimes(1);
-    expect(revalidatePathMock).toHaveBeenCalledWith("/carte", "layout");
-  });
-
-  it("refus service → AUCUNE revalidation (aucun crédit à rafraîchir sur un refus propre)", async () => {
-    profileMock.mockResolvedValue(7);
-    resolveTargetMock.mockReturnValue(FAKE_TARGET);
-    finishLevelMock.mockReturnValue({ ok: false, error: "LEVEL_LOCKED" });
-    await finishLevelAction(2);
-    expect(revalidatePathMock).not.toHaveBeenCalled();
-  });
-
-  it("non authentifié → AUCUNE revalidation", async () => {
-    profileMock.mockResolvedValue(null);
-    await finishLevelAction(2);
+      },
+    });
+    const result = await finishLevelAction("run");
+    expect(result).toMatchObject({ ok: true, stars: 2, coins: 37, legendary: FAKE_LEGENDARY });
+    expect(await finishLevelAction("run")).toEqual(result);
+    expect(finishLevelMock).not.toHaveBeenCalled();
+    expect(resolveTargetMock).not.toHaveBeenCalled();
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });
 });

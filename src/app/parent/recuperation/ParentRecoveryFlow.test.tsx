@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ParentRecoveryFlow } from "./ParentRecoveryFlow";
 import { resetParentPinAction, verifyRecoveryCodeAction } from "./actions";
 import { strings } from "@/strings";
+import { parent as p } from "@/strings/parent";
 import {
   contrastRatio,
   mixSrgb,
@@ -72,14 +73,14 @@ describe("ParentRecoveryFlow — étape code", () => {
 });
 
 describe("ParentRecoveryFlow — étape nouveau PIN", () => {
-  it("« Enregistrer » désactivé tant que le PIN n'a pas 4 chiffres", async () => {
+  it("« Continuer » désactivé tant que le PIN n'a pas 4 chiffres", async () => {
     render(<ParentRecoveryFlow />);
     await reachNewPinStep();
-    expect(screen.getByRole("button", { name: r.submit })).toBeDisabled();
+    expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
     pressDigits("11");
-    expect(screen.getByRole("button", { name: r.submit })).toBeDisabled();
+    expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
     pressDigits("11");
-    expect(screen.getByRole("button", { name: r.submit })).toBeEnabled();
+    expect(screen.getByRole("button", { name: p.next })).toBeEnabled();
   });
 
   it("succès → écran final avec le nouveau code de secours ; CTA → accueil", async () => {
@@ -87,10 +88,14 @@ describe("ParentRecoveryFlow — étape nouveau PIN", () => {
     render(<ParentRecoveryFlow />);
     await reachNewPinStep();
     pressDigits("1111");
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
+    pressDigits("1111");
     fireEvent.click(screen.getByRole("button", { name: r.submit }));
 
     await screen.findByRole("heading", { level: 1, name: r.done.title });
     expect(screen.getByText("NEWCODE9")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: r.done.cta })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: p.savedRecovery }));
     fireEvent.click(screen.getByRole("button", { name: r.done.cta }));
     expect(push).toHaveBeenCalledWith("/");
   });
@@ -100,18 +105,22 @@ describe("ParentRecoveryFlow — étape nouveau PIN", () => {
     render(<ParentRecoveryFlow />);
     await reachNewPinStep();
     pressDigits("1234");
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
+    pressDigits("1234");
     fireEvent.click(screen.getByRole("button", { name: r.submit }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(r.errors.PARENT_PIN_SAME),
     );
-    expect(screen.getByRole("heading", { level: 1, name: r.newPinTitle })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: p.confirmParentPin })).toBeInTheDocument();
   });
 
   it("code invalidé entre-temps (rate-limit) → retour à l'étape code", async () => {
     resetMock.mockResolvedValue({ ok: false, code: "CODE_INVALID" });
     render(<ParentRecoveryFlow />);
     await reachNewPinStep();
+    pressDigits("1111");
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
     pressDigits("1111");
     fireEvent.click(screen.getByRole("button", { name: r.submit }));
 
@@ -123,6 +132,8 @@ describe("ParentRecoveryFlow — étape nouveau PIN", () => {
     resetMock.mockRejectedValue(new Error("net"));
     render(<ParentRecoveryFlow />);
     await reachNewPinStep();
+    pressDigits("1111");
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
     pressDigits("1111");
     fireEvent.click(screen.getByRole("button", { name: r.submit }));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(r.errors.GENERIC));

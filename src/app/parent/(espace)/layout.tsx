@@ -1,3 +1,4 @@
+import { ParentShell } from "@/components/ParentShell";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentParentSession } from "@/lib/auth/current-session";
@@ -21,6 +22,6 @@ export const runtime = "nodejs";
  */
 export default async function ParentLayout({ children }: { children: ReactNode }) {
   const session = await getCurrentParentSession();
-  if (session === null) redirect("/");
-  return <>{children}</>;
+  if (session === null) redirect("/parent/connexion");
+  return <ParentShell>{children}</ParentShell>;
 }

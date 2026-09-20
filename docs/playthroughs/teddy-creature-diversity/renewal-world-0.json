@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "worldIndex": 0,
+  "inventoryPath": "docs/playthroughs/teddy-creature-diversity/renewal-a12556c1-99fd-49b1-b493-7d11d8e6bfb8/plan.json",
+  "inventorySha256": "bdfd993d1b9af19dee332e4bbffd389d46edf4b36d00e37beea4333af321c953",
+  "validatedCastApprovalSha256": "dd58638282d788ba71c25c628ad4097020abdb23c844403f49ace02e445eb871",
+  "habitat": "The Passage des lucioles: a dense humid ancient woodland under giant branch vaults, damp hollow trunks, roots, bracket fungi and fern undergrowth. These inhabitants tend leaf litter, softened dead wood and nocturnal flowers. This is the shaded forest floor, distinct from the open willow pools and banks of world 4.",
+  "creatures": [
+    {
+      "name": "Mycélou",
+      "story": "Mycélou transforme les feuilles tombées en nourriture pour les racines.",
+      "anatomy": "A baby living bracket fungus: a compact folded fan of soft russet lamellae on one short cream stalk with a small spreading root base. The kind face is integrated into the upper stalk, never a separate animal head.",
+      "signature": "Pleated fan, cream stalk and soft ochre-to-russet underside; no mushroom hat on an animal, no limbs or held leaves.",
+      "adaptation": "The pleated underside breaks down leaf litter and the root base distributes moisture.",
+      "role": "Recycle les feuilles mortes au pied des géants",
+      "adolescent": "A clearly exposed medium stalk raises a wider partly unfolded fan; the body is taller and the face smaller relative to the fan than in the compact baby. Retain the fan pleats and same root base.",
+      "adult": "A tall strong curved cream stalk supports a broad fully opened semicircular fan with deep long lamellae and a substantial spreading root base. The small integrated face occupies under one fifth of the total height. A mature umbrella-like fungal body, much taller and more developed than the juvenile."
+    },
+    {
+      "name": "Tavelle",
+      "story": "Tavelle ouvre de petits passages pour que la terre respire.",
+      "anatomy": "A low baby burrowing beetle with a compact oval chestnut carapace, two softly grooved wing covers, a large rounded cream face, two short antennae and exactly six short legs ending in blunt shovel pads. Moss-green groove accents.",
+      "signature": "Two grooved covers and six digging legs, friendly cream face, chestnut shell; no horns, teeth, wings extended or accessories.",
+      "adaptation": "Broad soft shovel feet loosen damp soil without cutting roots.",
+      "role": "Aère les sols entre les racines",
+      "adolescent": "The oval body elongates behind the smaller head, exposing a clear thoracic waist; six moderately longer bent legs spread outward and existing shovel pads broaden. The two shell covers develop longer parallel grooves.",
+      "adult": "A long low wedge-shaped mature shell dominates the body, at least three head lengths long, with a developed thorax and a small rounded cream face. Six powerful but softly rounded articulated legs carry broad shovel pads; foreleg pads are visibly wider than in the juvenile. Same two covers and colours, no armour or spikes."
+    },
+    {
+      "name": "Orsil",
+      "story": "Orsil apporte des fibres douces dans les troncs creux.",
+      "anatomy": "A baby woodland inchworm-like creature with four compact horizontal rounded body sections, a large friendly face on the first section, and exactly four pairs of short cushioned feet. Soft terracotta back, cream underside and muted sage cushions.",
+      "signature": "Four connected body sections and eight cushioned feet; face integrated at the front, no external mammal head, no horns or wings.",
+      "adaptation": "The many soft pads grip wet wood and hold fibres beneath the belly.",
+      "role": "Transporte les fibres pour tapisser les troncs creux",
+      "adolescent": "Four clearly elongated body sections form a gentle low wave; the front face becomes smaller in proportion, eight moderately longer pads stand beneath the wider exposed belly.",
+      "adult": "A very long supple four-section body arches between widely spaced pairs of developed cushioned legs. Small front facial region under one eighth of body length, long visible connecting waists and substantial soft belly. Keep exactly eight feet and four sections; no added segments or new features to fake growth."
+    },
+    {
+      "name": "Pivertin",
+      "story": "Pivertin aménage des abris dans le bois déjà tendre.",
+      "anatomy": "A baby woodland bird with a short upright pear-shaped body, a large round cream face, tiny blunt ochre beak, two short folded chestnut wings, two feet and a short stiff fan tail. A soft coral forehead marking belongs to its plumage.",
+      "signature": "Upright bird with two wings, two feet and one stiff fan tail; cream face and chestnut/coral plumage. No costume or held tool.",
+      "adaptation": "The blunt beak works softened dead wood while the stiff tail braces against a trunk.",
+      "role": "Ouvre de petits abris dans le bois déjà tendre",
+      "adolescent": "A visible short neck and lengthened pear-shaped chest emerge below a medium head; the two folded wings reach the hips, legs lengthen and the same fan tail develops into a clear supporting wedge.",
+      "adult": "A tall lean mature bird with a small cream head on a long visible neck, deep elongated chest, long folded wing surfaces and a substantial stiff fan tail balancing the body. Legs and rounded gripping feet are clearly developed beyond the juvenile. Keep the blunt beak, face markings and wing count; no predatory claws."
+    },
+    {
+      "name": "Fougrette",
+      "story": "Fougrette garde des gouttes pour les pousses du sous-bois.",
+      "anatomy": "A baby living fern: one short sage-green stem curled into a compact crozier, six pairs of tiny folded leaflets along the stem, a small fibre root base and a kind integrated face on the lower stem. Pale mint leaflet edges.",
+      "signature": "One curled frond, paired leaflets and a fibrous root base; no animal limbs, flower crown or separate head.",
+      "adaptation": "Leaflet grooves hold rain droplets and the fibre base releases them to nearby shoots.",
+      "role": "Retient les gouttes sous la canopée",
+      "adolescent": "The stem rises and begins to uncurl into a clear S-shape, with a larger space inside its upper curl. The same leaflets partly unfold into short side fans; the face is smaller relative to the exposed stem.",
+      "adult": "One tall sweeping mature frond with an almost unfurled tip and long widely spread paired leaflets forms a broad asymmetric fern silhouette. The lower stem and existing root base are substantial; its small smiling face occupies under one sixth of the frond height. Six leaflet pairs remain, no extra fronds or limbs."
+    },
+    {
+      "name": "Lucéran",
+      "story": "Lucéran éclaire le chemin des fleurs qui s’ouvrent la nuit.",
+      "anatomy": "A baby woodland light insect with a large rounded kind copper face, a tiny thorax, short segmented softly glowing pale-yellow abdomen, two short translucent sage wings, six short rounded legs and two soft antennae.",
+      "signature": "Exactly two translucent wings, six legs, two antennae and one luminous segmented abdomen; copper and pale yellow, no detached sparkles.",
+      "adaptation": "Its gentle abdomen light guides pollinators and the narrow wings manoeuvre between stems.",
+      "role": "Guide les pollinisateurs entre les fleurs nocturnes",
+      "adolescent": "A clear slim waist separates a smaller head from a visibly lengthened segmented abdomen; the same two wings extend past the hips and six legs develop gentle bends.",
+      "adult": "A graceful elongated mature insect with a tiny kind face, a long copper thorax and a strongly lengthened luminous abdomen at least four head lengths long. Two long narrow translucent wings sweep back beyond the abdomen; six fine but visible rounded legs and the same two antennae. Distinct from a butterfly, beetle or wingless canopy-weaver."
+    },
+    {
+      "name": "Tormille",
+      "story": "Tormille protège les petits refuges au pied des arbres géants.",
+      "anatomy": "A baby hollow-log guardian with a short horizontal barrel-shaped russet wooden torso on exactly four thick rounded bark feet. A large friendly cream face is integrated into its front end; one hollow oval opening in the flank reveals the dark warm interior. Small natural moss patches on the top.",
+      "signature": "Horizontal closed tubular log body, one side hollow, four feet and an integrated front face. Never an upright arch, bridge or doorway; no antlers or crown.",
+      "adaptation": "The hollow torso shelters small forest inhabitants while four soft root feet cross damp ground.",
+      "role": "Protège les petits abris du sous-bois",
+      "adolescent": "The tubular body becomes visibly longer than the front face, with a clear shoulder region and four medium-length bent root legs. The same side hollow stretches into a longer oval; keep the front face welcoming.",
+      "adult": "A long substantial horizontal hollow trunk, about four front-face widths from nose to rump, carried on four developed bent root legs with broad pads and distinct shoulders and hips. The small cream face remains at the front end; the single flank hollow and restrained moss patches persist. Mature weight and elongated anatomy, not a larger baby or architectural bridge."
+    }
+  ]
+}

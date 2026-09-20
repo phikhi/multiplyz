@@ -599,11 +599,9 @@ export interface RegularityConfig {
  * des **défauts + bornes** ⚙️ des réglages de temps d'écran que le parent calibre depuis l'espace
  * parent (persistés par foyer dans `household_settings`, `lib/parent/settings.ts`).
  *
- * ⚠️ **État de consommation (honnête, #127/#155)** : ces ⚙️ sont **POSÉS + VALIDÉS + STOCKÉS** en
- * 7.3 (défauts d'un foyer neuf + bornes de validation `writeHouseholdSettings`). Ils ne sont **PAS
- * ENFORCÉS** ici : l'enforcement runtime (nudge de session + verrou dur qui bloque l'app) dépend du
- * **temps-joué persisté** (story 7.4 #217, inexistant) et vit dans la **story 7.8 #229**. Décrire
- * « borne posée + validée + stockée, consommée en 7.8 », **jamais** « agit / bloque ».
+ * Consommés par `daily-return` (suggestion à la fin d’un niveau, une fois par jour) et
+ * `screen-time-lock` (plafond avant une nouvelle partie). Même temps journalier estimé
+ * que le suivi parental ; aucune interruption du niveau actif. ADR 0023.
  *
  * `parsePositiveInt` partout (≥ 1) : une durée `0`/négative n'a pas de sens (min de session, min/jour).
  */

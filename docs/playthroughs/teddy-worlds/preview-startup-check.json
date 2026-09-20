@@ -1,0 +1,16 @@
+{
+  "method": "Delivered HTML executed in jsdom, with matchMedia and ResizeObserver stubs. No WebGL pixel or browser layout validation.",
+  "startup": true,
+  "checked": [
+    "forest",
+    "ocean",
+    "magic",
+    "galaxy",
+    "candy",
+    "snow",
+    "forest:4"
+  ],
+  "mapNodes": 11,
+  "navigationPrevented": true,
+  "errors": []
+}

@@ -1,0 +1,101 @@
+{
+  "integrity": "ok",
+  "tables": {
+    "__drizzle_migrations": {
+      "rows": 20,
+      "sha256": "c77d951d5180ec35315393b27a3c006e3611fc0019146b41560ed38b010f617d"
+    },
+    "adventure_sessions": {
+      "rows": 1,
+      "sha256": "f6105faab77d37a1d95ce81b663e243e62aab7c2573c0b8b051be5fc97630579"
+    },
+    "attempts": {
+      "rows": 302,
+      "sha256": "4535b63c25c4f6607c543e5a3542a6ec5fd0b9f93f40e31673037a1d28581b77"
+    },
+    "characters": {
+      "rows": 41,
+      "sha256": "46cbb18133bd2fb45a9c88fb5a4e05b5ddf3c9d138709a2396294bfe33403b81"
+    },
+    "collection": {
+      "rows": 10,
+      "sha256": "86ea04ce8d6c66a8979dd156be0f2f837d8f7a444a2c5c5cb19870386ca10722"
+    },
+    "cosmetics": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "cosmetics_owned": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "daily": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "egg_pity": {
+      "rows": 1,
+      "sha256": "9b8c8cb448c2964bc6d7f7fcb19a536ba5edc2b180d7fec12141993500a4d1eb"
+    },
+    "egg_receipts": {
+      "rows": 1,
+      "sha256": "20e87b6ffdf4d6f23e82f3056dcd9491b27be2e64cabe0a5ec501b98d2382f98"
+    },
+    "household_settings": {
+      "rows": 1,
+      "sha256": "4503f94fc709b8799e06221f6b6e56be18b5c6871a93358ae5e96aa65bb0c4a3"
+    },
+    "inventory_items": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "jobs": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ledger": {
+      "rows": 67,
+      "sha256": "2fdea21a5379a2d43b8b3749ba63fbe995a3273f6e24258fcd4e18c4e4274516"
+    },
+    "mastery": {
+      "rows": 123,
+      "sha256": "50008976d50d5ef3935e24f6e42cb58d82030dd908af84948e8966280b73e517"
+    },
+    "pin_attempts": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "profiles": {
+      "rows": 1,
+      "sha256": "bf69d0e8b79a0c39b9b9d9dccfb7bc00bbcc7724bddf9a33eb626095a9d91965"
+    },
+    "progress": {
+      "rows": 62,
+      "sha256": "0eb49a663ef5a7ecd26b777f285db612bff9f7464d1502926b147c93edce8225"
+    },
+    "schema_meta": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "sessions": {
+      "rows": 5,
+      "sha256": "2adff7f9d763e345c21b44aa187d5b53bdfef98506c9f53eb387c309af894866"
+    },
+    "socle_worlds": {
+      "rows": 6,
+      "sha256": "decb8dda2b97d26f1f237322e70e47f141465179d7cc21f41fa5ec1619617ca0"
+    },
+    "teddy_reference_assets": {
+      "rows": 6,
+      "sha256": "b499d8524354db9ae061576a6e4314be95ec156bd014006cd9bdcb4a43f37ca7"
+    },
+    "wallet": {
+      "rows": 1,
+      "sha256": "3d4a436fc52205cc15be8f8227b80088d4471fd849cc8f3393f3d73060f54896"
+    },
+    "worlds": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  }
+}
