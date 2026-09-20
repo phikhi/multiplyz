@@ -395,6 +395,8 @@ test.describe.serial("parcours auth (onboarding #2.2 → connexion #2.3 → réc
 
     // Étape code parent (distinct).
     await enterPin(page, "9876");
+    await page.getByRole("button", { name: nav.next }).click();
+    await enterPin(page, "9876");
     await page.getByRole("button", { name: nav.create }).click();
 
     // Écran code de secours : titre + code 8 caractères lisibles, affiché une fois.
@@ -3510,7 +3512,7 @@ test.describe("Boutique / Œufs (R4.2 #393)", () => {
     expect(geometry!.artTop).toBeGreaterThanOrEqual(geometry!.openingBottom);
 
     // CTA de fermeture présent (l'enfant repart quand il veut, no-FOMO).
-    await expect(page.getByRole("button", { name: strings.eggReveal.dismiss })).toBeVisible();
+    await expect(page.getByRole("button", { name: eggShop.continue })).toBeVisible();
 
     await page.screenshot({ path: "docs/captures/393-egg-open-reveal.png", fullPage: true });
   });
