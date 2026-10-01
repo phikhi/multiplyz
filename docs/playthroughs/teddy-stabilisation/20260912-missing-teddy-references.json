@@ -1,0 +1,35 @@
+{
+  "at": "2026-09-12T10:10:43.534566+00:00",
+  "source": "multiplyz/",
+  "destination": "app/",
+  "existingFilesReplaced": false,
+  "databaseChanged": false,
+  "generated": false,
+  "copied": [
+    {
+      "ref": "storage/reference/teddy/teddy-neutre.png",
+      "bytes": 1006382,
+      "sha256": "49063f0a2ea959f3b422b0adb812a6e9e1d123543656a99e3abf83a13c3e842b"
+    },
+    {
+      "ref": "storage/reference/teddy/teddy-content.png",
+      "bytes": 1037719,
+      "sha256": "363776647979eaf475577eb1dfe728c4ca45e29e94f79c0691b8d407eff3b845"
+    },
+    {
+      "ref": "storage/reference/teddy/teddy-oups.png",
+      "bytes": 1092989,
+      "sha256": "45978474a08467274c05dd5e63c28fa552b0b7bfd90ccb146533edb2f0a7824f"
+    },
+    {
+      "ref": "storage/reference/teddy/teddy-acclame.png",
+      "bytes": 1105728,
+      "sha256": "5ff635d979777489facc69da22b66f24937abe512bd507720357186bfdd41578"
+    },
+    {
+      "ref": "storage/reference/teddy/teddy-intrepide.png",
+      "bytes": 1063266,
+      "sha256": "ea2164bcef883ca1ff708992bb4e13cba525baac24b5c8a1a52a182b7f0d6b2d"
+    }
+  ]
+}

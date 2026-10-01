@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { strings } from "@/strings";
+import { parent as p } from "@/strings/parent";
 import {
   contrastRatio,
   mixSrgb,
@@ -125,9 +126,12 @@ describe("ProfileManager — réinitialiser le PIN enfant", () => {
 
     fireEvent.click(card("Zoé").getByRole("button", { name: m.resetPin.action }));
     // Bouton désactivé tant que le PIN n'a pas 4 chiffres.
-    expect(screen.getByRole("button", { name: m.resetPin.save })).toBeDisabled();
+    expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
     pressDigits("3333");
-    fireEvent.click(screen.getByRole("button", { name: m.resetPin.save }));
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
+    expect(resetMock).not.toHaveBeenCalled();
+    pressDigits("3333");
+    fireEvent.click(screen.getByRole("button", { name: p.savePin }));
 
     await waitFor(() => expect(resetMock).toHaveBeenCalledWith(2, "3333"));
     expect(await screen.findByText(m.resetPin.success)).toBeInTheDocument();
@@ -139,7 +143,10 @@ describe("ProfileManager — réinitialiser le PIN enfant", () => {
 
     fireEvent.click(card("Léa").getByRole("button", { name: m.resetPin.action }));
     pressDigits("9876");
-    fireEvent.click(screen.getByRole("button", { name: m.resetPin.save }));
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
+    expect(resetMock).not.toHaveBeenCalled();
+    pressDigits("9876");
+    fireEvent.click(screen.getByRole("button", { name: p.savePin }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(m.errors.PARENT_PIN_SAME);
   });
@@ -149,7 +156,10 @@ describe("ProfileManager — réinitialiser le PIN enfant", () => {
     render(<ProfileManager profiles={PROFILES} />);
     fireEvent.click(card("Zoé").getByRole("button", { name: m.resetPin.action }));
     pressDigits("3333");
-    fireEvent.click(screen.getByRole("button", { name: m.resetPin.save }));
+    fireEvent.click(screen.getByRole("button", { name: p.next }));
+    expect(resetMock).not.toHaveBeenCalled();
+    pressDigits("3333");
+    fireEvent.click(screen.getByRole("button", { name: p.savePin }));
     expect(await screen.findByRole("alert")).toHaveTextContent(m.errors.GENERIC);
   });
 });
@@ -299,4 +309,15 @@ describe("ProfileManager — focus à l'ouverture des panneaux (a11y clavier/SR)
     fireEvent.click(card("Zoé").getByRole("button", { name: m.delete.action }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: m.delete.cancel }));
   });
+});
+
+it("refuses mismatching child PIN confirmation without sending a reset", () => {
+  render(<ProfileManager profiles={PROFILES} />);
+  fireEvent.click(card("Zoé").getByRole("button", { name: m.resetPin.action }));
+  pressDigits("3333");
+  fireEvent.click(screen.getByRole("button", { name: p.next }));
+  pressDigits("3334");
+  fireEvent.click(screen.getByRole("button", { name: p.savePin }));
+  expect(screen.getByRole("alert")).toHaveTextContent(p.mismatch);
+  expect(resetMock).not.toHaveBeenCalled();
 });

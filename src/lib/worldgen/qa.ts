@@ -33,6 +33,14 @@ export type AssetKind = "background" | "tiles" | "teddy" | "creature";
 
 /** Un asset généré à inspecter : sa réf d'URL (servie par Nginx) + sa nature. */
 export interface InspectableAsset {
+  /** Opt-in character readability check at the actual small portrait size. */
+  readonly requireReadableFace?: boolean;
+  /** Identity reference and immediately preceding stage for a new growth illustration. */
+  readonly babyRef?: string;
+  readonly previousRef?: string;
+  /** Optional mature endpoint: an adolescent must fall BETWEEN baby and this adult. */
+  readonly adultRef?: string;
+  readonly stage?: 2 | 3;
   /** Réf d'URL de l'asset (`world/<index>/...`). Pas de donnée enfant. */
   readonly ref: string;
   /** Nature de l'asset (fond, tuiles, Teddy, créature). */
@@ -47,6 +55,12 @@ export interface InspectableAsset {
  * - `styleScore` → règle `style_coherence` (cohérence vs charte ART).
  */
 export interface AssetInspection {
+  readonly faceReadable?: boolean;
+  readonly habitatMatches?: boolean;
+  readonly visuallyDistinct?: boolean;
+  /** Stage diagnostics. A false comparison still maps to a failing styleScore. */
+  readonly identityMatches?: boolean;
+  readonly growthVisible?: boolean;
   /** Texte détecté (OCR). **Non vide** = texte parasite → rejet (règle `no_parasitic_text`). */
   readonly detectedText: string;
   /** Score « effrayant/inapproprié » `[0,1]` (0 sûr → 1 inapproprié) — règle `safe_content`. */
@@ -57,6 +71,9 @@ export interface AssetInspection {
 
 /** Inspecteur vision : produit les signaux kid-safe d'un asset (injecté ; défaut = fail-closed). */
 export type WorldInspector = (asset: InspectableAsset) => AssetInspection;
+export type AsyncWorldInspector = (
+  asset: InspectableAsset,
+) => AssetInspection | Promise<AssetInspection>;
 
 /** Identifiants des **règles kid-safe** (WORLDGEN §6) — un asset rejeté nomme la règle qu'il rate. */
 export type QaRuleId = "no_parasitic_text" | "safe_content" | "style_coherence";
@@ -107,7 +124,15 @@ function passesSafeContent(inspection: AssetInspection, config: QaConfig): boole
 
 /** Règle `style_coherence` : score de cohérence de style **≥** seuil ⚙️ exigé (ART §6). */
 function passesStyleCoherence(inspection: AssetInspection, config: QaConfig): boolean {
-  return inspection.styleScore >= config.styleMinScore;
+  return (
+    [
+      inspection.identityMatches,
+      inspection.growthVisible,
+      inspection.habitatMatches,
+      inspection.visuallyDistinct,
+      inspection.faceReadable,
+    ].every((signal) => signal !== false) && inspection.styleScore >= config.styleMinScore
+  );
 }
 
 /**
@@ -148,7 +173,18 @@ export function collectInspectableAssets(world: GeneratedWorld): InspectableAsse
     { ref: world.assetRefs.background, kind: "background" },
     { ref: world.assetRefs.tiles, kind: "tiles" },
     { ref: world.assetRefs.teddy, kind: "teddy" },
-    ...world.creatures.map((c): InspectableAsset => ({ ref: c.artRef, kind: "creature" })),
+    ...world.creatures.flatMap((c): InspectableAsset[] => [
+      { ref: c.artRef, kind: "creature" },
+      ...(c.stageArt
+        ? ([2, 3] as const).map((stage) => ({
+            ref: c.stageArt![stage],
+            kind: "creature" as const,
+            stage,
+            babyRef: c.artRef,
+            previousRef: stage === 3 ? c.stageArt![2] : undefined,
+          }))
+        : []),
+    ]),
   ];
 }
 
@@ -175,6 +211,20 @@ export function assessWorldAssets(
     if (!verdict.ok) {
       return { ok: false, failedRule: verdict.failedRule, failedAssetRef: asset.ref };
     }
+  }
+  return { ok: true };
+}
+
+/** Same rules, with real asynchronous vision I/O. A missing or failed inspection still throws. */
+export async function assessWorldAssetsAsync(
+  world: GeneratedWorld,
+  inspect: AsyncWorldInspector,
+  config: QaConfig,
+): Promise<WorldQaVerdict> {
+  for (const asset of collectInspectableAssets(world)) {
+    const verdict = assessAsset(await inspect(asset), config);
+    if (!verdict.ok)
+      return { ok: false, failedRule: verdict.failedRule, failedAssetRef: asset.ref };
   }
   return { ok: true };
 }

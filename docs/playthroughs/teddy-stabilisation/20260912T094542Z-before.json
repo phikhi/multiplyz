@@ -1,0 +1,116 @@
+{
+  "at": "2026-09-12T09:45:42.399648+00:00",
+  "source": "/Users/philippekhill/Sites/TEDDy/app/data/multiplyz.sqlite",
+  "readOnly": true,
+  "tables": {
+    "__drizzle_migrations": {
+      "rows": 22,
+      "sha256": "7c14d181362e568f1993ed02528216e1c10bfd26fe643fefc0d67d0d5ec5f9cf"
+    },
+    "adventure_sessions": {
+      "rows": 1,
+      "sha256": "db41244243b995e251128f30afea8c41be5c40ac896425eaedd8dd4519df6152"
+    },
+    "attempts": {
+      "rows": 390,
+      "sha256": "11510d08beddda1f5fd7c44a9ec8617f93cbc62c6b8bd485a9af2c905d7cdf68"
+    },
+    "characters": {
+      "rows": 47,
+      "sha256": "3a47a34d295c54034f6bef053c6c0fd0b06a6b0b7dc89f3fe4c1eeaf1ad5dc99"
+    },
+    "collection": {
+      "rows": 26,
+      "sha256": "8dc8da93370f30ed788837ed60a01b46c170875a7ff9489f5ac307566715a7d6"
+    },
+    "cosmetics": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cosmetics_owned": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "daily": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "egg_pity": {
+      "rows": 1,
+      "sha256": "310454e5fb55e43017b98f230595d7aa62828cdbb2bd3f72c0afaa1b02247ad3"
+    },
+    "egg_receipts": {
+      "rows": 25,
+      "sha256": "6daf167e757e0d5301f50752c94873ee9faee4d5dcec477d11050e3f417cc0b1"
+    },
+    "evolution_receipts": {
+      "rows": 2,
+      "sha256": "ba1b78e58be075c097fb751991afb85ae9d60ce9a8f7f0cbf38e7d8bfa5e009b"
+    },
+    "household_settings": {
+      "rows": 1,
+      "sha256": "29785799671bbc9aff91a26e0b45584f92bf4cb7a5176a201639ef21dea26e0f"
+    },
+    "inventory_items": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "jobs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ledger": {
+      "rows": 119,
+      "sha256": "3b6e400a6a5505f438f9b961ea8ffe8f2aeebcf0d4c5b7c3a4ecf8720988f977"
+    },
+    "mastery": {
+      "rows": 123,
+      "sha256": "fc8abae2136510a8b69daac10f02a42ac11352611a810ce38f8d2e2d2a109350"
+    },
+    "pin_attempts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "profiles": {
+      "rows": 1,
+      "sha256": "54a12e14d27658e971239c5d5999a168cc79e91b03d8d4cc3e7dc2dbbdf1884f"
+    },
+    "progress": {
+      "rows": 78,
+      "sha256": "7fa9f2f095848d9da79daf19ddb0d3c81032b012c8e0a05e6d266956823a3501"
+    },
+    "schema_meta": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sessions": {
+      "rows": 11,
+      "sha256": "bd1597fec97579aafb031b368f8c40463313335e24ee26cc2fe998e2caf44f4c"
+    },
+    "shard_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "socle_worlds": {
+      "rows": 6,
+      "sha256": "8132a9fcf2b0028d4b99003d3bf0fd0371d0371e956205e1e0520f0c2ef40e86"
+    },
+    "sqlite_sequence": {
+      "rows": 3,
+      "sha256": "9d68d19648bd1795e2810de52e7ee64dbf3c07666db3577735a89c014985fa13"
+    },
+    "teddy_reference_assets": {
+      "rows": 6,
+      "sha256": "146a01c3238d84bce70a2991b31e4dd69faa2036df471da6e87dd38670ad4740"
+    },
+    "wallet": {
+      "rows": 1,
+      "sha256": "a4b3856e78f1dc8ca6cac03137fe570bad3108efa41488d069e1751cbf3c3bdb"
+    },
+    "worlds": {
+      "rows": 1,
+      "sha256": "fa2bc9163d81de0804f30ed5c9fac01cbd8ab0d96c6f3e43eeb14afb30b7297c"
+    }
+  },
+  "integrity": "ok"
+}

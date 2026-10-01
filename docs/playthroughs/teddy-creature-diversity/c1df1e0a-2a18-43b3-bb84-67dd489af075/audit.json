@@ -1,0 +1,50 @@
+{
+  "at": "2026-09-11T07:50:58.680Z",
+  "familyCreatures": 41,
+  "distinctFamilyNames": 18,
+  "repeatedNames": [
+    {
+      "name": "Câlin",
+      "worlds": [0, 1]
+    },
+    {
+      "name": "Pompon",
+      "worlds": [0, 1, 2]
+    },
+    {
+      "name": "Guimauve",
+      "worlds": [0, 1, 2, 3]
+    },
+    {
+      "name": "Praline",
+      "worlds": [0, 1, 2, 3, 4]
+    },
+    {
+      "name": "Nougat",
+      "worlds": [0, 1, 2, 3, 4, 5]
+    },
+    {
+      "name": "Pistache",
+      "worlds": [2, 3, 4, 5]
+    },
+    {
+      "name": "Coquillette",
+      "worlds": [2, 3, 4, 5]
+    },
+    {
+      "name": "Myrtille",
+      "worlds": [3, 4, 5]
+    }
+  ],
+  "comparisonCreatures": 47,
+  "comparisonAges": 141,
+  "comparisonSheets": 12,
+  "proposedNames": ["Vrillou", "Samarine", "Nacélie", "Rosélice", "Spirélis", "Arbélune"],
+  "namesAvailable": true,
+  "newImagesGenerated": 0,
+  "apiCalls": 0,
+  "databaseWritten": false,
+  "pilotReservedEur": 3.3,
+  "review": "/Users/philippekhill/Sites/TEDDy/app/docs/playthroughs/teddy-creature-diversity/c1df1e0a-2a18-43b3-bb84-67dd489af075/proposition.md",
+  "visualNoveltyValidated": false
+}

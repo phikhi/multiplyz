@@ -1,0 +1,272 @@
+.forest-shop {
+  position: relative;
+  isolation: isolate;
+  min-height: calc(100dvh - var(--app-shell-height));
+  --collection-rarity-glyph: var(--forest-ink);
+}
+.forest-shop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--egg-shop-scrim);
+  pointer-events: none;
+}
+.forest-shop .forest-renderer {
+  z-index: -2;
+}
+.egg-shop-inner {
+  max-width: var(--companion-album-width);
+  margin: auto;
+  padding: var(--space-4);
+}
+.forest-shop :is(button, a):focus-visible {
+  outline-color: var(--forest-gold);
+}
+.forest-shop .companion-biography :is(button, a):focus-visible {
+  outline-color: var(--forest-ink);
+}
+.egg-shop-heading {
+  width: fit-content;
+  max-width: var(--max-width-play);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--border-radius-lg);
+  background: var(--forest-deep);
+  margin-bottom: var(--space-4);
+}
+.egg-shop-heading .forest-kicker {
+  color: var(--forest-gold);
+}
+.egg-shop-heading h1 {
+  margin-bottom: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.egg-shop-heading p:last-child {
+  margin-bottom: 0;
+}
+.egg-shop-layout {
+  display: grid;
+  gap: var(--space-5);
+  align-items: center;
+}
+.egg-presentation {
+  text-align: center;
+}
+.egg-presentation > p {
+  display: inline-block;
+  color: var(--forest-gold);
+  background: var(--forest-deep);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--border-radius-lg);
+  font: var(--font-weight-bold) var(--font-size-xl) var(--font-family-display);
+}
+.egg-nest {
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background: var(--egg-nest-bg);
+}
+.egg-shell {
+  display: grid;
+  place-items: center;
+  width: var(--egg-shell-width);
+  aspect-ratio: 3 / 4;
+  border-radius: var(--egg-shell-radius);
+  background: var(--egg-shell-bg);
+  box-shadow: var(--egg-shell-shadow);
+  border: 1px solid var(--forest-gold);
+  animation: egg-float var(--egg-float-duration) ease-in-out infinite;
+}
+.egg-shell svg {
+  width: 38%;
+  fill: var(--forest-dot);
+  stroke: var(--forest-ink);
+  stroke-width: 2;
+  opacity: 0.7;
+}
+.egg-wallet {
+  display: flex;
+  gap: var(--space-6);
+  margin: 0 0 var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--forest-line);
+}
+.egg-wallet dt {
+  color: var(--forest-muted);
+}
+.egg-wallet dd {
+  margin: 0;
+  font: var(--font-weight-bold) var(--font-size-2xl) var(--font-family-display);
+}
+.egg-offer h2,
+.egg-encounter h2 {
+  font-size: var(--font-size-2xl);
+  margin-bottom: var(--space-3);
+  overflow-wrap: anywhere;
+}
+.egg-price {
+  font: var(--font-weight-bold) var(--font-size-xl) var(--font-family-display);
+}
+.egg-actions {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+.egg-actions :is(button, a) {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+}
+.egg-rules,
+.egg-saved {
+  color: var(--forest-muted);
+  margin: var(--space-5) 0 0;
+}
+.egg-guide,
+.egg-network,
+.egg-pending {
+  background: var(--forest-deep);
+  color: var(--forest-cream);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-4) var(--space-5);
+}
+.egg-guide {
+  grid-column: 1 / -1;
+}
+.egg-guide p:last-child {
+  margin-bottom: 0;
+  color: var(--forest-mint);
+}
+.egg-network {
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--forest-gold);
+}
+.egg-opening {
+  text-align: center;
+}
+.egg-opening-copy {
+  background: var(--forest-deep);
+  padding: var(--space-5);
+  border-radius: var(--border-radius-lg);
+  max-width: var(--max-width-play);
+  margin: auto;
+}
+.egg-opening-copy p:last-child {
+  color: var(--forest-mint);
+  margin: var(--space-4) 0 0;
+}
+.egg-encounter figure {
+  margin: 0;
+}
+.egg-shards {
+  background: var(--forest-soft);
+  border-radius: var(--border-radius-sm);
+  padding: var(--space-3);
+  font: var(--font-weight-bold) var(--font-size-xl) var(--font-family-display);
+}
+.shard-shop-link {
+  margin-top: var(--space-5);
+  text-align: center;
+}
+.shard-wallet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border-radius: var(--border-radius-lg);
+  background: var(--forest-paper);
+  color: var(--forest-ink);
+}
+.shard-wallet strong {
+  font: var(--font-weight-bold) var(--font-size-3xl) var(--font-family-display);
+}
+.shard-wallet p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.shard-family {
+  margin-top: var(--space-6);
+}
+.shard-family h2 {
+  width: fit-content;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--border-radius-lg);
+  background: var(--forest-deep);
+  color: var(--forest-cream);
+}
+.shard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--shard-card-width)), 1fr));
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+.shard-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--forest-line);
+  border-radius: var(--border-radius-lg);
+  background: var(--forest-paper);
+  color: var(--forest-ink);
+  cursor: pointer;
+}
+.shard-choice:disabled {
+  cursor: wait;
+}
+.shard-shop .shard-choice:focus-visible {
+  outline-color: var(--forest-ink);
+}
+.shard-choice:hover {
+  background: var(--forest-soft);
+}
+.shard-choice .companion-card-art {
+  width: 100%;
+}
+.shard-name {
+  font: var(--font-weight-bold) var(--font-size-2xl) var(--font-family-display);
+  overflow-wrap: anywhere;
+}
+.shard-cost {
+  font-weight: var(--font-weight-bold);
+}
+@keyframes egg-float {
+  50% {
+    transform: translateY(var(--egg-float-distance)) rotate(2deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .egg-shell {
+    animation: none;
+  }
+}
+@media (min-width: 600px) {
+  .egg-shop-inner {
+    padding: var(--space-5) var(--space-6);
+  }
+}
+@media (min-width: 900px) {
+  .egg-shop-heading {
+    max-width: none;
+  }
+  .egg-shop-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-5) var(--space-7);
+  }
+  .egg-presentation .egg-nest {
+    padding: var(--space-8);
+  }
+  .egg-guide {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: var(--space-6);
+  }
+  .egg-guide p {
+    margin: 0;
+  }
+}

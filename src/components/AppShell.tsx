@@ -2,6 +2,8 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { BRAND_NAME } from "@/config/brand";
 import { strings } from "@/strings";
 import { LogoutButton } from "@/components/LogoutButton";
 
@@ -149,12 +151,25 @@ const settingsLinkStyle: CSSProperties = {
 };
 
 export function AppShell({ coins, shards }: AppShellProps) {
+  const pathname = usePathname();
   const s = strings.shell;
   const coinsLabel = countLabel(coins, s.balanceCoins, s.balanceCoinsPlural);
   const shardsLabel = countLabel(shards, s.balanceShards, s.balanceShardsPlural);
 
+  if (["/jouer", "/repos", "/reprendre"].includes(pathname)) return null;
   return (
-    <header data-app-shell="" style={headerStyle}>
+    <header
+      data-app-shell=""
+      className={
+        pathname === "/carte" || pathname.startsWith("/collection") ? "forest-shell" : undefined
+      }
+      style={headerStyle}
+    >
+      {(pathname === "/carte" || pathname.startsWith("/collection")) && (
+        <Link className="forest-brand" href="/carte">
+          {BRAND_NAME}
+        </Link>
+      )}
       <div style={balanceGroupStyle}>
         <span
           role="img"

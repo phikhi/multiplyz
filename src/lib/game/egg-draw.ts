@@ -178,7 +178,7 @@ export function loadPityCount(db: TxHandle, profileId: number): number {
  * @param rand aléa injecté `[0,1)` (défaut `Math.random`) — déterministe en test.
  */
 export function buyEggAndDraw(
-  db: AppDatabase,
+  db: Pick<AppDatabase, "select" | "insert" | "update" | "transaction">,
   profileId: number,
   economyConfig: EconomyConfig,
   mapConfig: MapConfig,

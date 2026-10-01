@@ -1,0 +1,60 @@
+{
+  "ok": true,
+  "earnedLevels": 8,
+  "purchases": 4,
+  "balance": {
+    "coins": 30,
+    "shards": 10
+  },
+  "creature": "creature:0:4",
+  "art": "/generated/socle/creature/creature_world_0_4.png",
+  "duplicate": true,
+  "geometry": [
+    {
+      "name": "encounter-1280",
+      "box": {
+        "x": 134,
+        "y": 345.59375,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "encounter-1024",
+      "box": {
+        "x": 40,
+        "y": 345.765625,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "encounter-390",
+      "box": {
+        "x": 16,
+        "y": 284.1875,
+        "width": 358,
+        "height": 358
+      }
+    },
+    {
+      "name": "encounter-320",
+      "box": {
+        "x": 16,
+        "y": 284.1875,
+        "width": 288,
+        "height": 288
+      }
+    },
+    {
+      "name": "05-duplicate",
+      "box": {
+        "x": 134,
+        "y": 399.6875,
+        "width": 440,
+        "height": 440
+      }
+    }
+  ],
+  "errors": []
+}

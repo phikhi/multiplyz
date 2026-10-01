@@ -967,7 +967,7 @@ export const fr = {
          * rappel in-app) n'a **pas** de story planifiée. Ne PAS affirmer un effet actif tant que ce
          * câblage n'existe pas (sinon fausse promesse au parent).
          */
-        nudgeHint: "Bientôt : une invitation douce à faire une pause, sans jamais bloquer.",
+        nudgeHint: "Une invitation douce en fin de niveau, une fois par jour. Tu peux continuer.",
         /** Libellé accessible d'une durée en minutes (gabarit). */
         minutesOption: "{min} minutes",
         /** Libellé du toggle du verrou dur optionnel. */

@@ -308,11 +308,12 @@ describe("strings (i18n FR)", () => {
     expect(set.language.value).toBe("Français");
     // Verrou dur (story 7.8 #229) : enforcement câblé → copie au PRÉSENT, écho DETAILS §3 (Temps d'écran)
     // (« verrouille en douceur jusqu'au lendemain ») — plus de « Bientôt » (mentirait au parent
-    // maintenant que le réglage AGIT réellement). Le nudge reste hors scope 7.8 → « Bientôt » inchangé.
+    // maintenant que le réglage AGIT réellement). La pause quotidienne est également livrée.
     expect(set.screenTime.hardLockHint.toLowerCase()).not.toContain("bientôt");
     expect(set.screenTime.hardLockHint).toContain("douceur");
     expect(set.screenTime.hardLockHint).toContain("lendemain");
-    expect(set.screenTime.nudgeHint.toLowerCase()).toContain("bientôt");
+    expect(set.screenTime.nudgeHint.toLowerCase()).not.toContain("bientôt");
+    expect(set.screenTime.nudgeHint).toContain("fin de niveau");
     // Son/musique/volume (story 8.3, DETAILS §3) : le moteur audio réel a mergé en 8.4 (#257) → les
     // 3 réglages AGISSENT → copie au PRÉSENT, plus de « Bientôt » (mentirait au parent maintenant que
     // le réglage AGIT — même bascule que hardLockHint en 7.8, story hardening #292).

@@ -11,6 +11,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => ({ __fakeDb: true })) }));
 vi.mock("@/lib/auth/current-session", () => ({ getCurrentParentSession: vi.fn() }));
 vi.mock("@/lib/engine/service", () => ({ requestRecalibration: vi.fn() }));
+vi.mock("@/lib/parent/profiles", () => ({ listManagedProfiles: () => [{ id: 1 }] }));
 vi.mock("@/lib/parent/settings", async (importActual) => {
   const actual = await importActual<typeof import("@/lib/parent/settings")>();
   return {

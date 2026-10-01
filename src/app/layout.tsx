@@ -8,7 +8,7 @@ import { dataThemeAttr, readHouseholdSettings } from "@/lib/parent/settings";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
 import { InstallPrompt } from "@/components/InstallPrompt";
-import { Baloo_2, Nunito } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
 // Le layout racine lit le **thème du foyer** (source de vérité serveur, story 7.3) à CHAQUE requête
@@ -18,17 +18,15 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const baloo2 = Baloo_2({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+const baloo2 = localFont({
+  src: "./fonts/baloo.woff2",
   // Fournit --font-next-display, référencé par --font-family-display via globals.css.
   variable: "--font-next-display",
   display: "swap",
 });
 
-const nunito = Nunito({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
+const nunito = localFont({
+  src: "./fonts/nunito.woff2",
   // Fournit --font-next-body, référencé par --font-family-body via globals.css.
   variable: "--font-next-body",
   display: "swap",

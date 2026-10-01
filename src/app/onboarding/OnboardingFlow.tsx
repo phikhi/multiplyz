@@ -1,417 +1,265 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { strings } from "@/strings";
+import { daily } from "@/strings/daily";
 import { AVATARS } from "@/config/avatars";
 import { NAME_MAX_LENGTH, PIN_LENGTH } from "@/lib/auth/validation";
 import { PinPad } from "@/components/PinPad";
 import { createHouseholdAction } from "./actions";
 import type { OnboardingErrorCode } from "@/lib/auth/household";
 
-/**
- * Flow d'onboarding 1er usage (AUTH.md §2, PRODUCT.md §1.1, WIREFRAMES §1).
- * Assistant en étapes : profil → code enfant → code parent → code de secours →
- * prêt. Le **serveur reste la source de vérité** (la server action valide et
- * hache) ; le gating client n'est qu'une affordance. No-fail, voix de Teddy
- * côté enfant, registre neutre côté parent. Tokens uniquement, cibles ≥ 44 px.
- */
-
-type Step = "profile" | "childPin" | "parentPin" | "recovery" | "ready";
-/** Code d'erreur affichable : ceux du serveur + un repli réseau. */
-type FlowErrorCode = OnboardingErrorCode | "GENERIC";
-
-const WARN_ICON = "⚠️";
-const NONE = "";
-
-// Une erreur renvoie l'utilisateur à l'étape où il peut la corriger.
-const ERROR_STEP: Record<FlowErrorCode, Step> = {
+type Step =
+  "profile" | "childPin" | "confirmChild" | "parentPin" | "confirmParent" | "recovery" | "ready";
+const ordinal: Record<Step, number> = {
+  profile: 1,
+  childPin: 2,
+  confirmChild: 2,
+  parentPin: 3,
+  confirmParent: 3,
+  recovery: 4,
+  ready: 4,
+};
+const errorStep: Record<OnboardingErrorCode, Step> = {
   NAME_INVALID: "profile",
   AVATAR_INVALID: "profile",
   NAME_TAKEN: "profile",
   PIN_INVALID: "parentPin",
   PARENT_PIN_SAME: "parentPin",
-  GENERIC: "parentPin",
 };
 
-const cardStyle = {
-  maxWidth: "var(--max-width-play)",
-  margin: "0 auto",
-  padding: "var(--space-6)",
-  backgroundColor: "var(--card-bg)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--card-shadow)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "var(--space-5)",
-} as const;
-
-// Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran,
-// chaque étape). `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1/7.5/7.9) : le focus
-// est programmatique, hors ordre clavier → l'anneau UA natif serait un artefact full-width sans
-// valeur a11y. Pas `mz-focusable` (ne stylise que `:focus-visible`, non matché par un focus
-// programmatique).
-const titleStyle = {
-  fontFamily: "var(--font-family-display)",
-  fontSize: "var(--font-size-xl)",
-  fontWeight: "var(--font-weight-bold)",
-  color: "var(--color-text-primary)",
-  margin: 0,
-  textAlign: "center",
-  outline: "none",
-} as const;
-
-const primaryButtonStyle = {
-  minHeight: "var(--tap-target-min)",
-  padding: "var(--space-3) var(--space-6)",
-  fontFamily: "var(--font-family-display)",
-  fontSize: "var(--font-size-md)",
-  fontWeight: "var(--font-weight-bold)",
-  // Texte-sur-accent : token qui suit le thème (accent foncé→blanc / clair→foncé),
-  // même pattern que ThemeToggle. Reste lisible dans les 2 thèmes.
-  color: "var(--color-text-inverse)",
-  backgroundColor: "var(--color-accent-primary)",
-  border: "none",
-  borderRadius: "var(--border-radius-full)",
-  cursor: "pointer",
-} as const;
-
-/**
- * Style CTA + affordance désactivée (#240/#226, corrigé PR #250). L'état désactivé passe à un
- * registre **neutre** (`--color-text-secondary` sur `--color-bg-tertiary`, ≥4.5:1 peint les 2
- * thèmes) au lieu d'un `opacity:0.55` sur le CTA plein-accent — ce dernier compositait le texte
- * blanc `--color-text-inverse` vers le fond de carte et le faisait tomber sous 4.5:1 peint
- * (~2.17:1 light / ~2.51:1 dark). Même patron neutre que `disabledButtonStyle` de `ProfileManager`.
- * Le signal « désactivé » vient du fond atténué + `cursor:not-allowed` + `aria-disabled`, jamais
- * d'une dilution du texte (rétro #226 : ne pas diluer du texte par une `opacity` de sous-arbre).
- */
-function primaryStyle(disabled: boolean) {
-  if (disabled) {
-    return {
-      ...primaryButtonStyle,
-      color: "var(--color-text-secondary)",
-      backgroundColor: "var(--color-bg-tertiary)",
-      border: "1px solid var(--color-border-primary)",
-      cursor: "not-allowed",
-    };
-  }
-  return primaryButtonStyle;
-}
-
-const ghostButtonStyle = {
-  minHeight: "var(--tap-target-min)",
-  padding: "var(--space-3) var(--space-5)",
-  fontFamily: "var(--font-family-body)",
-  fontSize: "var(--font-size-base)",
-  fontWeight: "var(--font-weight-semibold)",
-  color: "var(--color-text-secondary)",
-  backgroundColor: "transparent",
-  border: "1px solid var(--color-border-primary)",
-  borderRadius: "var(--border-radius-full)",
-  cursor: "pointer",
-} as const;
-
+/** First household setup; existing validation, hashing and ownership rules stay on the server. */
 export function OnboardingFlow() {
-  const router = useRouter();
-  // Gestion du focus a11y : chaque étape monte un nouveau titre ; ce ref-callback
-  // y place le focus à son montage → l'utilisateur clavier/lecteur d'écran suit
-  // le changement d'étape (et n'atterrit pas sur <body>). Au démontage `node=null`.
-  const focusHeading = useCallback((node: HTMLHeadingElement | null) => {
-    node?.focus();
-  }, []);
+  const { refresh } = useRouter();
   const [step, setStep] = useState<Step>("profile");
-  const [name, setName] = useState(NONE);
-  const [avatar, setAvatar] = useState(NONE);
-  const [childPin, setChildPin] = useState(NONE);
-  const [parentPin, setParentPin] = useState(NONE);
-  const [error, setError] = useState<FlowErrorCode | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [recoveryCode, setRecoveryCode] = useState(NONE);
-
-  const goto = (next: Step) => {
+  const [name, setName] = useState("");
+  const [avatar, setAvatar] = useState("");
+  const [childPin, setChildPin] = useState("");
+  const [parentPin, setParentPin] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [recovery, setRecovery] = useState("");
+  const [kept, setKept] = useState(false);
+  const [already, setAlready] = useState(false);
+  const inFlight = useRef(false);
+  const focus = useCallback((node: HTMLHeadingElement | null) => node?.focus(), []);
+  const go = (next: Step) => {
+    if (inFlight.current) return;
     setError(null);
+    setConfirmation("");
     setStep(next);
   };
-
-  const canContinueProfile = name.trim().length > 0 && avatar !== NONE;
-
   const submit = async () => {
-    setSubmitting(true);
+    if (inFlight.current) return;
+    if (confirmation !== parentPin) {
+      setError(daily.mismatch);
+      setConfirmation("");
+      return;
+    }
+    inFlight.current = true;
+    setBusy(true);
     setError(null);
     try {
       const result = await createHouseholdAction({ name, avatar, childPin, parentPin });
       if (!result.ok) {
-        setError(result.code);
-        setStep(ERROR_STEP[result.code]);
+        setError(strings.onboarding.errors[result.code]);
+        setStep(errorStep[result.code]);
+        setConfirmation("");
         return;
       }
+      setChildPin("");
+      setParentPin("");
+      setConfirmation("");
       if ("recoveryCode" in result) {
-        setRecoveryCode(result.recoveryCode);
+        setRecovery(result.recoveryCode);
         setStep("recovery");
-        return;
+      } else {
+        setAlready(true);
+        setStep("ready");
       }
-      // Foyer déjà configuré (rejeu idempotent) : rien à noter, on termine.
-      setStep("ready");
     } catch {
-      setError("GENERIC");
-      setStep("parentPin");
+      setError(strings.onboarding.errors.GENERIC);
     } finally {
-      setSubmitting(false);
+      inFlight.current = false;
+      setBusy(false);
     }
   };
-
+  const titles: Record<Step, string> = {
+    profile: strings.onboarding.profile.title,
+    childPin: strings.onboarding.childPin.title,
+    confirmChild: daily.confirmChild,
+    parentPin: strings.onboarding.parentPin.title,
+    confirmParent: daily.confirmParent,
+    recovery: strings.onboarding.recovery.title,
+    ready: strings.onboarding.ready.title,
+  };
   return (
-    <main style={{ minHeight: "100dvh", padding: "var(--space-6)" }} className="bg-bg text-text">
-      <div style={cardStyle}>
-        {error !== null && (
-          <p
-            role="alert"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-2)",
-              margin: 0,
-              padding: "var(--space-3) var(--space-4)",
-              backgroundColor: "var(--color-status-warning)",
-              color: "var(--color-on-warning)",
-              borderRadius: "var(--border-radius-md)",
-              fontFamily: "var(--font-family-body)",
-              fontSize: "var(--font-size-sm)",
-              fontWeight: "var(--font-weight-semibold)",
-            }}
-          >
-            <span aria-hidden="true">{WARN_ICON}</span>
-            {strings.onboarding.errors[error]}
+    <main className="daily-main">
+      <section className="daily-card" aria-busy={busy}>
+        <p className="forest-kicker">{daily.setupStep(ordinal[step])}</p>
+        <h1 ref={focus} tabIndex={-1} key={step}>
+          {titles[step]}
+        </h1>
+        {error && (
+          <p className="daily-error" role="alert">
+            {error}
           </p>
         )}
-
         {step === "profile" && (
           <>
-            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
-              {strings.onboarding.profile.title}
-            </h1>
-            <p style={{ textAlign: "center", margin: 0, color: "var(--color-text-secondary)" }}>
-              {strings.onboarding.profile.intro}
-            </p>
-
-            <label style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-              <span style={{ fontWeight: "var(--font-weight-semibold)" }}>
-                {strings.onboarding.profile.nameLabel}
-              </span>
+            <p>{strings.onboarding.profile.intro}</p>
+            <label className="daily-field">
+              <span>{strings.onboarding.profile.nameLabel}</span>
               <input
-                type="text"
+                autoComplete="given-name"
                 value={name}
                 maxLength={NAME_MAX_LENGTH}
-                placeholder={strings.onboarding.profile.namePlaceholder}
                 onChange={(event) => setName(event.target.value)}
-                style={{
-                  minHeight: "var(--tap-target-min)",
-                  padding: "var(--space-3) var(--space-4)",
-                  fontSize: "var(--font-size-md)",
-                  fontFamily: "var(--font-family-body)",
-                  color: "var(--color-text-primary)",
-                  backgroundColor: "var(--color-bg-secondary)",
-                  border: "1px solid var(--color-border-primary)",
-                  borderRadius: "var(--border-radius-md)",
-                }}
+                placeholder={strings.onboarding.profile.namePlaceholder}
               />
             </label>
-
-            <div
-              role="group"
-              aria-label={strings.onboarding.profile.avatarLabel}
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: "var(--space-3)",
-                justifyContent: "center",
-              }}
-            >
-              {AVATARS.map((option) => {
-                const selected = option.id === avatar;
-                // Chaque id d'AVATARS a un libellé (invariant vérifié en test).
-                const avatarName =
-                  strings.onboarding.profile.avatarNames[
-                    option.id as keyof typeof strings.onboarding.profile.avatarNames
-                  ];
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className="mz-focusable"
-                    aria-pressed={selected}
-                    aria-label={strings.onboarding.profile.avatarOption.replace(
-                      "{nom}",
-                      avatarName,
-                    )}
-                    onClick={() => setAvatar(option.id)}
-                    style={{
-                      minWidth: "var(--tap-target-min)",
-                      minHeight: "var(--tap-target-min)",
-                      fontSize: "var(--font-size-2xl)",
-                      cursor: "pointer",
-                      borderRadius: "var(--border-radius-md)",
-                      backgroundColor: "var(--color-bg-secondary)",
-                      border: selected
-                        ? "3px solid var(--color-accent-primary)"
-                        : "1px solid var(--color-border-primary)",
-                    }}
-                  >
-                    {option.emoji}
-                  </button>
-                );
-              })}
+            <p id="avatar-label">{strings.onboarding.profile.avatarLabel}</p>
+            <div className="daily-avatars" role="group" aria-labelledby="avatar-label">
+              {AVATARS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={option.id === avatar}
+                  className="daily-profile"
+                  aria-label={strings.onboarding.profile.avatarOption.replace(
+                    "{nom}",
+                    strings.onboarding.profile.avatarNames[
+                      option.id as keyof typeof strings.onboarding.profile.avatarNames
+                    ],
+                  )}
+                  onClick={() => setAvatar(option.id)}
+                >
+                  {option.emoji}
+                </button>
+              ))}
             </div>
-
             <button
-              type="button"
-              className="mz-focusable"
-              disabled={!canContinueProfile}
-              aria-disabled={!canContinueProfile}
-              onClick={() => goto("childPin")}
-              style={primaryStyle(!canContinueProfile)}
+              className="forest-primary"
+              disabled={!name.trim() || !avatar}
+              onClick={() => go("childPin")}
             >
               {strings.onboarding.nav.next}
             </button>
           </>
         )}
-
-        {step === "childPin" && (
+        {(step === "childPin" || step === "parentPin") && (
           <>
-            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
-              {strings.onboarding.childPin.title}
-            </h1>
-            <p style={{ textAlign: "center", margin: 0, color: "var(--color-text-secondary)" }}>
-              {strings.onboarding.childPin.hint}
+            <p>
+              {step === "childPin"
+                ? strings.onboarding.childPin.hint
+                : strings.onboarding.parentPin.hint}
             </p>
+            {step === "parentPin" && (
+              <p className="daily-hint">
+                {strings.onboarding.parentPin.method.replace("{prénom}", name)}
+              </p>
+            )}
             <PinPad
-              value={childPin}
-              onChange={setChildPin}
-              label={strings.onboarding.childPin.title}
+              label={titles[step]}
+              value={step === "childPin" ? childPin : parentPin}
+              onChange={step === "childPin" ? setChildPin : setParentPin}
             />
-            <div
-              style={{ display: "flex", gap: "var(--space-3)", justifyContent: "space-between" }}
-            >
+            <div className="daily-actions">
               <button
-                type="button"
-                className="mz-focusable"
-                onClick={() => goto("profile")}
-                style={ghostButtonStyle}
+                className="forest-secondary"
+                onClick={() => go(step === "childPin" ? "profile" : "childPin")}
               >
                 {strings.onboarding.nav.back}
               </button>
               <button
-                type="button"
-                className="mz-focusable"
-                disabled={childPin.length !== PIN_LENGTH}
-                aria-disabled={childPin.length !== PIN_LENGTH}
-                onClick={() => goto("parentPin")}
-                style={primaryStyle(childPin.length !== PIN_LENGTH)}
+                className="forest-primary"
+                disabled={(step === "childPin" ? childPin : parentPin).length !== PIN_LENGTH}
+                onClick={() => go(step === "childPin" ? "confirmChild" : "confirmParent")}
               >
                 {strings.onboarding.nav.next}
               </button>
             </div>
           </>
         )}
-
-        {step === "parentPin" && (
+        {(step === "confirmChild" || step === "confirmParent") && (
           <>
-            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
-              {strings.onboarding.parentPin.title}
-            </h1>
-            <p style={{ textAlign: "center", margin: 0, color: "var(--color-text-secondary)" }}>
-              {strings.onboarding.parentPin.hint}
-            </p>
-            <p
-              style={{
-                margin: 0,
-                color: "var(--color-text-secondary)",
-                fontSize: "var(--font-size-sm)",
-              }}
-            >
-              {strings.onboarding.parentPin.method.replace("{prénom}", name)}
-            </p>
+            <p>{daily.confirmHint}</p>
             <PinPad
-              value={parentPin}
-              onChange={setParentPin}
-              label={strings.onboarding.parentPin.title}
+              label={titles[step]}
+              value={confirmation}
+              onChange={setConfirmation}
+              disabled={busy}
             />
-            <div
-              style={{ display: "flex", gap: "var(--space-3)", justifyContent: "space-between" }}
-            >
+            <div className="daily-actions">
               <button
-                type="button"
-                className="mz-focusable"
-                onClick={() => goto("childPin")}
-                style={ghostButtonStyle}
+                className="forest-secondary"
+                disabled={busy}
+                onClick={() => go(step === "confirmChild" ? "childPin" : "parentPin")}
               >
                 {strings.onboarding.nav.back}
               </button>
               <button
-                type="button"
-                className="mz-focusable"
-                disabled={parentPin.length !== PIN_LENGTH || submitting}
-                aria-disabled={parentPin.length !== PIN_LENGTH || submitting}
-                onClick={submit}
-                style={primaryStyle(parentPin.length !== PIN_LENGTH || submitting)}
+                className="forest-primary"
+                disabled={busy || confirmation.length !== PIN_LENGTH}
+                onClick={() => {
+                  if (step === "confirmParent") {
+                    void submit();
+                    return;
+                  }
+                  if (confirmation !== childPin) {
+                    setError(daily.mismatch);
+                    setConfirmation("");
+                    return;
+                  }
+                  go("parentPin");
+                }}
               >
-                {submitting ? strings.onboarding.nav.creating : strings.onboarding.nav.create}
+                {busy
+                  ? strings.onboarding.nav.creating
+                  : step === "confirmParent"
+                    ? strings.onboarding.nav.create
+                    : strings.onboarding.nav.next}
               </button>
             </div>
           </>
         )}
-
         {step === "recovery" && (
           <>
-            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
-              {strings.onboarding.recovery.title}
-            </h1>
-            <p style={{ margin: 0, color: "var(--color-text-secondary)" }}>
-              {strings.onboarding.recovery.intro}
+            <p>{strings.onboarding.recovery.intro}</p>
+            <p role="status" className="daily-recovery">
+              {recovery}
             </p>
-            {/* role=status : le code à usage unique est annoncé aux lecteurs
-                d'écran dès l'affichage (ne pas le rater). */}
-            <p
-              role="status"
-              style={{
-                textAlign: "center",
-                fontFamily: "var(--font-family-display)",
-                fontSize: "var(--font-size-3xl)",
-                fontWeight: "var(--font-weight-bold)",
-                letterSpacing: "var(--letter-spacing-wide)",
-                color: "var(--color-accent-primary)",
-                margin: 0,
-              }}
-            >
-              {recoveryCode}
-            </p>
+            <label className="daily-check">
+              <input
+                type="checkbox"
+                checked={kept}
+                onChange={(event) => setKept(event.target.checked)}
+              />
+              {daily.recoveryChecked}
+            </label>
             <button
-              type="button"
-              className="mz-focusable"
-              onClick={() => goto("ready")}
-              style={primaryButtonStyle}
+              className="forest-primary"
+              disabled={!kept}
+              onClick={() => {
+                setRecovery("");
+                go("ready");
+              }}
             >
               {strings.onboarding.recovery.done}
             </button>
           </>
         )}
-
         {step === "ready" && (
           <>
-            <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
-              {strings.onboarding.ready.title}
-            </h1>
-            <button
-              type="button"
-              className="mz-focusable"
-              onClick={() => router.refresh()}
-              style={primaryButtonStyle}
-            >
+            <p>{already ? daily.configured : daily.readyHint}</p>
+            <button className="forest-primary" onClick={refresh}>
               {strings.onboarding.ready.cta}
             </button>
           </>
         )}
-      </div>
+      </section>
     </main>
   );
 }

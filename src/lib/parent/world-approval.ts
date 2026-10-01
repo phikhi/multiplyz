@@ -1,9 +1,10 @@
 import { asc, eq } from "drizzle-orm";
 import type { AppDatabase } from "@/lib/db";
-import { worlds } from "@/lib/db/schema";
+import { characters, worlds } from "@/lib/db/schema";
 import { buildWorldTheme, type WorldTheme } from "@/lib/game/world-theme";
 import { PaletteError } from "@/lib/worldgen/palette";
 import { worldPassedQa } from "@/lib/worldgen/worker";
+import { readRuntimeCatalogue, RuntimeCatalogueError } from "@/lib/worldgen/runtime-catalogue";
 
 /**
  * **Projection de lecture parent** des mondes en attente d'approbation (story 7.9, WORLDGEN §6).
@@ -33,6 +34,13 @@ export interface PendingWorld {
   /** Thème per-monde déjà validé (accent + refs d'assets, `lib/game/world-theme.ts`) — même
    * garde de sécurité que la carte (`isRenderableAssetRef`) pour un éventuel aperçu image. */
   readonly theme: WorldTheme;
+  readonly creatures?: readonly {
+    id: string;
+    name: string;
+    artRef: string;
+    stageArt?: Readonly<Record<"2" | "3", string>>;
+    story: string | null;
+  }[];
 }
 
 /** Colonnes brutes d'un candidat `buffered`, avant filtre QA + construction du thème. */
@@ -81,6 +89,25 @@ export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
       pending.push({
         id: row.id,
         index: row.index,
+        creatures: row.assetRefs.includes("/runtime-")
+          ? readRuntimeCatalogue(row.index, row.assetRefs).creatures.map((c) => ({
+              id: c.id,
+              name: c.nameDefault,
+              artRef: c.artRef,
+              stageArt: c.stageArt,
+              story: c.story,
+            }))
+          : db
+              .select({
+                id: characters.id,
+                name: characters.nameDefault,
+                artRef: characters.artRef,
+                story: characters.story,
+              })
+              .from(characters)
+              .where(eq(characters.worldIndex, row.index))
+              .orderBy(asc(characters.id))
+              .all(),
         theme: buildWorldTheme({
           theme: row.theme,
           palette: row.palette,
@@ -88,7 +115,8 @@ export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
         }),
       });
     } catch (error) {
-      if (!(error instanceof PaletteError)) throw error;
+      if (!(error instanceof PaletteError) && !(error instanceof RuntimeCatalogueError))
+        throw error;
       // Palette corrompue (défense en profondeur) : exclu de la file plutôt que de planter tout
       // l'écran d'approbation — les AUTRES mondes en attente restent approuvables/rejetables.
     }
@@ -103,5 +131,5 @@ export function listPendingWorlds(db: AppDatabase): PendingWorld[] {
  * découvrabilité de l'impasse #231).
  */
 export function countPendingWorlds(db: AppDatabase): number {
-  return qaPassedBufferedRows(db).length;
+  return listPendingWorlds(db).length;
 }

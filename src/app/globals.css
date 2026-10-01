@@ -1,5 +1,10 @@
 @import "tailwindcss";
 @import "../../tokens.css";
+@import "./forest.css";
+@import "./daily.css";
+@import "./companions.css";
+@import "./egg-shop.css";
+@import "./parent.css";
 
 /* Fait pointer les tokens polices vers les variables next/font (CLS + métriques fallback).
    Doit venir APRÈS @import tokens.css pour prendre le dessus dans la cascade (:root même spécificité). */

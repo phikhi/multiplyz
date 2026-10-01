@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { parent as p } from "@/strings/parent";
+import { AssetImage } from "@/components/media/AssetImage";
 import { strings } from "@/strings";
 import type { PendingWorld } from "@/lib/parent/world-approval";
 import { approveWorldAction, rejectWorldAction } from "./actions";
@@ -32,7 +34,7 @@ export interface WorldApprovalManagerProps {
 const CHECK_ICON = "✓";
 const WARN_ICON = "⚠️";
 
-type Mode = "reject" | null;
+type Mode = "reject" | "approve" | null;
 type FeedbackKind = "success" | "error";
 type ErrorCode = "UNAUTHORIZED" | "MODERATION_FAILED" | "GENERIC";
 
@@ -40,24 +42,6 @@ type ErrorCode = "UNAUTHORIZED" | "MODERATION_FAILED" | "GENERIC";
 function fill(template: string, token: string, value: string): string {
   return template.replace(token, value);
 }
-
-const mainStyle = {
-  minHeight: "100dvh",
-  padding: "var(--space-6)",
-} as const;
-
-const cardStyle = {
-  maxWidth: "var(--max-width-play)",
-  width: "100%",
-  margin: "0 auto",
-  padding: "var(--space-6)",
-  backgroundColor: "var(--card-bg)",
-  borderRadius: "var(--card-radius)",
-  boxShadow: "var(--card-shadow)",
-  display: "flex",
-  flexDirection: "column",
-  gap: "var(--space-5)",
-} as const;
 
 // Titre focus-managé (`ref` + `tabIndex={-1}` + `.focus()` au montage → annonce lecteur d'écran).
 // `outline:"none"` **documenté** (STACK-TRAP #222, rétro 7.1/7.5) : le focus est programmatique,
@@ -304,12 +288,13 @@ export function WorldApprovalManager({ pending }: WorldApprovalManagerProps) {
   };
 
   return (
-    <main className="bg-bg text-text" style={mainStyle}>
-      <div style={cardStyle}>
+    <main className="parent-page parent-mondes">
+      <div className="parent-form">
         <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
           {wa.title}
         </h1>
         <p style={introStyle}>{wa.intro}</p>
+        <p>{p.previewHint}</p>
 
         {feedback !== null &&
           (feedback.kind === "success" ? (
@@ -348,7 +333,78 @@ export function WorldApprovalManager({ pending }: WorldApprovalManagerProps) {
                   </div>
                 </div>
 
-                {isRejectPanelOpen ? (
+                <div className="parent-world-preview">
+                  <h2>{p.preview}</h2>
+                  {(
+                    [
+                      [p.background, world.theme.background],
+                      [p.tiles, world.theme.tiles],
+                      [p.teddy, world.theme.teddy],
+                    ] as const
+                  ).map(([label, url]) => (
+                    <figure key={label}>
+                      <AssetImage
+                        key={url}
+                        assetRef={url?.replace(/^\/generated\//, "") ?? null}
+                        alt={label}
+                        fallback={<span>{p.previewUnavailable}</span>}
+                        width="100%"
+                        dataAsset="parent-world-preview"
+                      />
+                      <figcaption>{label}</figcaption>
+                    </figure>
+                  ))}
+                  <h3>{p.characters}</h3>
+                  <div className="parent-world-creatures">
+                    {world.creatures?.map((creature) => (
+                      <figure key={creature.id}>
+                        {(creature.stageArt
+                          ? [creature.artRef, creature.stageArt["2"], creature.stageArt["3"]]
+                          : [creature.artRef]
+                        ).map((ref, index) => (
+                          <div key={ref}>
+                            <AssetImage
+                              assetRef={ref}
+                              alt={`${creature.name} · ${p.creatureStages[index]}`}
+                              fallback={<span>{p.previewUnavailable}</span>}
+                              width="100%"
+                              dataAsset="parent-creature-preview"
+                            />
+                            {creature.stageArt && <p>{p.creatureStages[index]}</p>}
+                          </div>
+                        ))}
+                        <figcaption>
+                          <strong>{creature.name}</strong>
+                          <p>{creature.story}</p>
+                        </figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                  {!world.creatures?.length && <p>{p.noCharacters}</p>}
+                </div>
+                {active?.id === world.id && active.mode === "approve" ? (
+                  <div className="parent-panel">
+                    <h3>{p.approveTitle}</h3>
+                    <p>{p.approveHint}</p>
+                    <div className="parent-actions">
+                      <button
+                        ref={panelAnchorRef}
+                        className="parent-secondary"
+                        disabled={pendingApprove !== null}
+                        onClick={() => setActive(null)}
+                      >
+                        {p.cancel}
+                      </button>
+                      <button
+                        className="parent-primary"
+                        disabled={pendingApprove !== null}
+                        onClick={() => void submitApprove(world.id)}
+                      >
+                        {p.approveConfirm}
+                      </button>
+                    </div>
+                  </div>
+                ) : isRejectPanelOpen ? (
                   <div style={panelStyle}>
                     {/* PAS `role="alert"` ici (réservé au bandeau de feedback live ci-dessus). */}
                     <p style={warningBoxStyle}>
@@ -360,6 +416,7 @@ export function WorldApprovalManager({ pending }: WorldApprovalManagerProps) {
                         ref={panelAnchorRef}
                         type="button"
                         className="mz-focusable"
+                        disabled={pendingReject}
                         onClick={cancelReject}
                         style={ghostButtonStyle}
                       >
@@ -382,8 +439,8 @@ export function WorldApprovalManager({ pending }: WorldApprovalManagerProps) {
                     <button
                       type="button"
                       className="mz-focusable"
-                      disabled={pendingApprove === world.id}
-                      onClick={() => submitApprove(world.id)}
+                      disabled={pendingApprove !== null || pendingReject}
+                      onClick={() => setActive({ id: world.id, mode: "approve" })}
                       style={pendingApprove === world.id ? disabledButtonStyle : primaryButtonStyle}
                     >
                       {wa.approve.action}
@@ -391,6 +448,7 @@ export function WorldApprovalManager({ pending }: WorldApprovalManagerProps) {
                     <button
                       type="button"
                       className="mz-focusable"
+                      disabled={pendingApprove !== null || pendingReject}
                       onClick={() => openReject(world.id)}
                       style={ghostButtonStyle}
                     >

@@ -1,220 +1,266 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BoutiqueScreen } from "./BoutiqueScreen";
 import {
+  acknowledgeEggAction,
   boutiqueStateAction,
   buyEggAction,
-  type BuyEggActionResult,
 } from "@/app/(app)/boutique/actions";
-import { strings } from "@/strings";
-import {
-  contrastRatio,
-  resolveTokenColor,
-  type Theme,
-} from "@/components/game/scaffolds/test-support/tokens-css";
+import type { EggReceipt, EggShopState } from "@/lib/game/egg-receipt-types";
+import { eggShop as copy } from "@/strings/egg-shop";
+import { contrastRatio, resolveTokenColor, type Theme } from "./scaffolds/test-support/tokens-css";
 
-/**
- * Tests de l'écran **Boutique / Œufs** (story R4.2 #393, WIREFRAMES §6). Prouvent à effet observable :
- * - l'achat relaie un `drawId` opaque, la révélation affiche la créature (art rendable → `<img>`) ;
- * - **doublon** → « +N ✨ » (jamais « rien ») ; **nouvelle** → beat célébration ; **broke** → doux ;
- * - l'art consomme le token de **MAGNITUDE** dédié `--egg-reveal-art-size` (la taille rendue = E2E) ;
- * - **a11y** : bloc de révélation `role="group"` (nom + rareté, contenu annoncé), art décoratif, ≥ 44 px ;
- * - **contraste WCAG résolu** (rétro #104/#125/#126) sur TOUS les couples texte/fond de l'écran.
- */
-
+const router = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("./ForestScene", () => ({ ForestScene: () => null }));
 vi.mock("@/app/(app)/boutique/actions", () => ({
   boutiqueStateAction: vi.fn(),
   buyEggAction: vi.fn(),
+  acknowledgeEggAction: vi.fn(),
 }));
-
 const stateMock = vi.mocked(boutiqueStateAction);
 const buyMock = vi.mocked(buyEggAction);
-
-const NEW_RESULT: Extract<BuyEggActionResult, { ok: true }> = {
-  ok: true,
-  creature: {
-    characterId: "creature:0:0",
-    displayName: "Goupil",
-    rarity: "common",
-    artRef: "socle/creature/creature_world_0_0.png",
-    story: "Un ami.",
+const ackMock = vi.mocked(acknowledgeEggAction);
+const receipt: EggReceipt = {
+  drawId: "draw-1",
+  acknowledged: false,
+  result: {
+    ok: true,
+    creature: {
+      characterId: "creature:0:0",
+      displayName: "Goupil",
+      rarity: "common",
+      artRef: "socle/creature/creature_world_0_0.png",
+      story: "Un ami des sous-bois.",
+    },
+    isNew: true,
+    shardsAwarded: 0,
+    pityApplied: false,
+    balance: { coins: 70, shards: 0 },
   },
-  isNew: true,
-  shardsAwarded: 0,
-  pityApplied: false,
-  coins: 70,
+};
+const shop: EggShopState = {
+  profileId: 7,
+  eggPriceCoins: 50,
+  coins: 120,
   shards: 0,
+  available: true,
+  receipt: null,
 };
-
-const DUP_RESULT: Extract<BuyEggActionResult, { ok: true }> = {
-  ...NEW_RESULT,
-  isNew: false,
-  shardsAwarded: 25,
-  coins: 70,
-  shards: 25,
-};
-
-/** Nom accessible attendu du bloc de révélation (nom + rareté FR — parité `collection.cardLabel`). */
-const REVEAL_LABEL = strings.eggReveal.creatureLabel
-  .replace("{nom}", "Goupil")
-  .replace("{rareté}", strings.collection.rarity.common);
-
-async function renderReady() {
-  stateMock.mockResolvedValue({ ok: true, eggPriceCoins: 50, coins: 120, shards: 40 });
-  const result = render(<BoutiqueScreen />);
-  await waitFor(() => expect(screen.getByRole("button", { name: /Ouvrir/ })).toBeInTheDocument());
-  return result;
+const storageKey = "teddy:egg:7";
+const intent = { kind: "buy", drawId: "draw-1", revealed: false };
+const buyButton = () => screen.getByRole("button", { name: copy.buy(50) });
+async function ready() {
+  const view = render(<BoutiqueScreen />);
+  await screen.findByRole("button", { name: copy.buy(50) });
+  return view;
 }
-
+async function reveal() {
+  fireEvent.click(buyButton());
+  await screen.findByRole("button", { name: copy.open });
+  fireEvent.click(screen.getByRole("button", { name: copy.open }));
+  await screen.findByRole("heading", { name: copy.named("Goupil") });
+}
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  localStorage.clear();
+  stateMock.mockResolvedValue(shop);
+  buyMock.mockResolvedValue({ ok: true, receipt });
+  ackMock.mockResolvedValue({ ...receipt, acknowledged: true });
 });
 
-describe("BoutiqueScreen — chargement + carte œuf", () => {
-  it("charge l'état serveur → affiche l'œuf + le bouton d'achat avec le prix", async () => {
-    await renderReady();
-    expect(screen.getByRole("heading", { name: strings.boutique.title })).toBeInTheDocument();
-    // Le prix (⚙️ 50) est interpolé dans le libellé du bouton (jamais un nombre en dur).
-    expect(screen.getByRole("button", { name: "Ouvrir 🪙50" })).toBeInTheDocument();
+describe("forest egg shop", () => {
+  it("shows real balance and explicit cost, then opens and acknowledges before visiting the collection", async () => {
+    await ready();
+    expect(screen.getByText(copy.after(70))).toBeInTheDocument();
+    await reveal();
+    expect(buyMock).toHaveBeenCalledWith(expect.any(String), 7);
+    expect(screen.getByText(receipt.result.creature.story)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Goupil" })).toHaveAttribute(
+      "src",
+      expect.stringContaining("creature_world_0_0.png"),
+    );
+    expect(screen.getByRole("heading", { name: copy.named("Goupil") })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: copy.visit }));
+    await waitFor(() =>
+      expect(router.replace).toHaveBeenCalledWith("/collection/creature%3A0%3A0"),
+    );
+    expect(ackMock).toHaveBeenCalledWith("draw-1", 7);
+    expect(router.refresh).not.toHaveBeenCalled();
+    expect(localStorage.getItem(storageKey)).toBeNull();
   });
-
-  it("erreur de chargement → message doux + réessai qui recharge l'écran", async () => {
-    stateMock.mockResolvedValue({ ok: false, eggPriceCoins: 50, coins: 0, shards: 0 });
+  it("suppresses rapid double clicks and waits for confirmed purchase before opening", async () => {
+    let resolve!: (value: Awaited<ReturnType<typeof buyEggAction>>) => void;
+    buyMock.mockReturnValue(
+      new Promise((r) => {
+        resolve = r;
+      }),
+    );
+    await ready();
+    const button = buyButton();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(buyMock).toHaveBeenCalledTimes(1);
+    expect(button).toBeDisabled();
+    expect(screen.queryByRole("button", { name: copy.open })).toBeNull();
+    await act(async () => resolve({ ok: true, receipt }));
+    expect(screen.getByRole("button", { name: copy.open })).toBeEnabled();
+  });
+  it("keeps an uncertain purchase id across a network failure, unmount and restored session", async () => {
+    buyMock.mockRejectedValueOnce(Error("lost response"));
+    const first = await ready();
+    fireEvent.click(buyButton());
+    await screen.findByText(copy.network);
+    const saved = JSON.parse(localStorage.getItem(storageKey)!);
+    expect(saved.drawId).toBe(buyMock.mock.calls[0][0]);
+    first.unmount();
+    stateMock.mockResolvedValue({ ...shop, coins: 70, receipt });
+    render(<BoutiqueScreen />);
+    await screen.findByRole("button", { name: copy.open });
+    await waitFor(() => expect(buyMock).toHaveBeenCalledTimes(2));
+    expect(buyMock.mock.calls[1]).toEqual(buyMock.mock.calls[0]);
+  });
+  it("retries the saved collection destination after a lost acknowledgement", async () => {
+    const first = await ready();
+    await reveal();
+    ackMock.mockRejectedValueOnce(Error("lost"));
+    fireEvent.click(screen.getByRole("button", { name: copy.visit }));
+    await screen.findByText(copy.network);
+    expect(router.replace).not.toHaveBeenCalled();
+    first.unmount();
+    stateMock.mockResolvedValue({ ...shop, coins: 70 });
     render(<BoutiqueScreen />);
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: strings.boutique.loadError })).toBeInTheDocument(),
+      expect(router.replace).toHaveBeenCalledWith("/collection/creature%3A0%3A0"),
     );
-    // Réessai : la 2ᵉ tentative réussit → l'écran revient à la carte œuf (jamais bloqué).
-    stateMock.mockResolvedValue({ ok: true, eggPriceCoins: 50, coins: 120, shards: 40 });
-    fireEvent.click(screen.getByRole("button", { name: strings.boutique.loadErrorRetry }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /Ouvrir/ })).toBeInTheDocument());
-  });
-});
-
-describe("BoutiqueScreen — ouverture d'œuf (WIREFRAMES §6b)", () => {
-  it("achat d'une NOUVELLE créature → révélation avec le VRAI art (img rendable) + beat célébration", async () => {
-    await renderReady();
-    buyMock.mockResolvedValue(NEW_RESULT);
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-
-    // Bloc de révélation présent, nommé par la créature + RARETÉ (a11y : role="group" + aria-label —
-    // un SR entend la rareté, parité `collection.cardLabel`).
-    const reveal = await screen.findByRole("group", { name: REVEAL_LABEL });
-    expect(reveal).toHaveAttribute("data-egg-reveal", "creature:0:0");
-    expect(reveal).toHaveAttribute("data-egg-reveal-new", "true");
-    // Un drawId opaque a bien été transmis (string non vide).
+    expect(ackMock).toHaveBeenCalledTimes(2);
     expect(buyMock).toHaveBeenCalledTimes(1);
-    expect(typeof buyMock.mock.calls[0][0]).toBe("string");
-    expect((buyMock.mock.calls[0][0] as string).length).toBeGreaterThan(0);
-
-    // VRAI art : la ref rendable `socle/creature/…` → `<img>` (data-asset-state="rendered"),
-    // jamais le repli emoji (#180 : l'enfant voit sa créature). Consomme le token de MAGNITUDE.
-    const art = document.querySelector('[data-asset="egg-reveal-art"]');
-    expect(art).not.toBeNull();
-    expect(art).toHaveAttribute("data-asset-state", "rendered");
-    expect((art as HTMLElement).style.width).toBe("var(--egg-reveal-art-size)");
-
-    // Beat Teddy « nouvel ami » (célébration, COPY §3).
-    expect(screen.getByText(strings.eggReveal.newFriend)).toBeInTheDocument();
-    // CTA de fermeture.
-    expect(screen.getByRole("button", { name: strings.eggReveal.dismiss })).toBeInTheDocument();
   });
-
-  it("achat d'un DOUBLON → « +25 ✨ » (jamais « rien », ECONOMY §1)", async () => {
-    await renderReady();
-    buyMock.mockResolvedValue(DUP_RESULT);
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-
-    const reveal = await screen.findByRole("group", { name: REVEAL_LABEL });
-    expect(reveal).toHaveAttribute("data-egg-reveal-new", "false");
-    // Le beat doublon interpole les éclats gagnés (25) — jamais un gabarit figé.
-    const beat = screen.getByText(strings.eggReveal.duplicate.replace("{éclats}", "25"));
-    expect(beat).toBeInTheDocument();
-    // A11y (#6) : pour un DOUBLON, le beat « +N ✨ » est la SEULE surface du gain d'éclats → il DOIT
-    // être ANNONCÉ (jamais `aria-hidden`, sinon silencieux à l'AT). Garde à effet observable : re-poser
-    // `aria-hidden` sur le beat rougit ce test.
-    expect(beat).not.toHaveAttribute("aria-hidden");
+  it("restores an unacknowledged server receipt without browser storage", async () => {
+    stateMock.mockResolvedValue({ ...shop, receipt });
+    render(<BoutiqueScreen />);
+    await screen.findByRole("button", { name: copy.open });
+    expect(buyMock).not.toHaveBeenCalled();
   });
-
-  it("« Génial ! » referme la révélation et revient à la carte œuf (solde rafraîchi)", async () => {
-    await renderReady();
-    buyMock.mockResolvedValue(NEW_RESULT);
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-    const dismiss = await screen.findByRole("button", { name: strings.eggReveal.dismiss });
-    // Après le tirage, l'état serveur est re-lu (solde débité) : la carte œuf revient.
-    stateMock.mockResolvedValue({ ok: true, eggPriceCoins: 50, coins: 70, shards: 0 });
-    fireEvent.click(dismiss);
-    await waitFor(() => expect(screen.getByRole("button", { name: /Ouvrir/ })).toBeInTheDocument());
-    // La révélation a bien disparu.
+  it("restores the revealed phase and announces useful duplicate shards and pity", async () => {
+    const duplicate = {
+      ...receipt,
+      result: { ...receipt.result, isNew: false, shardsAwarded: 25, pityApplied: true },
+    };
+    localStorage.setItem(storageKey, JSON.stringify({ ...intent, revealed: true }));
+    buyMock.mockResolvedValue({ ok: true, receipt: duplicate });
+    render(<BoutiqueScreen />);
+    await screen.findByText(copy.shardsGain(25));
+    expect(screen.getByText(copy.duplicate("Goupil", 25))).toBeInTheDocument();
+    expect(screen.getByText(copy.pity)).toBeInTheDocument();
+    expect(screen.getByText(copy.shardsGain(25)).closest('[role="img"]')).toBeNull();
+  });
+  it("returns to the updated shop or map after acknowledgement", async () => {
+    await ready();
+    await reveal();
+    stateMock.mockResolvedValue({ ...shop, coins: 70, shards: 10 });
+    fireEvent.click(screen.getByRole("button", { name: copy.returnShop }));
+    await screen.findByRole("button", { name: copy.buy(50) });
+    expect(screen.getByText(copy.after(20))).toBeInTheDocument();
+    await reveal();
+    fireEvent.click(screen.getByRole("button", { name: copy.continue }));
+    await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/carte"));
+  });
+  it.each([
+    { ...shop, coins: 12 },
+    { ...shop, available: false },
+  ])("keeps learning accessible when buying is unavailable", async (state) => {
+    stateMock.mockResolvedValue(state);
+    render(<BoutiqueScreen />);
+    await screen.findByRole("link", { name: copy.continue });
+    expect(screen.queryByRole("button", { name: copy.buy(50) })).toBeNull();
     expect(
-      screen.queryByRole("button", { name: strings.eggReveal.dismiss }),
-    ).not.toBeInTheDocument();
+      screen.getByText(state.available ? copy.missing(38) : copy.unavailable),
+    ).toBeInTheDocument();
   });
-
-  it("pitié → bandeau de réassurance affiché (ECONOMY §7)", async () => {
-    await renderReady();
-    buyMock.mockResolvedValue({ ...NEW_RESULT, pityApplied: true });
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-    await screen.findByRole("button", { name: strings.eggReveal.dismiss });
-    expect(screen.getByText(strings.eggReveal.pity)).toBeInTheDocument();
-  });
-
-  it("solde insuffisant → indice DOUX sous le bouton, jamais bloquant (no-fail)", async () => {
-    await renderReady();
+  it("refreshes a stale balance after a definitive insufficient-funds refusal", async () => {
+    await ready();
+    stateMock.mockResolvedValue({ ...shop, coins: 10 });
     buyMock.mockResolvedValue({ ok: false, error: "BROKE" });
-    stateMock.mockResolvedValue({ ok: true, eggPriceCoins: 50, coins: 10, shards: 0 });
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-    await waitFor(() => expect(screen.getByText(strings.boutique.broke)).toBeInTheDocument());
-    // Le bouton d'achat reste présent (jamais un écran de blocage).
-    expect(screen.getByRole("button", { name: /Ouvrir/ })).toBeInTheDocument();
+    fireEvent.click(buyButton());
+    await screen.findByText(copy.broke);
+    await screen.findByText(copy.missing(40));
+    expect(localStorage.getItem(storageKey)).toBeNull();
   });
-
-  it("échec NON-BROKE (ex. REPLAY) → indice doux générique, jamais bloquant (branche non-broke)", async () => {
-    await renderReady();
-    buyMock.mockResolvedValue({ ok: false, error: "REPLAY" });
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-    await waitFor(() => expect(screen.getByText(strings.boutique.loadError)).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /Ouvrir/ })).toBeInTheDocument();
+  it("allows retrying initial load failure and on network return", async () => {
+    stateMock.mockRejectedValueOnce(Error("offline"));
+    render(<BoutiqueScreen />);
+    await screen.findByText(copy.network);
+    fireEvent.click(screen.getByRole("button", { name: copy.retry }));
+    await screen.findByRole("button", { name: copy.buy(50) });
+    buyMock.mockRejectedValueOnce(Error("offline"));
+    fireEvent.click(buyButton());
+    await screen.findByText(copy.network);
+    fireEvent(window, new Event("online"));
+    await screen.findByRole("button", { name: copy.open });
+  });
+  it("does not spend when durable local intent cannot be written", async () => {
+    await ready();
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw Error("denied");
+    });
+    fireEvent.click(buyButton());
+    await screen.findByText(copy.storage);
+    expect(buyMock).not.toHaveBeenCalled();
+  });
+  it("does not replay another profile's intention", async () => {
+    localStorage.setItem("teddy:egg:8", JSON.stringify(intent));
+    await ready();
+    expect(buyMock).not.toHaveBeenCalled();
+  });
+  it("returns keyboard focus to the heading after a retry in the same shop phase", async () => {
+    await ready();
+    buyMock.mockResolvedValue({ ok: false, error: "BROKE" });
+    fireEvent.click(buyButton());
+    const retry = await screen.findByRole("button", { name: copy.retry });
+    retry.focus();
+    expect(retry).toHaveFocus();
+    fireEvent.click(retry);
+    await waitFor(() => expect(buyButton()).toBeEnabled());
+    expect(screen.getByRole("heading", { name: copy.title })).toHaveFocus();
+  });
+  it("discards malformed local JSON while restoring the server's pending egg", async () => {
+    localStorage.setItem(storageKey, "{broken");
+    stateMock.mockResolvedValue({ ...shop, receipt });
+    render(<BoutiqueScreen />);
+    await screen.findByRole("button", { name: copy.open });
+    expect(screen.queryByText(copy.storage)).toBeNull();
+    expect(localStorage.getItem(storageKey)).toBeNull();
+    expect(buyMock).not.toHaveBeenCalled();
+  });
+  it("routes session expiry to profile selection and leaves the intent intact", async () => {
+    await ready();
+    buyMock.mockResolvedValue({ ok: false, error: "UNAUTHENTICATED" });
+    fireEvent.click(buyButton());
+    await screen.findByRole("link", { name: copy.login });
+    expect(localStorage.getItem(storageKey)).not.toBeNull();
+  });
+  it("handles an unauthenticated initial load", async () => {
+    stateMock.mockResolvedValue(null);
+    render(<BoutiqueScreen />);
+    await screen.findByRole("link", { name: copy.login });
   });
 });
 
-describe("BoutiqueScreen — a11y", () => {
-  it("le bouton d'achat est une cible ≥ 44 px (token --tap-target-min)", async () => {
-    await renderReady();
-    const buy = screen.getByRole("button", { name: /Ouvrir/ });
-    expect(buy.style.minHeight).toBe("var(--tap-target-min)");
-  });
-
-  it("l'art de la révélation est DÉCORATIF (le role=group parent porte le nom, pas de double annonce)", async () => {
-    await renderReady();
-    buyMock.mockResolvedValue(NEW_RESULT);
-    fireEvent.click(screen.getByRole("button", { name: /Ouvrir/ }));
-    await screen.findByRole("button", { name: strings.eggReveal.dismiss });
-    const art = document.querySelector('[data-asset="egg-reveal-art"]');
-    // Décoratif : l'`<img>` porte alt="" (ignoré des lecteurs d'écran) — l'ancêtre role=group nomme.
-    expect(art?.getAttribute("alt")).toBe("");
-  });
-});
-
-// ============================================================================
-// Contraste WCAG RÉSOLU (rétro #104/#125/#126) — TOUS les couples texte/fond de l'écran
-// boutique + révélation, résolus depuis tokens.css (hex → ratio réel ≥ 4.5:1), sur les 2 thèmes.
-// ============================================================================
-describe("BoutiqueScreen — contraste WCAG résolu (tous les glyphes rendus)", () => {
-  const PAIRS: ReadonlyArray<readonly [string, string, string]> = [
-    ["titre/beat sur la page", "--color-text-primary", "--color-bg-primary"],
-    ["sous-titre sections (muted) sur la page", "--collection-text-muted", "--color-bg-primary"],
-    ["nom de créature/œuf sur carte", "--collection-text", "--collection-card-bg"],
-    ["beat/pitié/notice (muted) sur carte", "--collection-text-muted", "--collection-card-bg"],
-    ["libellé du bouton d'achat sur accent", "--color-text-inverse", "--color-accent-primary"],
-    ["lien retour sur fond tertiaire", "--color-text-primary", "--color-bg-tertiary"],
-  ];
-
-  it.each(["light", "dark"] as Theme[])("chaque couple texte/fond ≥ 4.5:1 (%s)", (theme) => {
-    for (const [label, fgToken, bgToken] of PAIRS) {
-      const fg = resolveTokenColor(theme, fgToken);
-      const bg = resolveTokenColor(theme, bgToken);
-      expect(contrastRatio(fg, bg), `${label} (${theme})`).toBeGreaterThanOrEqual(4.5);
-    }
+describe("shop readable foregrounds in both themes", () => {
+  it.each(["light", "dark"] as Theme[])("foreground/background pairs ≥4.5:1 (%s)", (theme) => {
+    for (const [fg, bg] of [
+      ["--forest-cream", "--forest-deep"],
+      ["--forest-gold", "--forest-deep"],
+      ["--forest-mint", "--forest-deep"],
+      ["--forest-ink", "--forest-cream"],
+      ["--forest-muted", "--forest-cream"],
+      ["--forest-ink", "--forest-gold"],
+      ["--forest-ink", "--forest-soft"],
+    ])
+      expect(
+        contrastRatio(resolveTokenColor(theme, fg), resolveTokenColor(theme, bg)),
+      ).toBeGreaterThanOrEqual(4.5);
   });
 });

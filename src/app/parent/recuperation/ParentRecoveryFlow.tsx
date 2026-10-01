@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
+import { parent as p } from "@/strings/parent";
 import { useRouter } from "next/navigation";
 import { strings } from "@/strings";
 import { PIN_LENGTH, RECOVERY_CODE_LENGTH, isValidRecoveryCodeFormat } from "@/lib/auth/validation";
@@ -15,7 +17,7 @@ import type { RecoveryErrorCode } from "@/lib/auth/recovery";
  * valident, régénèrent) ; le gating client n'est qu'une affordance. Registre
  * **neutre** (parent, pas la voix de Teddy). Tokens uniquement, cibles ≥ 44 px.
  */
-type Step = "code" | "newPin" | "done";
+type Step = "code" | "newPin" | "confirmPin" | "done";
 /** Code d'erreur affichable : ceux du serveur + un repli réseau. */
 type FlowErrorCode = RecoveryErrorCode | "GENERIC";
 
@@ -128,12 +130,15 @@ export function ParentRecoveryFlow() {
   const [step, setStep] = useState<Step>("code");
   const [code, setCode] = useState(NONE);
   const [newPin, setNewPin] = useState(NONE);
+  const [confirmedPin, setConfirmedPin] = useState(NONE);
+  const [savedRecovery, setSavedRecovery] = useState(false);
+  const [mismatch, setMismatch] = useState(false);
   const [error, setError] = useState<FlowErrorCode | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [newRecoveryCode, setNewRecoveryCode] = useState(NONE);
 
   const canVerify = isValidRecoveryCodeFormat(code);
-  const canSubmitPin = newPin.length === PIN_LENGTH;
+  const canSubmitPin = (step === "confirmPin" ? confirmedPin : newPin).length === PIN_LENGTH;
 
   const verifyCode = async () => {
     setSubmitting(true);
@@ -154,12 +159,24 @@ export function ParentRecoveryFlow() {
   };
 
   const submitNewPin = async () => {
+    if (step === "newPin") {
+      setStep("confirmPin");
+      setConfirmedPin(NONE);
+      return;
+    }
+    if (newPin !== confirmedPin) {
+      setMismatch(true);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const result = await resetParentPinAction(code, newPin);
       if (result.ok) {
         setNewRecoveryCode(result.recoveryCode);
+        setCode(NONE);
+        setNewPin(NONE);
+        setConfirmedPin(NONE);
         setStep("done");
         return;
       }
@@ -174,7 +191,7 @@ export function ParentRecoveryFlow() {
   };
 
   return (
-    <main className="bg-bg text-text" style={{ minHeight: "100dvh", padding: "var(--space-6)" }}>
+    <main className="parent-recovery">
       <div style={cardStyle}>
         {error !== null && (
           <p role="alert" style={errorStyle}>
@@ -231,22 +248,32 @@ export function ParentRecoveryFlow() {
           </>
         )}
 
-        {step === "newPin" && (
+        {(step === "newPin" || step === "confirmPin") && (
           <>
             <h1 ref={focusHeading} tabIndex={-1} style={titleStyle}>
-              {strings.recovery.newPinTitle}
+              {step === "confirmPin" ? p.confirmParentPin : strings.recovery.newPinTitle}
             </h1>
             <p style={introStyle}>{strings.recovery.newPinHint}</p>
-            <PinPad value={newPin} onChange={setNewPin} label={strings.recovery.pinLabel} />
-            <div
-              style={{ display: "flex", gap: "var(--space-3)", justifyContent: "space-between" }}
-            >
+            {mismatch && <p role="alert">{p.mismatch}</p>}
+            <PinPad
+              value={step === "confirmPin" ? confirmedPin : newPin}
+              onChange={(value) => {
+                setMismatch(false);
+                if (step === "confirmPin") setConfirmedPin(value);
+                else setNewPin(value);
+              }}
+              label={step === "confirmPin" ? p.confirmParentPin : strings.recovery.pinLabel}
+              disabled={submitting}
+            />
+            <div className="parent-actions">
               <button
                 type="button"
                 className="mz-focusable"
+                disabled={submitting}
                 onClick={() => {
                   setError(null);
-                  setStep("code");
+                  setStep(step === "confirmPin" ? "newPin" : "code");
+                  setMismatch(false);
                 }}
                 style={ghostButtonStyle}
               >
@@ -260,7 +287,11 @@ export function ParentRecoveryFlow() {
                 onClick={submitNewPin}
                 style={primaryStyle(!canSubmitPin || submitting)}
               >
-                {submitting ? strings.recovery.submitting : strings.recovery.submit}
+                {submitting
+                  ? strings.recovery.submitting
+                  : step === "newPin"
+                    ? p.next
+                    : strings.recovery.submit}
               </button>
             </div>
           </>
@@ -286,15 +317,29 @@ export function ParentRecoveryFlow() {
             >
               {newRecoveryCode}
             </p>
+            <label>
+              <input
+                type="checkbox"
+                checked={savedRecovery}
+                onChange={(event) => setSavedRecovery(event.target.checked)}
+              />
+              {p.savedRecovery}
+            </label>
             <button
               type="button"
               className="mz-focusable"
+              disabled={!savedRecovery}
               onClick={() => router.push("/")}
               style={primaryButtonStyle}
             >
               {strings.recovery.done.cta}
             </button>
           </>
+        )}
+        {step !== "done" && (
+          <Link className="parent-text-link" href="/">
+            {p.backHome}
+          </Link>
         )}
       </div>
     </main>

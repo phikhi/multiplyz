@@ -6,18 +6,20 @@ import type { AppDatabase } from "@/lib/db";
 import { jobs, progress, worlds, type JobStatus } from "@/lib/db/schema";
 import { generateWorld, ESTIMATED_EUR_PER_IMAGE, type GeneratedWorld } from "./generate-world";
 import {
-  assessWorldAssets,
+  assessWorldAssetsAsync,
   defaultInspector,
   moderatedStatusAfterQaPass,
-  type WorldInspector,
+  type AsyncWorldInspector,
 } from "./qa";
 import { readHouseholdSettings } from "@/lib/parent/settings";
 import { readMasterBytesFromDisk } from "./socle-assets";
+import { assertFutureWorld } from "./future-worlds";
+import { publishRuntimeCatalogue } from "./runtime-catalogue";
 
 /**
  * **Worker daemon — logique cœur** (WORLDGEN §2/§3/§6, stories 6.4 + 6.5, épic #6). Consommé par
- * un process daemon **séparé** géré par Forge (STACK.md ; le wiring process = gate-déploiement
- * différé #47/#9 — hors scope ici). Ce module ne contient que la **logique testable** :
+ * un process daemon **séparé** (`scripts/worldgen-worker.ts`, prêt à configurer sous Forge).
+ * Le raccordement disque/vision est dans `runtime.ts`. Ce module conserve la **logique testable** :
  *
  * 1. `ensureBuffer` — maintient `bufferAhead` mondes d'avance sur le `world_index` courant
  *    (dérivé de `progress`) : chaque monde manquant de la fenêtre est **enqueue** (job
@@ -86,6 +88,11 @@ export function themeForWorld(worldIndex: number): CuratedTheme {
 
 /** Dépendances injectables du worker (tests → zéro appel réseau réel, horloge déterministe). */
 export interface WorkerDeps {
+  afterActivate?: (db: Pick<AppDatabase, "insert" | "select">, world: GeneratedWorld) => void;
+  /** Runtime may preserve socle/visited worlds and stop re-enqueueing exhausted jobs. */
+  mayEnqueue?: (db: Pick<AppDatabase, "select">, worldIndex: number) => boolean;
+  /** Optional runtime guard checked atomically with activation, after asynchronous QA. */
+  beforeActivate?: (db: Pick<AppDatabase, "select">, worldIndex: number) => void;
   /**
    * Générateur de monde (défaut : `generateWorld` 6.3). **Mocké en test** (zéro appel réseau
    * réel, DoD). Reçoit la connexion, le thème, l'index, les thèmes récents.
@@ -106,7 +113,7 @@ export interface WorkerDeps {
    * (**fail-closed** — lève tant qu'aucun classifieur vision réel n'est branché → le monde reste
    * sur le fallback, jamais actif). **Injecté en test** (signaux d'échec pour exercer chaque règle).
    */
-  inspect: WorldInspector;
+  inspect: AsyncWorldInspector;
   /**
    * **Chargeur des octets RÉELS du master Teddy** pour l'ancrage img2img de la variante Teddy des
    * mondes **générés** (WORLDGEN §8, ADR 0009). Le worker prod le **passe à `generateWorld`** dans
@@ -129,6 +136,9 @@ export function resolveWorkerDeps(overrides?: Partial<WorkerDeps>): WorkerDeps {
   // référencer une sœur) : défaut committé = `readMasterBytesFromDisk`, surchargeable par l'argument.
   const loadMasterBytes = overrides?.loadMasterBytes ?? readMasterBytesFromDisk;
   return {
+    mayEnqueue: overrides?.mayEnqueue,
+    afterActivate: overrides?.afterActivate,
+    beforeActivate: overrides?.beforeActivate,
     generate:
       overrides?.generate ??
       // **Injection RÉELLE** du loader disque dans les deps de `generateWorld` (ancrage img2img de la
@@ -354,6 +364,10 @@ export function ensureBuffer(
   let projectedSpend = currentMonthSpendEur(db, now);
 
   for (const worldIndex of targets) {
+    if (deps.mayEnqueue && !deps.mayEnqueue(db, worldIndex)) {
+      skippedExisting.push(worldIndex);
+      continue;
+    }
     // Idempotence : ne jamais ré-enqueue un monde déjà présent ou déjà en file active (#82).
     if (worldExists(db, worldIndex) || hasActiveJobForWorld(db, worldIndex)) {
       skippedExisting.push(worldIndex);
@@ -516,13 +530,13 @@ export async function processNextJob(
   }
 
   // ── QA kid-safe (WORLDGEN §6, story 6.5) : filtrer les assets générés AVANT toute activation ──
-  // L'inspection tourne HORS transaction (règles pures, synchrones). L'inspecteur peut LEVER
+  // L'inspection asynchrone tourne HORS transaction ; les règles restent pures. L'inspecteur peut LEVER
   // (`defaultInspector` fail-closed) : on traite toute erreur d'inspection **comme un rejet QA**
   // (fail-closed) → jamais de monde non-vérifié en `active` (AC3). Le monde reste `buffered` (posé
   // par le générateur), donc un rejet QA n'a **aucun état partiel** à annuler (pas de transaction).
   let qaFailReason: string | null = null;
   try {
-    const qa = assessWorldAssets(world, deps.inspect, deps.config.qa);
+    const qa = await assessWorldAssetsAsync(world, deps.inspect, deps.config.qa);
     if (!qa.ok) {
       qaFailReason = `asset "${qa.failedAssetRef}" rejeté (règle ${qa.failedRule})`;
     }
@@ -567,15 +581,18 @@ export async function processNextJob(
   const parentValidationEnabled = readHouseholdSettings(db).parentWorldValidation;
   const targetStatus = moderatedStatusAfterQaPass(parentValidationEnabled);
   db.transaction((tx) => {
+    deps.beforeActivate?.(tx, worldIndex);
     // 1ʳᵉ écriture : statut de modération du monde QA-validé (WORLDGEN §6). Gardée sur
     // `status = buffered` (rétro Backend PR #247, story 7.9) : si le parent a déjà REJETÉ ce monde
     // dans la fenêtre pré-QA/mi-QA (`rejected`), cette écriture devient un no-op (0 ligne) — jamais
     // un écrasement silencieux de la décision parent. Sans effet sur le chemin normal (le monde est
     // TOUJOURS `buffered` à ce point quand aucun rejet n'a eu lieu).
-    tx.update(worlds)
+    const activated = tx
+      .update(worlds)
       .set({ status: targetStatus })
       .where(and(eq(worlds.index, worldIndex), eq(worlds.status, "buffered")))
       .run();
+    if (activated.changes && targetStatus === "active") deps.afterActivate?.(tx, world);
     // 2ᵉ écriture (gardée) : fermer le job. Si elle échoue APRÈS la 1ʳᵉ → rollback complet.
     tx.update(jobs).set({ status: "done", updatedAt: now }).where(eq(jobs.id, job.id)).run();
   });
@@ -721,7 +738,29 @@ export function approveWorld(db: AppDatabase, worldId: string, approvedBy: strin
       `approbation refusée : monde "${worldId}" non QA-validé — jamais de monde non-QA en active (WORLDGEN §6).`,
     );
   }
-  db.update(worlds).set({ status: "active", approvedBy: who }).where(eq(worlds.id, worldId)).run();
+  db.transaction((tx) => {
+    // New runtime worlds may wait for a parent while a child reaches their fallback.
+    // Never change the scenery or companion identities of that already-opened journey.
+    const row = tx
+      .select({ assetRefs: worlds.assetRefs })
+      .from(worlds)
+      .where(eq(worlds.id, worldId))
+      .get();
+    if (row?.assetRefs.includes("/runtime-")) {
+      try {
+        assertFutureWorld(tx, world.index);
+        publishRuntimeCatalogue(tx, world.index, row.assetRefs);
+      } catch {
+        throw new WorldModerationError(
+          "Ce monde ne peut plus être publié ; le parcours existant est préservé.",
+        );
+      }
+    }
+    tx.update(worlds)
+      .set({ status: "active", approvedBy: who })
+      .where(eq(worlds.id, worldId))
+      .run();
+  });
 }
 
 /**

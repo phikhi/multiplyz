@@ -1,0 +1,89 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import { AddProfileForm } from "./AddProfileForm";
+import { createChildProfileAction } from "./actions";
+import { parent as p } from "@/strings/parent";
+import { strings } from "@/strings";
+import { AVATARS } from "@/config/avatars";
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+vi.mock("./actions", () => ({ createChildProfileAction: vi.fn() }));
+beforeEach(() => vi.clearAllMocks());
+function enterPin(value: string) {
+  for (const key of value) fireEvent.keyDown(window, { key });
+}
+function details() {
+  fireEvent.click(screen.getByRole("button", { name: p.create }));
+  expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(p.name), { target: { value: "  " } });
+  expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(p.name), { target: { value: "Camille" } });
+  fireEvent.change(screen.getByLabelText(p.avatar), { target: { value: AVATARS[1].id } });
+  fireEvent.click(screen.getByRole("button", { name: p.next }));
+  expect(screen.getByRole("heading", { name: p.childPin })).toHaveFocus();
+  expect(screen.getByRole("button", { name: p.next })).toBeDisabled();
+  enterPin("1234");
+  fireEvent.click(screen.getByRole("button", { name: p.next }));
+  expect(screen.getByRole("heading", { name: p.confirmPin })).toHaveFocus();
+  expect(screen.getByRole("button", { name: p.create })).toBeDisabled();
+}
+it("requires matching codes, then creates exactly the selected profile and resets the form", async () => {
+  vi.mocked(createChildProfileAction).mockResolvedValue({ ok: true });
+  render(<AddProfileForm />);
+  details();
+  enterPin("1235");
+  fireEvent.click(screen.getByRole("button", { name: p.create }));
+  expect(screen.getByRole("alert")).toHaveTextContent(p.mismatch);
+  expect(createChildProfileAction).not.toHaveBeenCalled();
+  fireEvent.keyDown(window, { key: "Backspace" });
+  enterPin("4");
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: p.create })));
+  expect(createChildProfileAction).toHaveBeenCalledExactlyOnceWith({
+    name: "Camille",
+    avatar: AVATARS[1].id,
+    pin: "1234",
+  });
+  expect(screen.getByRole("status")).toHaveTextContent(p.createDone);
+  expect(refresh).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: p.create }));
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  expect(screen.getByLabelText(p.name)).toHaveValue("");
+});
+it.each(["server", "network"])(
+  "keeps the entered profile and permits retry after %s failure",
+  async (failure) => {
+    const action = vi.mocked(createChildProfileAction);
+    if (failure === "server") action.mockResolvedValue({ ok: false, code: "NAME_TAKEN" });
+    else action.mockRejectedValue(new Error("offline"));
+    render(<AddProfileForm />);
+    details();
+    enterPin("1234");
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: p.create })));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      strings.parent.manage.errors[failure === "server" ? "NAME_TAKEN" : "GENERIC"],
+    );
+    expect(screen.getByRole("button", { name: p.create })).toBeEnabled();
+    expect(refresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.cancel }));
+    fireEvent.click(screen.getByRole("button", { name: p.create }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(p.name)).toHaveValue("");
+  },
+);
+it("locks code entry, cancellation and duplicate submission while the server is pending", async () => {
+  let resolve!: (value: Awaited<ReturnType<typeof createChildProfileAction>>) => void;
+  vi.mocked(createChildProfileAction).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  render(<AddProfileForm />);
+  details();
+  enterPin("1234");
+  fireEvent.click(screen.getByRole("button", { name: p.create }));
+  fireEvent.click(screen.getByRole("button", { name: p.create }));
+  expect(screen.getByRole("button", { name: p.cancel })).toBeDisabled();
+  expect(screen.getByRole("group", { name: p.confirmPin })).toHaveAttribute("aria-busy", "true");
+  expect(createChildProfileAction).toHaveBeenCalledOnce();
+  await act(async () => resolve({ ok: true }));
+});

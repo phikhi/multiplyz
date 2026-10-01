@@ -1,0 +1,43 @@
+{
+  "root": "/private/var/folders/w0/_rx1_w2d38jb7kcynk3cp82r0000gn/T/teddy-canary-faXRks",
+  "checks": [
+    {
+      "case": "repeat",
+      "refused": true,
+      "databaseUnchanged": true,
+      "message": "Base d\u00e9j\u00e0 pr\u00e9sente : aucune migration, restauration ou r\u00e9initialisation."
+    },
+    {
+      "case": "wrong-database",
+      "refused": true,
+      "databaseUnchanged": true,
+      "message": "Contexte du canari incoh\u00e9rent."
+    }
+  ],
+  "fixture": {
+    "profileId": 1,
+    "counts": {
+      "profiles": {
+        "n": 1
+      },
+      "sessions": {
+        "n": 0
+      },
+      "progress": {
+        "n": 0
+      },
+      "attempts": {
+        "n": 0
+      },
+      "collection": {
+        "n": 0
+      }
+    },
+    "integrity": "ok"
+  },
+  "browser": {
+    "status": "blocked",
+    "reason": "listen EPERM 127.0.0.1:33217",
+    "log": "20260914-canary.log"
+  }
+}

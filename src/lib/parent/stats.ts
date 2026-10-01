@@ -370,7 +370,7 @@ export function computeMasteryMap(scope: readonly ScopeEntry[], config: StatsCon
 }
 
 /** `true` si le temps moyen du fait dépasse le seuil de fluence de sa compétence (ENGINE §2). */
-function isSlow(state: MasteryState, skill: Skill, engine: EngineConfig): boolean {
+export function isSlow(state: MasteryState, skill: Skill, engine: EngineConfig): boolean {
   return state.avgResponseMs > engine.fluenceThresholdsMs[skill];
 }
 

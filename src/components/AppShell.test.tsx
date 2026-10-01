@@ -16,7 +16,10 @@ const THEMES: Theme[] = ["light", "dark"];
 // câblage, pas un stub) sans dupliquer sa suite dédiée.
 const push = vi.fn();
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/collection",
+  useRouter: () => ({ push, refresh }),
+}));
 vi.mock("@/app/login/actions", () => ({ logoutAction: vi.fn() }));
 
 describe("AppShell — solde pièces/éclats (story R1.1 #337, WIREFRAMES §2)", () => {

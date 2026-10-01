@@ -13,6 +13,7 @@ import { legendaryForWorld } from "@/lib/game/collection";
 import { generateImage, type GenerateImageInput, type ImageRef } from "./image-client";
 import { getApprovedMaster, MASTER_ASSET_ID } from "./reference-assets";
 import { deriveWorldPalette, serializePalette } from "./palette";
+import { designedCreaturePrompt, nativeCreatureStyle } from "./creature-design";
 import {
   CREATURE_TOTALS,
   creatureCharacterId,
@@ -86,6 +87,10 @@ export interface GeneratedAsset {
 
 /** Une créature générée + persistée (art réel câblé dans `characters`). */
 export interface GeneratedCreature {
+  readonly design?: import("./creature-design").CreatureDesign;
+  /** New runtime worlds include both older stages, inspected before catalogue publication. */
+  readonly stageArt?: Readonly<Record<"2" | "3", string>>;
+  readonly stagePrompts?: Readonly<Record<"2" | "3", string>>;
   readonly id: string;
   readonly speciesKey: string;
   readonly nameDefault: string;
@@ -97,6 +102,8 @@ export interface GeneratedCreature {
 
 /** Résultat de `generateWorld` : le monde persisté + le coût **rapporté** (pas enforce). */
 export interface GeneratedWorld {
+  readonly habitat?: string;
+  readonly designVersion?: 1;
   readonly worldId: string;
   readonly worldIndex: number;
   readonly themeSlug: string;
@@ -132,6 +139,12 @@ export interface WorldAssetRefs {
 
 /** Dépendances injectables du générateur de monde (tests → aucun appel réseau réel). */
 export interface GenerateWorldDeps {
+  /** Runtime-only new designs; historical socle derivation stays unchanged. */
+  creatureDesign?: import("./creature-design").WorldCreatureDesign;
+  /** The operational runtime publishes its catalogue only with QA/parent activation. */
+  deferCreatures?: boolean;
+  /** Runtime guard, rechecked inside the publishing transaction after network work. */
+  beforePersist?: (db: Pick<AppDatabase, "select">, worldIndex: number) => void;
   /** Générateur d'image (défaut : client image 6.1). Mocké en test. */
   generate: (input: GenerateImageInput) => Promise<Buffer>;
   /**
@@ -164,6 +177,9 @@ export interface GenerateWorldDeps {
 /** Résout les dépendances par défaut (prod), surchargées en test. */
 export function resolveDeps(overrides?: Partial<GenerateWorldDeps>): GenerateWorldDeps {
   return {
+    creatureDesign: overrides?.creatureDesign,
+    deferCreatures: overrides?.deferCreatures,
+    beforePersist: overrides?.beforePersist,
     generate: overrides?.generate ?? ((input) => generateImage(input)),
     writeAsset: overrides?.writeAsset ?? defaultWriteAsset,
     creatureStyleBible: overrides?.creatureStyleBible ?? [],
@@ -313,12 +329,29 @@ export async function generateWorld(
   let paidImageCalls = 0;
 
   // Fond 16:9 + tuiles (texte, aucune référence).
-  const bgPrompt = buildBackgroundPrompt(config, curated);
+  const design = deps.creatureDesign;
+  const creatureConfig = design
+    ? {
+        ...config,
+        prompts: {
+          ...config.prompts,
+          style: nativeCreatureStyle(config.prompts.style),
+          creature: config.prompts.creature.replace(
+            "a cute round collectible creature",
+            "a gentle collectible creature with a distinctive anatomical silhouette",
+          ),
+        },
+      }
+    : config;
+  if (design && (design.worldIndex !== worldIndex || design.theme !== curated.slug))
+    throw new WorldGenError("La conception ne correspond pas à ce monde.");
+  const habitatPrompt = design ? `\nEnvironment and ecological setting: ${design.habitat}` : "";
+  const bgPrompt = buildBackgroundPrompt(config, curated) + habitatPrompt;
   const bgBytes = await deps.generate({ prompt: bgPrompt });
   paidImageCalls += 1;
   const backgroundRef = await deps.writeAsset(worldIndex, "background.png", bgBytes);
 
-  const tilesPrompt = buildTilesPrompt(config, curated);
+  const tilesPrompt = buildTilesPrompt(config, curated) + habitatPrompt;
   const tilesBytes = await deps.generate({ prompt: tilesPrompt });
   paidImageCalls += 1;
   const tilesRef = await deps.writeAsset(worldIndex, "tiles.png", tilesBytes);
@@ -344,8 +377,16 @@ export async function generateWorld(
   for (let slot = 0; slot < eggPoolCount; slot += 1) {
     // Les `split.commons` premiers slots = communes, les suivants = rares (ordre stable).
     const rarity: GeneratedRarity = slot < split.commons ? "common" : "rare";
-    const concept = pickFromBank(curated.creatureConcepts, conceptBase, slot);
-    const creaturePrompt = buildCreaturePrompt(config, concept, curated.accent);
+    const authored = design?.creatures[slot];
+    const concept = authored
+      ? { concept: authored.anatomy, features: authored.signature }
+      : pickFromBank(curated.creatureConcepts, conceptBase, slot);
+    const creaturePrompt =
+      buildCreaturePrompt(
+        creatureConfig,
+        concept,
+        authored ? "individual natural colours, adapted to its material" : curated.accent,
+      ) + (authored ? `\n${designedCreaturePrompt(authored, design!.habitat)}` : "");
     // Créatures : {base_style} en TEXTE + style-bible OPTIONNELLE (jamais le master — ADR 0009).
     const creatureBytes = await deps.generate({
       prompt: creaturePrompt,
@@ -355,13 +396,14 @@ export async function generateWorld(
     const artRef = await deps.writeAsset(worldIndex, `creature-${slot}.png`, creatureBytes);
 
     creatures.push({
+      ...(authored ? { design: authored } : {}),
       id: creatureCharacterId(worldIndex, slot),
       speciesKey: creatureSpeciesKey(worldIndex, slot),
-      nameDefault: pickFromBank(strings.worldgen.creatureNames, nameBase, slot),
+      nameDefault: authored?.name ?? pickFromBank(strings.worldgen.creatureNames, nameBase, slot),
       rarity,
       inEggPool: true, // communes + rares = pool d'œufs (ECONOMY §4.2).
       artRef,
-      story: pickFromBank(strings.worldgen.creatureStories, storyBase, slot),
+      story: authored?.story ?? pickFromBank(strings.worldgen.creatureStories, storyBase, slot),
     });
   }
 
@@ -369,8 +411,24 @@ export async function generateWorld(
   // le **concept DÉDIÉ** du thème (`legendaryConcept`), DISTINCT de tout concept œufs du monde — la
   // récompense du boss doit paraître spéciale, jamais se confondre avec une commune tirable d'un œuf
   // (ECONOMY §5/§8, COPY §3, MAP §6). Même charte ART §5, mais concept impressionnant/majestueux.
-  const legendary = legendaryForWorld(worldIndex);
-  const legendaryPrompt = buildCreaturePrompt(config, curated.legendaryConcept, curated.accent);
+  const legendaryBase = legendaryForWorld(worldIndex);
+  const legendaryDesign = design?.creatures.at(-1);
+  const legendary = {
+    ...legendaryBase,
+    nameDefault: legendaryDesign?.name ?? legendaryBase.nameDefault,
+    story: legendaryDesign?.story ?? legendaryBase.story,
+  };
+  const legendaryPrompt =
+    buildCreaturePrompt(
+      creatureConfig,
+      legendaryDesign
+        ? {
+            concept: legendaryDesign.anatomy,
+            features: legendaryDesign.signature,
+          }
+        : curated.legendaryConcept,
+      legendaryDesign ? "individual natural colours, adapted to its material" : curated.accent,
+    ) + (legendaryDesign ? `\n${designedCreaturePrompt(legendaryDesign, design!.habitat)}` : "");
   // La légendaire est une créature → même règle d'ancrage (bible optionnelle, JAMAIS le master).
   const legendaryBytes = await deps.generate({
     prompt: legendaryPrompt,
@@ -390,44 +448,46 @@ export async function generateWorld(
   const worldPrompt = bgPrompt; // le fond porte le prompt canonique du monde (reproductibilité §7).
 
   db.transaction((tx) => {
-    // Créatures œufs : upsert (art réel, idempotent par PK).
-    for (const c of creatures) {
+    deps.beforePersist?.(tx, worldIndex);
+    if (!deps.deferCreatures) {
+      // Créatures œufs : upsert (art réel, idempotent par PK).
+      for (const c of creatures) {
+        tx.insert(characters)
+          .values({
+            id: c.id,
+            worldIndex,
+            speciesKey: c.speciesKey,
+            nameDefault: c.nameDefault,
+            rarity: c.rarity,
+            inEggPool: c.inEggPool,
+            artRef: c.artRef,
+            story: c.story,
+          })
+          .onConflictDoUpdate({
+            target: characters.id,
+            set: { artRef: c.artRef, story: c.story, nameDefault: c.nameDefault },
+          })
+          .run();
+      }
+      // Légendaire : câble l'art RÉEL. Si épic #5 l'a amorcée (placeholder), on met à jour art+story ;
+      // sinon on l'insère (déterministe, hors œufs, MAP §6). Upsert idempotent par PK.
       tx.insert(characters)
         .values({
-          id: c.id,
+          id: legendary.id,
           worldIndex,
-          speciesKey: c.speciesKey,
-          nameDefault: c.nameDefault,
-          rarity: c.rarity,
-          inEggPool: c.inEggPool,
-          artRef: c.artRef,
-          story: c.story,
+          speciesKey: legendary.speciesKey,
+          nameDefault: legendary.nameDefault,
+          rarity: legendary.rarity,
+          inEggPool: legendary.inEggPool,
+          artRef: legendaryArtRef,
+          story: legendary.story,
         })
         .onConflictDoUpdate({
           target: characters.id,
-          set: { artRef: c.artRef, story: c.story, nameDefault: c.nameDefault },
+          set: { artRef: legendaryArtRef },
         })
         .run();
     }
-    // Légendaire : câble l'art RÉEL. Si épic #5 l'a amorcée (placeholder), on met à jour art+story ;
-    // sinon on l'insère (déterministe, hors œufs, MAP §6). Upsert idempotent par PK.
-    tx.insert(characters)
-      .values({
-        id: legendary.id,
-        worldIndex,
-        speciesKey: legendary.speciesKey,
-        nameDefault: legendary.nameDefault,
-        rarity: legendary.rarity,
-        inEggPool: legendary.inEggPool,
-        artRef: legendaryArtRef,
-        story: legendary.story,
-      })
-      .onConflictDoUpdate({
-        target: characters.id,
-        set: { artRef: legendaryArtRef },
-      })
-      .run();
-
     // Monde : prompt + seed persistés (reproductibilité WORLDGEN §7). Upsert par PK (idempotent).
     tx.insert(worlds)
       .values({
@@ -453,6 +513,7 @@ export async function generateWorld(
   });
 
   const legendaryCreature: GeneratedCreature = {
+    ...(legendaryDesign ? { design: legendaryDesign } : {}),
     id: legendary.id,
     speciesKey: legendary.speciesKey,
     nameDefault: legendary.nameDefault,
@@ -463,6 +524,7 @@ export async function generateWorld(
   };
 
   return {
+    ...(design ? { habitat: design.habitat, designVersion: 1 as const } : {}),
     worldId,
     worldIndex,
     themeSlug: curated.slug,

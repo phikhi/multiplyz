@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { strings } from "@/strings";
+import { readFileSync } from "node:fs";
+import { parent as p } from "@/strings/parent";
 import {
   contrastRatio,
   mixSrgb,
@@ -10,6 +12,16 @@ import {
 import type { PendingWorld } from "@/lib/parent/world-approval";
 import { WorldApprovalManager } from "./WorldApprovalManager";
 import { approveWorldAction, rejectWorldAction } from "./actions";
+
+const stylesheet = document.createElement("style");
+beforeAll(() => {
+  stylesheet.textContent = readFileSync("src/app/parent.css", "utf8").replace(
+    /var\(--(parent-(?:paper|soft|muted|accent|accent-ink|ink))\)/g,
+    (_, token: string) => resolveTokenColor("light", token),
+  );
+  document.head.append(stylesheet);
+});
+afterAll(() => stylesheet.remove());
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
@@ -91,6 +103,8 @@ describe("WorldApprovalManager — approuver", () => {
     fireEvent.click(
       worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.approve.action }),
     );
+    expect(approveMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.approveConfirm }));
 
     await waitFor(() => expect(approveMock).toHaveBeenCalledWith("world:2"));
     expect(await screen.findByText(wa.approve.success)).toBeInTheDocument();
@@ -104,6 +118,8 @@ describe("WorldApprovalManager — approuver", () => {
     fireEvent.click(
       worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.approve.action }),
     );
+    expect(approveMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.approveConfirm }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(wa.errors.MODERATION_FAILED);
     expect(refresh).not.toHaveBeenCalled();
@@ -115,6 +131,8 @@ describe("WorldApprovalManager — approuver", () => {
     fireEvent.click(
       worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.approve.action }),
     );
+    expect(approveMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.approveConfirm }));
     expect(await screen.findByRole("alert")).toHaveTextContent(wa.errors.UNAUTHORIZED);
   });
 
@@ -124,6 +142,8 @@ describe("WorldApprovalManager — approuver", () => {
     fireEvent.click(
       worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.approve.action }),
     );
+    expect(approveMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.approveConfirm }));
     expect(await screen.findByRole("alert")).toHaveTextContent(wa.errors.GENERIC);
     expect(refresh).not.toHaveBeenCalled();
   });
@@ -248,11 +268,25 @@ describe("WorldApprovalManager — contraste WCAG résolu (tous glyphes rendus)"
     );
 
     function checkComposite(btn: HTMLElement) {
-      const opacity = btn.style.opacity === "" ? 1 : Number(btn.style.opacity);
+      const style = getComputedStyle(btn);
+      const opacity = style.opacity === "" ? 1 : Number(style.opacity);
       expect(opacity).toBe(1); // garde directe : aucun opacity diluant sur un bouton désactivé
       for (const theme of THEMES) {
-        const text = resolveTokenColor(theme, "color-text-secondary");
-        const bg = resolveTokenColor(theme, "color-bg-tertiary");
+        const confirmation = btn.classList.contains("parent-primary");
+        if (confirmation) {
+          expect(btn).toHaveStyle({
+            color: resolveTokenColor("light", "parent-muted"),
+            backgroundColor: resolveTokenColor("light", "parent-soft"),
+          });
+        } else {
+          expect(style.color).toBe("var(--color-text-secondary)");
+          expect(style.backgroundColor).toBe("var(--color-bg-tertiary)");
+        }
+        const text = resolveTokenColor(
+          theme,
+          confirmation ? "parent-muted" : "color-text-secondary",
+        );
+        const bg = resolveTokenColor(theme, confirmation ? "parent-soft" : "color-bg-tertiary");
         // Couleur réellement peinte = blend du texte sur le fond selon l'opacité rendue.
         const painted = opacity === 1 ? text : mixSrgb(text, bg, opacity);
         expect(contrastRatio(painted, bg)).toBeGreaterThanOrEqual(4.5);
@@ -268,7 +302,9 @@ describe("WorldApprovalManager — contraste WCAG résolu (tous glyphes rendus)"
     fireEvent.click(
       worldCard("3", "Forêt enchantée").getByRole("button", { name: wa.approve.action }),
     );
-    const approveBtn = await screen.findByRole("button", { name: wa.approve.action });
+    expect(approveMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: p.approveConfirm }));
+    const approveBtn = await screen.findByRole("button", { name: p.approveConfirm });
     expect(approveBtn).toBeDisabled();
     checkComposite(approveBtn);
     resolveApprove({ ok: true });
@@ -306,14 +342,19 @@ describe("WorldApprovalManager — contraste WCAG résolu (tous glyphes rendus)"
     const rejectGhost = card.getByRole("button", { name: wa.reject.action });
 
     fireEvent.click(card.getByRole("button", { name: wa.approve.action }));
-    const approveBtn = await screen.findByRole("button", { name: wa.approve.action });
+    fireEvent.click(screen.getByRole("button", { name: p.approveConfirm }));
+    const approveBtn = await screen.findByRole("button", { name: p.approveConfirm });
     expect(approveBtn).toBeDisabled();
 
-    expect(approveBtn.style.backgroundColor).toBe("var(--color-bg-tertiary)");
+    expect(approveBtn).toHaveStyle({ backgroundColor: resolveTokenColor("light", "parent-soft") });
     expect(rejectGhost.style.backgroundColor).toBe("transparent");
-    expect(approveBtn.style.backgroundColor).not.toBe(rejectGhost.style.backgroundColor);
+    expect(getComputedStyle(approveBtn).backgroundColor).not.toBe(
+      rejectGhost.style.backgroundColor,
+    );
 
     resolveApprove({ ok: true });
-    await waitFor(() => expect(approveBtn).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: wa.approve.action })).toBeEnabled(),
+    );
   });
 });

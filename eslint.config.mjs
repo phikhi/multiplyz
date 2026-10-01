@@ -15,7 +15,11 @@ const eslintConfig = defineConfig([
     },
   },
   globalIgnores([
+    "public/forest/**",
     ".next/**",
+    ".next-daily-check/**",
+    ".next-parent-check/**",
+    ".next-worlds-check/**",
     "out/**",
     "build/**",
     "coverage/**",

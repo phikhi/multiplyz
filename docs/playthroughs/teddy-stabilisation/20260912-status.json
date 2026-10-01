@@ -1,0 +1,21 @@
+{
+  "node": "22.23.0",
+  "build": "success",
+  "typecheck": "success",
+  "distDir": ".next-worlds-check",
+  "buildLog": "20260912-build-webpack.log",
+  "server": {
+    "url": "http://127.0.0.1:3217",
+    "listening": false,
+    "launchError": "listen EPERM: operation not permitted 127.0.0.1:3217"
+  },
+  "browser": {
+    "screensInspected": false,
+    "chromeAccess": "Computer Use was not approved to use Google Chrome"
+  },
+  "familyPlaytestPerformed": false,
+  "databasePreservation": "20260912T094650Z-after.json",
+  "databaseTablesUnchanged": 27,
+  "sourceChanges": false,
+  "globalTestsOrCanaryRun": false
+}

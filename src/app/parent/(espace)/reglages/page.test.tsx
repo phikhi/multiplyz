@@ -12,6 +12,10 @@ import ParentSettingsPage from "./page";
 // UNIQUEMENT (les constantes `SOUND_VOLUME_MIN`/`MAX` restent le module RÉEL, importées) ;
 // `presetOptionsInRange` (pure) reste RÉELLE pour prouver le CÂBLAGE des options.
 const FAKE_DB = { __fakeDb: true };
+vi.mock("@/lib/auth/current-session", () => ({
+  getCurrentParentSession: async () => ({ profileId: 7 }),
+}));
+vi.mock("@/lib/parent/profiles", () => ({ listManagedProfiles: () => [{ id: 7, name: "Léa" }] }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => FAKE_DB) }));
 vi.mock("@/config/server-config", async (importActual) => {
   const actual = await importActual<typeof import("@/config/server-config")>();
@@ -46,7 +50,7 @@ const CONTROLS: ParentControlsConfig = {
 };
 
 describe("ParentSettingsPage (story 7.3 ; volume story 8.3)", () => {
-  it("lit les réglages (getDb) + calcule les options aux bornes et les transmet au formulaire", () => {
+  it("lit les réglages (getDb) + calcule les options aux bornes et les transmet au formulaire", async () => {
     const settings: HouseholdSettings = {
       theme: "dark",
       parentWorldValidation: true,
@@ -60,16 +64,16 @@ describe("ParentSettingsPage (story 7.3 ; volume story 8.3)", () => {
     readMock.mockReturnValue(settings);
     controlsMock.mockReturnValue(CONTROLS);
 
-    render(<ParentSettingsPage />);
+    render(await ParentSettingsPage());
 
-    expect(getDb).toHaveBeenCalledOnce();
+    expect(getDb).toHaveBeenCalled();
     expect(readMock).toHaveBeenCalledWith(FAKE_DB);
     const form = screen.getByTestId("form");
     expect(form).toHaveAttribute("data-theme", "dark");
     // Options nudge = présets dans 5..60 (la valeur 30 est déjà un préset).
     expect(form).toHaveAttribute("data-nudge", "15,20,30,45,60");
-    // Options verrou dur = présets dans 10..240 + la valeur courante 75 insérée et triée.
-    expect(form).toHaveAttribute("data-hardlock", "30,45,60,75,90,120");
+    // Options verrou dur = présets atteignables dans 75 min + valeur courante conservée.
+    expect(form).toHaveAttribute("data-hardlock", "30,45,60,75");
     // Options volume = présets dans les bornes fixes [0,100] + la valeur courante 90 insérée et triée.
     expect(form).toHaveAttribute("data-volume", "0,25,50,75,90,100");
   });

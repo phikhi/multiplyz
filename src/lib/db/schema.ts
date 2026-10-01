@@ -5,6 +5,16 @@ import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core
 // `config.ts`). `import type` = erased au build, mais on garde le relatif par
 // cohérence et robustesse du résolveur outillage.
 import type { Skill } from "../engine/domain";
+import type { Adventure } from "../game/adventure-types";
+
+/** One durable checkpoint per child; closed runs can be replaced by the next adventure. */
+export const adventureSessions = sqliteTable("adventure_sessions", {
+  profileId: integer("profile_id")
+    .primaryKey()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  state: text("state", { mode: "json" }).$type<Adventure>().notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
 
 // Schéma métier auth-lite (epic #2) + Moteur math (epic #3 : `mastery`/`attempts`)
 // + table technique de wiring (#12).
@@ -1114,4 +1124,55 @@ export const eggPity = sqliteTable("egg_pity", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
+});
+
+/** Durable purchase receipt; independent of the changing catalogue/wallet. ADR 0020. */
+export const eggReceipts = sqliteTable("egg_receipts", {
+  id: text("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  drawId: text("draw_id").notNull(),
+  result: text("result", { mode: "json" })
+    .$type<import("../game/egg-receipt-types").EggReceipt["result"]>()
+    .notNull(),
+  acknowledged: integer("acknowledged", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+/** Targeted purchases and concurrent intention aliases, retained for replay after acknowledgement. */
+export const shardReceipts = sqliteTable("shard_receipts", {
+  id: text("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  purchaseId: text("purchase_id").notNull(),
+  offer: text("offer", { mode: "json" })
+    .$type<import("../game/shard-shop-types").ShardOffer>()
+    .notNull(),
+  balance: text("balance", { mode: "json" })
+    .$type<import("../game/wallet").WalletBalance>()
+    .notNull(),
+  acknowledged: integer("acknowledged", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+/** One immutable cosmetic transition per possession; retained after acknowledgement. */
+export const evolutionReceipts = sqliteTable("evolution_receipts", {
+  id: text("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  characterId: text("character_id")
+    .notNull()
+    .references(() => characters.id, { onDelete: "cascade" }),
+  fromStage: integer("from_stage").notNull(),
+  offer: text("offer", { mode: "json" })
+    .$type<import("../game/evolution-types").EvolutionOffer>()
+    .notNull(),
+  balance: text("balance", { mode: "json" })
+    .$type<import("../game/wallet").WalletBalance>()
+    .notNull(),
+  acknowledged: integer("acknowledged", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });

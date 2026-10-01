@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { listManagedProfiles } from "@/lib/parent/profiles";
 import { getDb } from "@/lib/db";
 import { getCurrentParentSession } from "@/lib/auth/current-session";
 import { requestRecalibration } from "@/lib/engine/service";
@@ -61,9 +62,8 @@ export async function saveSettingsAction(
 /**
  * **Arme le recalibrage** (story 7.6, DETAILS §3 (Recalibrer) « Recalibrer : relancer un mini-diagnostic »,
  * PRODUCT §3.6, ADR 0016). Pose `profiles.recalibration_requested = true` sur **le profil enfant du
- * foyer** — résolu comme `session.profileId` (le profil de la session parent EST le profil enfant/
- * propriétaire, v1 mono-profil ; même résolution que le tableau de bord `page.tsx` et
- * `mondes/actions.ts`). À la prochaine partie, l'enfant re-joue le mini-diagnostic et la fusion
+ * foyer** — choisi explicitement et vérifié contre la liste du foyer sous session parent,
+ * avec le propriétaire comme valeur par défaut. Le diagnostic attend la fin de la partie en cours ; sa fusion
  * **monotone** relève les faits sous-amorcés sans jamais rétrograder (invariant ENGINE §2 préservé).
  *
  * **Anti-abus (SÉCU)** : ré-exige une session **`kind:"parent"` valide** (`getCurrentParentSession`
@@ -72,10 +72,15 @@ export async function saveSettingsAction(
  * s'auto-recalibrer. **N'écrit que le drapeau** (jamais `mastery`/`attempts`) : la maîtrise ne bouge
  * qu'après que l'enfant a re-joué le diagnostic. Idempotent (armer un drapeau déjà armé est sûr).
  */
-export async function requestRecalibrationAction(): Promise<RecalibrationActionResult> {
+export async function requestRecalibrationAction(
+  profileId?: number,
+): Promise<RecalibrationActionResult> {
   const session = await getCurrentParentSession();
   if (session === null) return { ok: false, code: "UNAUTHORIZED" };
-  requestRecalibration(getDb(), session.profileId);
+  const target = profileId ?? session.profileId;
+  if (!Number.isSafeInteger(target) || !listManagedProfiles(getDb()).some((p) => p.id === target))
+    return { ok: false, code: "UNAUTHORIZED" };
+  requestRecalibration(getDb(), target);
   revalidatePath(REGLAGES_PATH);
   return { ok: true };
 }

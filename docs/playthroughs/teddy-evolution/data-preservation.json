@@ -1,0 +1,322 @@
+{
+  "activeDatabase": "data/multiplyz.sqlite",
+  "backup": "data/backups/teddy-before-evolution-20260910T184846Z.sqlite",
+  "backupSha256": "c1ef6306c06d683978ac3a0978fe097c21f896bf519ef0099807b9f4f3f074cd",
+  "before": {
+    "adventure_sessions": {
+      "rows": 1,
+      "sha256": "0d53da2201977026f77f1aee97d0a9fec99c6a91e5c2d31def430d208b814d7e"
+    },
+    "attempts": {
+      "rows": 302,
+      "sha256": "a98675508b5d3766e30d5a9d2b9eefa79e0b869f2ebb679bf8f4dfef9cdc272b"
+    },
+    "characters": {
+      "rows": 41,
+      "sha256": "5fadc7ca15127ece1ea63a06d242f90c9c62e779dc1c88eb1142ed113da254d2",
+      "identitySha256": "ced065a32ac4cf585598ab47fb808a9a307820e2615b551f9a8d6eac64a4c1b5"
+    },
+    "collection": {
+      "rows": 11,
+      "sha256": "880039bf125f0cfe9ff7ffb8c2642794489acc048b3ade7c525e26149266c16b"
+    },
+    "cosmetics": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cosmetics_owned": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "daily": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "egg_pity": {
+      "rows": 1,
+      "sha256": "b989020e0d1d673c9135aa7c04509444dc69a3ed1a7cac0dfe0bd6f5e0130951"
+    },
+    "egg_receipts": {
+      "rows": 2,
+      "sha256": "7469e65ddb59091cf74e4f06f3436fdf31e5453f91a96238254c5bfdd07b2801"
+    },
+    "household_settings": {
+      "rows": 1,
+      "sha256": "29785799671bbc9aff91a26e0b45584f92bf4cb7a5176a201639ef21dea26e0f"
+    },
+    "inventory_items": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "jobs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ledger": {
+      "rows": 68,
+      "sha256": "ea40eafa51359eed5cc0b3fac7eff0dc0cac9ac6550d0f8b57df856b5b35b8da"
+    },
+    "mastery": {
+      "rows": 123,
+      "sha256": "c6a4e25c7b68200554a6762107d7049da7484dad11196e9aa7b1acff2f061f83"
+    },
+    "pin_attempts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "profiles": {
+      "rows": 1,
+      "sha256": "54a12e14d27658e971239c5d5999a168cc79e91b03d8d4cc3e7dc2dbbdf1884f"
+    },
+    "progress": {
+      "rows": 62,
+      "sha256": "88f847b33f84527f042eea653ef407fecb79d5ccf2a31d75c46f1afe8e0be87b"
+    },
+    "schema_meta": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sessions": {
+      "rows": 6,
+      "sha256": "921bee860fc9c799e93936e376795610be02769b9036c8b29abbad618969967c"
+    },
+    "shard_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "socle_worlds": {
+      "rows": 6,
+      "sha256": "8132a9fcf2b0028d4b99003d3bf0fd0371d0371e956205e1e0520f0c2ef40e86"
+    },
+    "teddy_reference_assets": {
+      "rows": 6,
+      "sha256": "146a01c3238d84bce70a2991b31e4dd69faa2036df471da6e87dd38670ad4740"
+    },
+    "wallet": {
+      "rows": 1,
+      "sha256": "bdbcf1e432da2641b232d5493645191c2ffbcebde4cc9bf7eb4a6f20316fc374"
+    },
+    "worlds": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "catalogueBefore": [
+    ["creature:0:0", 1, null],
+    ["creature:0:1", 1, null],
+    ["creature:0:2", 1, null],
+    ["creature:0:3", 1, null],
+    ["creature:0:4", 1, null],
+    ["creature:0:5", 1, null],
+    ["creature:1:0", 1, null],
+    ["creature:1:1", 1, null],
+    ["creature:1:2", 1, null],
+    ["creature:1:3", 1, null],
+    ["creature:1:4", 1, null],
+    ["creature:2:0", 1, null],
+    ["creature:2:1", 1, null],
+    ["creature:2:2", 1, null],
+    ["creature:2:3", 1, null],
+    ["creature:2:4", 1, null],
+    ["creature:2:5", 1, null],
+    ["creature:3:0", 1, null],
+    ["creature:3:1", 1, null],
+    ["creature:3:2", 1, null],
+    ["creature:3:3", 1, null],
+    ["creature:3:4", 1, null],
+    ["creature:3:5", 1, null],
+    ["creature:4:0", 1, null],
+    ["creature:4:1", 1, null],
+    ["creature:4:2", 1, null],
+    ["creature:4:3", 1, null],
+    ["creature:4:4", 1, null],
+    ["creature:5:0", 1, null],
+    ["creature:5:1", 1, null],
+    ["creature:5:2", 1, null],
+    ["creature:5:3", 1, null],
+    ["creature:5:4", 1, null],
+    ["creature:5:5", 1, null],
+    ["creature:5:6", 1, null],
+    ["legendary:0", 1, null],
+    ["legendary:1", 1, null],
+    ["legendary:2", 1, null],
+    ["legendary:3", 1, null],
+    ["legendary:4", 1, null],
+    ["legendary:5", 1, null]
+  ],
+  "checkedDatabase": "data/multiplyz.sqlite",
+  "after": {
+    "adventure_sessions": {
+      "rows": 1,
+      "sha256": "0d53da2201977026f77f1aee97d0a9fec99c6a91e5c2d31def430d208b814d7e"
+    },
+    "attempts": {
+      "rows": 302,
+      "sha256": "a98675508b5d3766e30d5a9d2b9eefa79e0b869f2ebb679bf8f4dfef9cdc272b"
+    },
+    "characters": {
+      "rows": 41,
+      "sha256": "bf940c5962fc72209f906668223876f08108248512f2f7f103f71d83252443de",
+      "identitySha256": "ced065a32ac4cf585598ab47fb808a9a307820e2615b551f9a8d6eac64a4c1b5"
+    },
+    "collection": {
+      "rows": 11,
+      "sha256": "880039bf125f0cfe9ff7ffb8c2642794489acc048b3ade7c525e26149266c16b"
+    },
+    "cosmetics": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "cosmetics_owned": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "daily": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "egg_pity": {
+      "rows": 1,
+      "sha256": "b989020e0d1d673c9135aa7c04509444dc69a3ed1a7cac0dfe0bd6f5e0130951"
+    },
+    "egg_receipts": {
+      "rows": 2,
+      "sha256": "7469e65ddb59091cf74e4f06f3436fdf31e5453f91a96238254c5bfdd07b2801"
+    },
+    "evolution_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "household_settings": {
+      "rows": 1,
+      "sha256": "29785799671bbc9aff91a26e0b45584f92bf4cb7a5176a201639ef21dea26e0f"
+    },
+    "inventory_items": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "jobs": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ledger": {
+      "rows": 68,
+      "sha256": "ea40eafa51359eed5cc0b3fac7eff0dc0cac9ac6550d0f8b57df856b5b35b8da"
+    },
+    "mastery": {
+      "rows": 123,
+      "sha256": "c6a4e25c7b68200554a6762107d7049da7484dad11196e9aa7b1acff2f061f83"
+    },
+    "pin_attempts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "profiles": {
+      "rows": 1,
+      "sha256": "54a12e14d27658e971239c5d5999a168cc79e91b03d8d4cc3e7dc2dbbdf1884f"
+    },
+    "progress": {
+      "rows": 62,
+      "sha256": "88f847b33f84527f042eea653ef407fecb79d5ccf2a31d75c46f1afe8e0be87b"
+    },
+    "schema_meta": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "sessions": {
+      "rows": 6,
+      "sha256": "921bee860fc9c799e93936e376795610be02769b9036c8b29abbad618969967c"
+    },
+    "shard_receipts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "socle_worlds": {
+      "rows": 6,
+      "sha256": "8132a9fcf2b0028d4b99003d3bf0fd0371d0371e956205e1e0520f0c2ef40e86"
+    },
+    "teddy_reference_assets": {
+      "rows": 6,
+      "sha256": "146a01c3238d84bce70a2991b31e4dd69faa2036df471da6e87dd38670ad4740"
+    },
+    "wallet": {
+      "rows": 1,
+      "sha256": "bdbcf1e432da2641b232d5493645191c2ffbcebde4cc9bf7eb4a6f20316fc374"
+    },
+    "worlds": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "unchangedTables": [
+    "adventure_sessions",
+    "attempts",
+    "collection",
+    "cosmetics",
+    "cosmetics_owned",
+    "daily",
+    "egg_pity",
+    "egg_receipts",
+    "household_settings",
+    "inventory_items",
+    "jobs",
+    "ledger",
+    "mastery",
+    "pin_attempts",
+    "profiles",
+    "progress",
+    "schema_meta",
+    "sessions",
+    "shard_receipts",
+    "socle_worlds",
+    "teddy_reference_assets",
+    "wallet",
+    "worlds"
+  ],
+  "catalogueStageMetadataAdded": [
+    "creature:0:0",
+    "creature:0:1",
+    "creature:0:2",
+    "creature:0:3",
+    "creature:0:4",
+    "creature:0:5",
+    "creature:1:0",
+    "creature:1:1",
+    "creature:1:2",
+    "creature:1:3",
+    "creature:1:4",
+    "creature:2:0",
+    "creature:2:1",
+    "creature:2:2",
+    "creature:2:3",
+    "creature:2:4",
+    "creature:2:5",
+    "creature:3:0",
+    "creature:3:1",
+    "creature:3:2",
+    "creature:3:3",
+    "creature:3:4",
+    "creature:3:5",
+    "creature:4:0",
+    "creature:4:1",
+    "creature:4:2",
+    "creature:4:3",
+    "creature:4:4",
+    "creature:5:0",
+    "creature:5:1",
+    "creature:5:2",
+    "creature:5:3",
+    "creature:5:4",
+    "creature:5:5",
+    "creature:5:6",
+    "legendary:0",
+    "legendary:1",
+    "legendary:2",
+    "legendary:3",
+    "legendary:4",
+    "legendary:5"
+  ],
+  "integrity": "ok",
+  "activeDatabaseReplaced": false,
+  "seedExecuted": false
+}

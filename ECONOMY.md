@@ -125,10 +125,14 @@ Obtention validée = **hybride** : œufs surprise **+** boutique éclats. Légen
 ### 4.3 Boutique (éclats)
 - Filet de sécurité : **acheter une créature précise** manquante contre des **éclats** (prix selon rareté).
 - Garantit la **complétude** sans dépendre de la chance.
+- Compagnons communs et rares du catalogue réel des mondes accessibles, y compris générés ; légendaires réservées aux gardiens. L’éligibilité aux œufs ne limite pas ce catalogue ciblé.
+- Dépense, journal, possession et reçu de rencontre enregistrés ensemble ; rejeu sans double dépense, même après acquittement. Contrat : [ADR 0021](docs/adr/0021-acquisition-ciblee-persistante.md).
 
 ### 4.4 Évolution (éclats)
-- Faire évoluer une créature au **stade suivant** (bébé→ado→adulte) contre des **éclats** (coût croissant par stade, selon rareté).
-- Cosmétique/affectif : ne donne **aucun avantage de jeu**.
+- Faire évoluer un compagnon possédé au **stade suivant** (bébé → ado → adulte) contre des **éclats** : tarifs serveur configurés, actuellement **40 puis 100**, indépendamment de la rareté. Les légendaires déjà acquises sont éligibles.
+- Voir les vrais arts avant/après, le coût et le solde restant avant confirmation. Une variante absente, identique ou non publiée ne permet pas de dépenser.
+- Débit, journal `spend/shards/evolution`, changement de stade et reçu sont atomiques. La même transition reste rejouable sans débit supplémentaire, même après acquittement. Contrat : [ADR 0022](docs/adr/0022-evolution-cosmetique-persistante.md).
+- Cosmétique/affectif : **aucun avantage de jeu**. Nom, histoire, quantité et date d’acquisition restent identiques ; maîtrise, calculs, progression et règles des mondes sont préservés.
 
 ### 4.5 Cosmétiques (pièces)
 - Tenues/accessoires d'avatar & de Teddy. Achat en pièces. Déco pure.
@@ -192,3 +196,9 @@ Obtention validée = **hybride** : œufs surprise **+** boutique éclats. Légen
 | Poisson au miel | Saveur (coffre quotidien) + **booster doux optionnel** |
 | Cosmétiques | Pièces, **déco pure** |
 | Garde-fous | Pitié + boutique + complétude garantie + no-FOMO + n'entrave jamais l'apprentissage |
+
+## 9. Reçu et rencontre persistante — TEDDy
+
+`egg_receipts` conserve le résultat exact d’un achat et son acquittement, dans la même transaction que `buyEggAndDraw`. Une rencontre en attente est reprise avant tout nouvel achat ; plusieurs intentions concurrentes sont liées au même tirage. Le rejeu restitue le reçu sans débit ni récompense supplémentaire, même après acquittement. Le solde du reçu est celui de l’achat, explicitement présenté comme historique.
+
+Contrat, champs et compatibilité des anciens achats : [ADR 0020](docs/adr/0020-rencontre-oeuf-persistante.md). Les tarifs, doublons, pitié et exclusions des légendaires restent ceux des sections précédentes.

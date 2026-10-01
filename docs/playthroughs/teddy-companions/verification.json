@@ -1,0 +1,89 @@
+{
+  "levels": [
+    {
+      "level": 0,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 1,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 2,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 3,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 4,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 5,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 6,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 7,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 8,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 9,
+      "questions": 10,
+      "stars": 3
+    },
+    {
+      "level": 10,
+      "questions": 13,
+      "stars": 0
+    }
+  ],
+  "reward": {
+    "ok": true,
+    "stars": 0,
+    "unlockedNextWorld": true,
+    "reward": {
+      "base": 10,
+      "starBonus": 0,
+      "treasureBonus": 0,
+      "bossBonus": 50,
+      "total": 60
+    },
+    "balance": {
+      "coins": 340,
+      "shards": 0
+    },
+    "coinsApplied": true,
+    "legendary": {
+      "characterId": "legendary:0",
+      "name": "Braisille",
+      "story": "La gardienne légendaire de ce monde — elle veillait sur le boss.",
+      "artRef": "socle/creature/legendary_world_0.png"
+    },
+    "legendaryAdded": true
+  },
+  "collectionCount": 1,
+  "nickname": "Luciolune",
+  "matchingArt": "/generated/socle/creature/legendary_world_0.png",
+  "focusContrast": 8.359924069852823,
+  "nextWorld": 1,
+  "errors": []
+}

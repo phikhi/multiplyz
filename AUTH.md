@@ -16,13 +16,16 @@
 
 ## 2. Flows
 
-- **1er usage** : créer le(s) profil(s) enfant (nom, avatar, PIN) + poser le **PIN parent**.
+- **1er usage TEDDy** : prénom, portrait, code enfant saisi deux fois, code parent distinct saisi deux fois, puis code de secours affiché une fois. Le parent confirme l’avoir conservé. Choix du profil et connexion normale avant le premier voyage ; aucune connexion implicite à la création du foyer.
 - **Connexion (n'importe quel appareil)** : aller à l'URL → choisir son profil dans la liste (servie par le serveur) ou saisir le nom → **PIN** → jouer.
-- **Espace parent** : bouton discret → **PIN parent**.
+- **Retour sur un appareil déjà connecté** : l’accueil propose « Reprendre mon aventure » uniquement si la session enfant est encore valide côté serveur. `/reprendre` retrouve le niveau/diagnostic, sa pause ou une rencontre en attente, puis la carte. Le nom mémorisé ne donne aucun accès ; un autre profil demande son code.
+- **Espace parent** : bouton discret → **PIN parent**. L’ajout d’un enfant et le changement d’un code passent par cet espace.
+
+Le parcours quotidien et ses limites de reprise sont documentés dans [ADR 0023](docs/adr/0023-premier-voyage-et-pauses.md).
 
 ## 3. Stockage & session
 
-- **PIN hashé côté serveur** (argon2id ou bcrypt). **Jamais** en clair, jamais côté client.
+- **PIN hashé côté serveur** (argon2id). La saisie transitoire est masquée côté client ; aucun code n’est enregistré dans le stockage navigateur. Les arguments des server functions sont exclus des logs de développement Next.
 - **Session** : cookie `httpOnly` + `Secure` + `SameSite=Lax`, token opaque.
   - Session enfant : durée longue (ex. 30 j) — confort.
   - Session **parent** : courte (ex. 15 min) pour l'espace parent, re-demande le PIN ensuite.

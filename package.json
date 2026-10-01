@@ -14,9 +14,9 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
+    "test": "vitest run --maxWorkers=2",
+    "test:coverage": "vitest run --coverage --maxWorkers=2",
+    "test:e2e": "node scripts/e2e-isolated.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/db-migrate.ts"
   },

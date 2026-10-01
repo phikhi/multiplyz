@@ -56,7 +56,7 @@ import { isLevelPlayable, isWorldUnlocked, loadWorldProgress } from "./unlock";
 import { baseNodeTypeAt } from "./map";
 import { computeLevelReward, type RewardBreakdown } from "./reward";
 import { assertPositiveAmount, creditWalletInTx, loadWallet, type WalletBalance } from "./wallet";
-import { grantLegendaryInTx, legendaryForWorld } from "./collection";
+import { grantLegendaryInTx, legendaryCharacterId, loadCollectionEntry } from "./collection";
 
 /**
  * Cible **brute** (non fiable) d'une fin de niveau (endpoint public) — chaque champ est
@@ -74,16 +74,16 @@ export interface FinishLevelInput {
 
 /**
  * **Légendaire garantie** d'un monde présentée à l'UI (écran résultats du boss, MAP §6).
- * Sous-ensemble d'affichage du descripteur catalogue (`legendaryForWorld`) — nom + histoire
+ * Lecture de la possession et du catalogue réels — nom affiché + histoire
  * + rareté + réf d'art **RÉELLE** de la légendaire (illustration committée, story R3.1 #378) ;
  * un `placeholder://…` ne subsiste que **hors socle** (repli no-fail côté UI, jamais bloquant).
  */
 export interface GrantedLegendary {
   /** Clé de catalogue (`legendary:<world>`). */
   readonly characterId: string;
-  /** Nom par défaut (déterministe, MAP §6) — renommable ensuite dans la collection. */
+  /** Nom affiché du compagnon (surnom existant ou nom du catalogue). */
   readonly name: string;
-  /** Ligne d'histoire déterministe de la légendaire (MAP §6, banques centralisées). */
+  /** Histoire du catalogue de la légendaire (MAP §6). */
   readonly story: string;
   /**
    * Réf d'art **RÉELLE** de la légendaire (`socle/creature/legendary_world_<i>.png`, art committé
@@ -289,10 +289,12 @@ export function finishLevel(
     if (isBoss) {
       const grant = grantLegendaryInTx(tx, profileId, worldIndex, now);
       legendaryAdded = grant.added;
-      const descriptor = legendaryForWorld(worldIndex);
+      // Read the actual catalogue and nickname, including already-owned creatures.
+      // Grant just ensured both rows in this same transaction.
+      const descriptor = loadCollectionEntry(tx, profileId, legendaryCharacterId(worldIndex))!;
       legendary = {
-        characterId: descriptor.id,
-        name: descriptor.nameDefault,
+        characterId: descriptor.characterId,
+        name: descriptor.displayName,
         story: descriptor.story,
         artRef: descriptor.artRef,
       };

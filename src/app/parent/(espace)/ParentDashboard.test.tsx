@@ -1,23 +1,27 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { strings } from "@/strings";
-import type { ParentStats } from "@/lib/parent/stats";
+import { parent as p } from "@/strings/parent";
+import { CONFIG_DEFAULTS } from "@/config/server-config";
+import { SKILLS } from "@/lib/engine/domain";
+import { computeParentOverview, type ParentPeriod } from "@/lib/parent/overview";
+import type { ParentStats, AttemptRecord } from "@/lib/parent/stats";
 import type { ProgressionSummary } from "@/lib/parent/progression";
 import {
   contrastRatio,
   resolveTokenColor,
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
-import { ParentDashboard } from "./ParentDashboard";
+import { ParentShell } from "@/components/ParentShell";
+import { ParentDashboard, type ParentDashboardProps } from "./ParentDashboard";
 
-// `ParentExitButton` a besoin d'un routeur Next monté (`useRouter`) — testé isolément
-// (`ParentExitButton.test.tsx`) ; on le stubbe ici pour ne vérifier QUE l'assemblage du
-// tableau de bord (même patron que l'ex-stub `page.test.tsx`, story 7.1).
 vi.mock("@/components/ParentExitButton", () => ({
   ParentExitButton: () => <button type="button">{strings.parent.dashboard.exit}</button>,
 }));
-
-const d = strings.parent.dashboard;
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/parent",
+  useSearchParams: () => new URLSearchParams("profile=2"),
+}));
 
 /** Agrégats riches : chaque bloc a des données réelles (tous les états non-vides exercés). */
 const FULL_STATS: ParentStats = {
@@ -109,41 +113,41 @@ const EMPTY_STATS: ParentStats = {
   accuracyDaily: [],
 };
 
-/** Justesse/rapidité NON-nulles (l'enfant a déjà joué, un jour) mais SANS donnée dans la
- * fenêtre hebdo courante — cas RÉEL distinct de "jamais joué" : `overall` porte sur TOUT
- * l'historique, `trend` seulement sur la semaine courante/précédente (`stats.ts`). Un enfant qui
- * a joué il y a 3 semaines et pas depuis a `overall !== null` mais `trend.delta === null`
- * (indécidable, `computeTrend`) → le mot de tendance retombe sur "stable" SANS aucun delta —
- * branche distincte de "jamais joué" (`accuracy.empty` ne s'affiche PAS ici, un pourcentage réel
- * est montré). */
-const STALE_STATS: ParentStats = {
-  ...FULL_STATS,
-  accuracy: {
-    overall: 0.7,
-    bySkill: FULL_STATS.accuracy.bySkill,
-    trend: { current: null, previous: null, delta: null, direction: "stable" },
-  },
-  speed: {
-    overallMs: 4000,
-    bySkillMs: FULL_STATS.speed.bySkillMs,
-    trend: { current: null, previous: null, delta: null, direction: "stable" },
-  },
-};
-
-/** Variante EN BAISSE (branche `direction === "regressing"` de `trendWord`/`accuracyTrendText`,
- * non exercée par FULL_STATS qui est toujours "improving"). */
-const REGRESSING_STATS: ParentStats = {
-  ...FULL_STATS,
-  accuracy: {
-    ...FULL_STATS.accuracy,
-    trend: { current: 0.6, previous: 0.7, delta: -0.1, direction: "regressing" },
-  },
-  speed: {
-    ...FULL_STATS.speed,
-    trend: { current: 5000, previous: 4000, delta: 1000, direction: "regressing" },
-  },
-};
-
+const now = Date.UTC(2026, 8, 11, 12);
+const day = 86400000;
+const record = (patch: Partial<AttemptRecord> = {}): AttemptRecord => ({
+  skill: "add",
+  correct: true,
+  responseMs: 2000,
+  isRetry: false,
+  createdAt: now,
+  ...patch,
+});
+const records = SKILLS.flatMap((skill, skillIndex) =>
+  Array.from({ length: 25 }, (_, i) =>
+    record({
+      skill,
+      correct: i < [22, 20, 16, 13][skillIndex],
+      responseMs: [2000, 2800, 3400, 4100][skillIndex],
+    }),
+  ),
+);
+const previous = Array.from({ length: 100 }, (_, i) =>
+  record({ correct: i < 60, createdAt: now - 8 * day }),
+);
+function overview(attempts = [...records, ...previous], period: ParentPeriod = "recent", days = 7) {
+  return computeParentOverview(
+    attempts,
+    [],
+    {
+      ...CONFIG_DEFAULTS,
+      reporting: { ...CONFIG_DEFAULTS.reporting, trendWindowDays: days },
+    },
+    now,
+    period,
+  );
+}
+const FULL_OVERVIEW = { ...overview(), seen: 3, weak: 1, due: 2, slow: 1 };
 const FULL_PROGRESSION: ProgressionSummary = {
   worldNumber: 2,
   levelsCompleted: 3,
@@ -151,617 +155,394 @@ const FULL_PROGRESSION: ProgressionSummary = {
   creaturesCount: 5,
   levelsToday: 3,
 };
-
-const BASE_PROPS = {
+const BASE_PROPS: ParentDashboardProps = {
   displayName: "Léa",
+  profileId: 2,
+  profiles: [
+    { id: 1, name: "Zoé" },
+    { id: 2, name: "Léa" },
+  ],
+  stats: FULL_STATS,
+  overview: FULL_OVERVIEW,
+  progression: FULL_PROGRESSION,
   respectWindowMinMinutes: 15,
   respectWindowMaxMinutes: 20,
   pendingWorldsCount: 0,
-  sparklineWindowDays: 7, // défaut réel `ReportingConfig.trendWindowDays` (ADR 0012).
+  sparklineWindowDays: 7,
 };
+function dashboard(patch: Partial<ParentDashboardProps> = {}) {
+  return render(<ParentDashboard {...BASE_PROPS} {...patch} />);
+}
+function section(title: string) {
+  return within(screen.getByRole("heading", { level: 2, name: title }).closest("section")!);
+}
 
-describe("ParentDashboard — bandeau + en-tête", () => {
-  it("rend le h1 inchangé (7.1) + le sous-titre nominatif (COPY §5)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByRole("heading", { level: 1, name: d.title })).toBeInTheDocument();
-    expect(screen.getByText("Progression de Léa")).toBeInTheDocument();
-  });
-
-  it("bandeau du jour : minutes + niveaux + série quand today et progression sont disponibles", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText("Aujourd'hui : 18 min · 3 niveaux")).toBeInTheDocument();
-    expect(screen.getByText("Série : 5 jours")).toBeInTheDocument();
-  });
-
-  it("bandeau du jour : repli minutes seules quand la progression est indisponible", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={null} />);
-    expect(screen.getByText("Aujourd'hui : 18 min")).toBeInTheDocument();
-  });
-
-  it("bandeau du jour : repli no-fail quand rien n'a encore été joué", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.getByText(d.today.notPlayed)).toBeInTheDocument();
-    expect(screen.getByText(d.today.noStreak)).toBeInTheDocument();
-  });
-
-  it('pluralisation FR (bug PR #239 "1 jours"/"1 niveaux") : SINGULIER à 0 et 1, PLURIEL à ≥2', () => {
-    const today18min = { dayOrdinal: 1, activeMs: 0, activeMinutes: 18, respect: "under" as const };
-    const withStreak = (currentStreakDays: number): ParentStats => ({
-      ...FULL_STATS,
-      regularity: { ...FULL_STATS.regularity, today: today18min, currentStreakDays },
-    });
-    const progressionWith = (levelsToday: number): ProgressionSummary => ({
-      ...FULL_PROGRESSION,
-      levelsToday,
-    });
-
-    // niveaux : 0 → singulier, 1 → singulier, 2 → pluriel.
-    const { rerender } = render(
-      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(0)} />,
-    );
-    expect(screen.getByText("Aujourd'hui : 18 min · 0 niveau")).toBeInTheDocument();
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(1)} />,
-    );
-    expect(screen.getByText("Aujourd'hui : 18 min · 1 niveau")).toBeInTheDocument();
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(2)} />,
-    );
-    expect(screen.getByText("Aujourd'hui : 18 min · 2 niveaux")).toBeInTheDocument();
-
-    // série : 1 → singulier (0 passe par le repli `noStreak`, déjà testé ci-dessus), 2 → pluriel.
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={withStreak(1)} progression={progressionWith(3)} />,
-    );
-    expect(screen.getByText("Série : 1 jour")).toBeInTheDocument();
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={withStreak(2)} progression={progressionWith(3)} />,
-    );
-    expect(screen.getByText("Série : 2 jours")).toBeInTheDocument();
-  });
-});
-
-describe("ParentDashboard — justesse (semaine) + par compétence", () => {
-  it("affiche la justesse globale + la tendance signée quand des données existent", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText("82 %")).toBeInTheDocument();
-    expect(screen.getByText("en progression (+5 % vs la semaine précédente)")).toBeInTheDocument();
-  });
-
-  it("repli no-fail quand aucune 1ʳᵉ réponse n'est comptée cette fenêtre", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.getAllByText(d.accuracy.empty).length).toBeGreaterThan(0);
-  });
-
-  it("tendance EN BAISSE : mot + delta signé négatif (branche `regressing`)", () => {
-    render(
-      <ParentDashboard {...BASE_PROPS} stats={REGRESSING_STATS} progression={FULL_PROGRESSION} />,
-    );
-    expect(screen.getByText("en baisse (−10 % vs la semaine précédente)")).toBeInTheDocument();
-  });
-
-  it('historique NON vide mais fenêtre hebdo sans donnée (delta indécidable) → mot "stable" SANS delta, valeur réelle affichée', () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={STALE_STATS} progression={null} />);
-    expect(screen.getByText("70 %")).toBeInTheDocument(); // overall réel, PAS le repli "empty"
-    // "stable" apparaît aussi côté rapidité (STALE_STATS a les 2 tendances indécidables) → ≥1.
-    expect(screen.getAllByText(d.accuracy.trend.stable).length).toBeGreaterThan(0);
-    expect(screen.queryByText(/vs la semaine précédente/u)).not.toBeInTheDocument();
-  });
-
-  it("rend les 4 barres par compétence (compte EXACT, ordre canonique SKILLS)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    const bars = screen.getAllByRole("img", {
-      name: /Compléments|Addition|Soustraction|Multiplication/u,
-    });
-    expect(bars).toHaveLength(4);
-    expect(bars[0]).toHaveAccessibleName(`${d.skills.comp10} : 88 %`);
-    expect(bars[1]).toHaveAccessibleName(`${d.skills.add} : 79 %`);
-    expect(bars[2]).toHaveAccessibleName(`${d.skills.sub} : 64 %`);
-    expect(bars[3]).toHaveAccessibleName(`${d.skills.mult} : 52 %`);
-  });
-
-  it("la largeur de la barre reflète le pourcentage réel (effet observable, pas juste le texte)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    const bar = screen.getByRole("img", { name: `${d.skills.comp10} : 88 %` });
-    const fillEl = bar.firstElementChild as HTMLElement;
-    expect(fillEl.style.width).toBe("88%");
-  });
-});
-
-// ==========================================================================
-// Sparkline de justesse QUOTIDIENNE (issue #241, ADR 0018) — réalise honnêtement la métaphore du
-// wireframe (WIREFRAMES §7 `▁▃▅▆▇`) avec de VRAIES données journalières `accuracyDaily`, jamais
-// `AccuracyStats.trend` (ADR 0012, current/previous seulement) — même patron de garde que le
-// graphique de régularité (#125 consommation, #170 plancher non-vacuous, compte EXACT #127).
-// ==========================================================================
-describe("ParentDashboard — sparkline de justesse quotidienne (#241)", () => {
-  it("graphique LISIBLE (≥2 jours) : consomme `sparklinePlural` en role=img (fenêtre PLURIEL), compte EXACT de barres", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    // Fenêtre ⚙️ = 7 (BASE_PROPS) → PLURIEL, même si seuls 5 points existent (même sémantique que
-    // `regularity.chartLabel`, la fenêtre nommée n'est pas le compte de barres réellement rendues).
-    const chart = screen.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
-    expect(chart.children).toHaveLength(5); // compte EXACT (5 jours dans la fixture)
-  });
-
-  it("repli textuel accessible : 0 jour → PAS de sparkline, `sparklineEmpty` affiché", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.getByText(d.accuracy.sparklineEmpty)).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /Justesse par jour/u })).not.toBeInTheDocument();
-  });
-
-  it("repli textuel accessible : EXACTEMENT 1 jour → PAS de sparkline (un point isolé n'est pas une forme)", () => {
-    const oneDay: ParentStats = {
-      ...FULL_STATS,
-      accuracyDaily: [{ dayOrdinal: 200, accuracy: 0.5 }],
-    };
-    render(<ParentDashboard {...BASE_PROPS} stats={oneDay} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText(d.accuracy.sparklineEmpty)).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: /Justesse par jour/u })).not.toBeInTheDocument();
-  });
-
-  it("hauteur des barres = pourcentage RÉEL par jour, plancher 4 % pour 0 % (jamais invisible, #170)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    const chart = screen.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
-    const bars = Array.from(chart.children) as HTMLElement[];
-    expect(bars).toHaveLength(5);
-    // Ordre CROISSANT de la fixture : 20 % / 50 % / 100 % / 0 %→plancher 4 % / 80 %.
-    expect(bars[0].style.height).toBe("20%");
-    expect(bars[1].style.height).toBe("50%");
-    expect(bars[2].style.height).toBe("100%");
-    expect(bars[3].style.height).toBe("4%"); // 0 % de justesse — plancher, jamais 0 %
-    expect(bars[4].style.height).toBe("80%");
-  });
-
-  it("aucune barre de la sparkline lisible n'a une hauteur nulle (rendu ≠ invisible, #170)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    const chart = screen.getByRole("img", { name: "Justesse par jour (7 derniers jours)" });
-    const bars = Array.from(chart.children) as HTMLElement[];
-    expect(bars.length).toBeGreaterThan(0);
-    for (const bar of bars) {
-      expect(bar.style.height).not.toBe("0%");
-      expect(bar.style.height).not.toBe("");
-    }
-  });
-
-  it("MUTATION-PROUVÉ : ne rend QUE les `sparklineWindowDays` DERNIERS jours (fenêtre ⚙️ AGIT, tranche la fin)", () => {
-    const nineDays: ParentStats = {
-      ...FULL_STATS,
-      accuracyDaily: Array.from({ length: 9 }, (_, i) => ({
-        dayOrdinal: 300 + i,
-        accuracy: i / 8, // 0, 0.125, …, 1 — croissant, le DERNIER (i=8) vaut 1 (100 %)
-      })),
-    };
-    render(
-      <ParentDashboard
-        {...BASE_PROPS}
-        sparklineWindowDays={3}
-        stats={nineDays}
-        progression={FULL_PROGRESSION}
-      />,
-    );
-    // 9 jours dispo, fenêtre 3 → seuls les 3 DERNIERS (i=6,7,8) sont rendus, jamais les 9.
-    const chart = screen.getByRole("img", { name: /Justesse par jour \(3 derniers jours\)/u });
-    const bars = Array.from(chart.children) as HTMLElement[];
-    expect(bars).toHaveLength(3); // rougit si le slice `-windowDays` est retiré (rendrait 9)
-    expect(bars[2].style.height).toBe("100%"); // le TOUT DERNIER jour (i=8), pas un jour ancien
-  });
-
-  it("pluralisation FR EXACTE de la fenêtre : SINGULIER à `sparklineWindowDays=1`, PLURIEL à ≥2", () => {
-    const { rerender } = render(
-      <ParentDashboard
-        {...BASE_PROPS}
-        sparklineWindowDays={1}
-        stats={FULL_STATS}
-        progression={FULL_PROGRESSION}
-      />,
-    );
+describe("ParentDashboard — carnet et filtres", () => {
+  it("annonce le profil et la période effectivement suivis", () => {
+    dashboard();
+    expect(screen.getByRole("heading", { level: 1, name: p.title("Léa") })).toBeInTheDocument();
+    expect(screen.getByText(p.intro)).toBeInTheDocument();
+    const profile = screen.getByRole("combobox", { name: p.profile });
+    expect(profile).toHaveValue("2");
+    expect(profile).toHaveAttribute("name", "profile");
     expect(
-      screen.getByRole("img", { name: "Justesse par jour (1 dernier jour)" }),
-    ).toBeInTheDocument();
-
-    rerender(
-      <ParentDashboard
-        {...BASE_PROPS}
-        sparklineWindowDays={2}
-        stats={FULL_STATS}
-        progression={FULL_PROGRESSION}
-      />,
-    );
-    // PLURIEL à ≥2 — retirer `pluralize()` au profit d'un gabarit unique figé romprait ce test.
-    expect(
-      screen.getByRole("img", { name: "Justesse par jour (2 derniers jours)" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/2 dernier jour\)/u)).toBeNull();
+      within(profile)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual(["Zoé", "Léa"]);
+    expect(profile.closest("form")).toHaveAttribute("action", "/parent");
+    expect(screen.getByRole("button", { name: p.apply })).toHaveAttribute("type", "submit");
+    expect(screen.getByText(p.periodHint)).toBeInTheDocument();
+  });
+  it.each(["recent", "month", "all"] as const)(
+    "sélectionne la période %s avec les bornes du rapport",
+    (period) => {
+      const report = overview(records, period, 3);
+      dashboard({ overview: report, sparklineWindowDays: 3 });
+      const filter = screen.getByRole("combobox", { name: p.period });
+      expect(filter).toHaveValue(period);
+      expect(
+        within(filter)
+          .getAllByRole("option")
+          .map((o) => o.textContent),
+      ).toEqual([p.recent(3), p.recent(12), p.all]);
+      const format = (value: number) =>
+        new Intl.DateTimeFormat("fr-FR", {
+          dateStyle: "medium",
+          timeStyle: "short",
+          timeZone: report.timeZone,
+        }).format(value);
+      expect(
+        screen.getByText(
+          report.start === null ? p.asOf(format(now)) : p.range(format(report.start), format(now)),
+        ),
+      ).toBeInTheDocument();
+    },
+  );
+  it("reste neutre si le rapport n'est pas disponible", () => {
+    expect(dashboard({ overview: undefined, profiles: undefined }).container).toBeEmptyDOMElement();
   });
 });
 
-describe("ParentDashboard — rapidité", () => {
-  it("affiche la rapidité moyenne (virgule française) + la tendance orientée enfant", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText("3,2 s")).toBeInTheDocument();
-    // Amélioration de vitesse = ms qui BAISSE → mot "plus rapide", jamais "en baisse" (ambigu).
-    expect(screen.getByText(d.speed.trend.improving)).toBeInTheDocument();
+describe("ParentDashboard — justesse et comparaisons", () => {
+  it("affiche le dénominateur réel et un écart positif sur deux périodes suffisantes", () => {
+    dashboard();
+    const accuracy = section(p.accuracy);
+    expect(accuracy.getByText("71 %")).toBeInTheDocument();
+    expect(accuracy.getByText(p.answers(71, 100))).toBeInTheDocument();
+    expect(accuracy.getByText(p.delta("+11"))).toBeInTheDocument();
+    expect(accuracy.getByText(p.comparison(100, 100))).toBeInTheDocument();
+    expect(accuracy.queryByText(p.small)).not.toBeInTheDocument();
   });
-
-  it("repli no-fail quand aucune donnée de rapidité", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.getByText(d.speed.empty)).toBeInTheDocument();
-  });
-
-  it('tendance PLUS LENTE (branche `regressing`, mot orienté enfant — jamais "en hausse")', () => {
-    render(
-      <ParentDashboard {...BASE_PROPS} stats={REGRESSING_STATS} progression={FULL_PROGRESSION} />,
-    );
-    expect(screen.getByText(d.speed.trend.regressing)).toBeInTheDocument();
-  });
-
-  it('historique NON vide mais fenêtre hebdo sans donnée → mot "stable", valeur réelle affichée', () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={STALE_STATS} progression={null} />);
-    expect(screen.getByText("4,0 s")).toBeInTheDocument(); // valeur réelle, PAS le repli "empty"
-    // "stable" apparaît aussi côté justesse (STALE_STATS a les 2 tendances indécidables) → ≥1.
-    expect(screen.getAllByText(d.speed.trend.stable).length).toBeGreaterThan(0);
-  });
-});
-
-describe("ParentDashboard — carte de maîtrise (heatmap)", () => {
-  it("rend les 4 compétences avec un statut TEXTE distinct (mastered/in-progress/weak)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText(d.mastery.mastered)).toBeInTheDocument();
-    expect(screen.getByText(d.mastery.inProgress)).toBeInTheDocument();
-    // 2 compétences sont "weak" dans la fixture (sub + mult).
-    expect(screen.getAllByText(d.mastery.weak)).toHaveLength(2);
-  });
-});
-
-describe("ParentDashboard — à revoir", () => {
-  it("rend une puce par calcul (équation formatée, réutilise formatEquation)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    const list = screen.getByRole("list", { name: d.review.heading });
-    const items = within(list).getAllByRole("listitem");
-    expect(items).toHaveLength(2);
-    expect(items[0]).toHaveTextContent("6 × 7 = ?");
-    expect(items[1]).toHaveTextContent("13 − 6 = ?");
-  });
-
-  it("état vide = posture croissance (jamais une liste vide muette)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.getByText(d.review.empty)).toBeInTheDocument();
-    expect(screen.queryByRole("list", { name: d.review.heading })).not.toBeInTheDocument();
-  });
-
-  it("garde de forme : une clé de fait MALFORMÉE retombe sur la clé brute (jamais un plantage)", () => {
-    const malformed: ParentStats = {
-      ...EMPTY_STATS,
-      reviewList: [
-        {
-          factKey: "not-a-real-key",
-          skill: "add",
-          box: 1,
-          wrongCount: 1,
-          avgResponseMs: 1000,
-          reason: "wrong",
-        },
-      ],
-    };
-    render(<ParentDashboard {...BASE_PROPS} stats={malformed} progression={null} />);
-    expect(screen.getByText("not-a-real-key")).toBeInTheDocument();
-  });
-});
-
-describe("ParentDashboard — régularité", () => {
-  it("jours joués + record + respect du jour + repère indicatif interpolé aux bornes ⚙️", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText("5 jours joués au total")).toBeInTheDocument();
-    expect(screen.getByText("Record : 7 jours")).toBeInTheDocument();
-    expect(screen.getByText(d.regularity.respect.within)).toBeInTheDocument();
-    expect(
-      screen.getByText("Repère indicatif (15-20 min), distinct du réglage de temps d'écran."),
-    ).toBeInTheDocument();
-  });
-
-  it('pluralisation FR (bug PR #239) : "jours joués"/"Record" SINGULIER à 0 et 1, PLURIEL à ≥2', () => {
-    const withDaysAndStreak = (daysPlayed: number, recordStreakDays: number): ParentStats => ({
-      ...EMPTY_STATS,
-      regularity: { ...EMPTY_STATS.regularity, daysPlayed, recordStreakDays },
+  it("affiche un écart négatif avec le signe typographique", () => {
+    dashboard({
+      overview: overview([...records.map((r) => ({ ...r, correct: false })), ...previous]),
     });
-
-    const { rerender } = render(
-      <ParentDashboard {...BASE_PROPS} stats={withDaysAndStreak(0, 0)} progression={null} />,
-    );
-    expect(screen.getByText("0 jour joué au total")).toBeInTheDocument();
-    expect(screen.getByText("Record : 0 jour")).toBeInTheDocument();
-
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={withDaysAndStreak(1, 1)} progression={null} />,
-    );
-    expect(screen.getByText("1 jour joué au total")).toBeInTheDocument();
-    expect(screen.getByText("Record : 1 jour")).toBeInTheDocument();
-
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={withDaysAndStreak(2, 2)} progression={null} />,
-    );
-    expect(screen.getByText("2 jours joués au total")).toBeInTheDocument();
-    expect(screen.getByText("Record : 2 jours")).toBeInTheDocument();
+    expect(section(p.accuracy).getByText(p.delta("−60"))).toBeInTheDocument();
   });
-
-  // ==========================================================================
-  // Graphique minutes/jour — FIX-2 (review Frontend PR #239) : `chartLabel` CONSOMMÉE
-  // (role="img"+aria-label, jamais déclarée-orpheline #125) + repli textuel accessible sous
-  // le seuil de lisibilité (< 2 jours OU toutes les minutes à 0 → un trait au plancher 4 % lirait
-  // comme un graphique CASSÉ, pas comme « pas assez de données »).
-  // ==========================================================================
-  it("graphique LISIBLE (≥2 jours, au moins 1 minute) : consomme `chartLabel` en role=img, compte EXACT de barres", () => {
-    const { container, rerender } = render(
-      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />,
-    );
-    const chart = screen.getByRole("img", { name: d.regularity.chartLabel });
-    expect(chart.children).toHaveLength(5); // compte EXACT (5 jours dans la fixture)
-    expect(container.querySelector('[aria-hidden="true"][style*="flex-end"]')).toBeNull(); // plus de aria-hidden nu sur le conteneur
-
-    // Repli textuel absent quand le graphique est lisible.
-    expect(screen.queryByText(d.regularity.chartEmpty)).not.toBeInTheDocument();
-
-    // Ré-affiche sans jour → plus de rôle image (le repli prend le relais, cf. test suivant).
-    rerender(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
+  it("réserve la stabilité aux périodes comparables", () => {
+    dashboard({
+      overview: overview([...records, ...records.map((r) => ({ ...r, createdAt: now - 8 * day }))]),
+    });
+    expect(section(p.accuracy).getByText(p.stable)).toBeInTheDocument();
   });
-
-  it("repli textuel accessible : 0 jour → PAS de graphique, `chartEmpty` affiché", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} progression={null} />);
-    expect(screen.getByText(d.regularity.chartEmpty)).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
+  it("ne transforme pas un historique ancien en réponse récente ou en stabilité", () => {
+    dashboard({ overview: overview(previous) });
+    expect(section(p.accuracy).getByText(p.empty)).toBeInTheDocument();
+    expect(section(p.accuracy).getByText(p.noComparison)).toBeInTheDocument();
+    expect(screen.queryByText(p.noHistory)).not.toBeInTheDocument();
+    expect(screen.queryByText(p.stable)).not.toBeInTheDocument();
   });
+  it("distingue un nouveau profil d'une justesse nulle", () => {
+    dashboard({ stats: EMPTY_STATS, overview: overview([]), progression: null });
+    expect(screen.getByText(p.noHistory)).toBeInTheDocument();
+    expect(section(p.accuracy).getByText(p.noAnswers)).toBeInTheDocument();
+    expect(screen.queryByText("0 %")).not.toBeInTheDocument();
+  });
+  it("montre un vrai zéro sans conclure de tendance sur un petit échantillon", () => {
+    dashboard({ overview: overview([record({ correct: false }), ...previous]) });
+    const accuracy = section(p.accuracy);
+    expect(accuracy.getByText("0 %")).toBeInTheDocument();
+    expect(accuracy.getByText(p.answers(0, 1))).toBeInTheDocument();
+    expect(accuracy.getAllByText(p.small)).toHaveLength(2);
+    expect(accuracy.queryByText(p.delta("−60"))).not.toBeInTheDocument();
+  });
+  it("l'historique complet ne revendique aucune comparaison de périodes", () => {
+    dashboard({ overview: overview(records, "all") });
+    expect(section(p.accuracy).queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+  });
+});
 
-  it("repli textuel accessible : EXACTEMENT 1 jour (même avec de vraies minutes) → PAS de graphique", () => {
-    const oneDay: ParentStats = {
-      ...FULL_STATS,
-      regularity: {
-        ...FULL_STATS.regularity,
-        days: [{ dayOrdinal: 50, activeMs: 18 * 60_000, activeMinutes: 18, respect: "within" }],
+describe("ParentDashboard — compétences et maîtrise", () => {
+  it("garde les quatre compétences dans l'ordre canonique avec leurs propres dénominateurs et temps", () => {
+    dashboard();
+    const cards = section(p.skills).getAllByRole("article");
+    expect(cards).toHaveLength(4);
+    cards.forEach((card, i) => {
+      const content = within(card);
+      expect(
+        content.getByRole("heading", { name: strings.parent.dashboard.skills[SKILLS[i]] }),
+      ).toBeInTheDocument();
+      expect(content.getByText(["88 %", "80 %", "64 %", "52 %"][i])).toBeInTheDocument();
+      expect(content.getByText(p.answers([22, 20, 16, 13][i], 25))).toBeInTheDocument();
+      expect(content.getByText(["2,0 s", "2,8 s", "3,4 s", "4,1 s"][i])).toBeInTheDocument();
+      expect(content.queryByText(p.small)).not.toBeInTheDocument();
+    });
+  });
+  it("la jauge reflète la maîtrise du socle entier, pas le taux de justesse", () => {
+    dashboard();
+    const meters = section(p.skills).getAllByRole("meter");
+    expect(meters).toHaveLength(4);
+    meters.forEach((meter, i) => {
+      const count = [9, 5, 1, 1][i],
+        total = [10, 10, 10, 20][i];
+      expect(meter).toHaveAttribute("min", "0");
+      expect(meter).toHaveAttribute("max", String(total));
+      expect(meter).toHaveAttribute("value", String(count));
+      expect(meter).toHaveAccessibleName(p.mastered(count, total));
+    });
+  });
+  it("distingue les calculs rencontrés, non explorés et les compétences sans réponses", () => {
+    const report = overview([record()]);
+    dashboard({
+      overview: {
+        ...report,
+        bySkill: { ...report.bySkill, add: { ...report.bySkill.add, seen: 1 } },
       },
-    };
-    render(<ParentDashboard {...BASE_PROPS} stats={oneDay} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText(d.regularity.chartEmpty)).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
+    });
+    const add = within(
+      screen
+        .getByRole("heading", { name: strings.parent.dashboard.skills.add })
+        .closest("article")!,
+    );
+    expect(add.getByText(p.seen(1))).toBeInTheDocument();
+    expect(add.getByText(p.small)).toBeInTheDocument();
+    const sub = within(
+      screen
+        .getByRole("heading", { name: strings.parent.dashboard.skills.sub })
+        .closest("article")!,
+    );
+    expect(sub.getByText(p.unseen)).toBeInTheDocument();
+    expect(sub.getByText(p.answers(0, 0))).toBeInTheDocument();
+    expect(sub.getAllByText(p.empty)).toHaveLength(2);
   });
+  it("un socle vide garde une jauge valide et un compte explicite de zéro", () => {
+    const masteryMap = {
+      ...EMPTY_STATS.masteryMap,
+      add: { ...EMPTY_STATS.masteryMap.add, totalCount: 0 },
+    };
+    dashboard({ stats: { ...EMPTY_STATS, masteryMap }, overview: overview([]) });
+    const meter = screen.getByRole("meter", { name: p.mastered(0, 0) });
+    expect(meter).toHaveAttribute("max", "1");
+    expect(meter).toHaveAttribute("value", "0");
+  });
+});
 
-  it("repli textuel accessible : ≥2 jours mais TOUTES les minutes à 0 → PAS de graphique", () => {
-    const allZero: ParentStats = {
-      ...FULL_STATS,
-      regularity: {
-        ...FULL_STATS.regularity,
-        days: [
-          { dayOrdinal: 50, activeMs: 0, activeMinutes: 0, respect: "under" },
-          { dayOrdinal: 51, activeMs: 0, activeMinutes: 0, respect: "under" },
+describe("ParentDashboard — détail quotidien et vitesse", () => {
+  it("montre les huit dates de la fenêtre glissante, y compris les jours sans réponse", () => {
+    dashboard();
+    const table = section(p.daily).getByRole("table");
+    expect(within(table).getAllByRole("row")).toHaveLength(9);
+    expect(table.closest("details")).toHaveAttribute("open");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual([p.date, p.count, p.right]);
+  });
+  it("un jour à zéro reste visible et distinct d'un jour sans réponse", () => {
+    dashboard({ overview: overview([record({ correct: false })]) });
+    const rows = section(p.daily).getAllByRole("row").slice(1);
+    const last = within(rows.at(-1)!);
+    expect(last.getByText("1")).toBeInTheDocument();
+    const zero = last.getByText("0 %");
+    expect(zero).toHaveStyle({ "--day-accuracy": "0%" });
+    expect(within(rows[0]).getAllByText(p.noDay)).toHaveLength(2);
+    expect(section(p.daily).getByText(p.dailyHint)).toBeInTheDocument();
+  });
+  it.each([
+    [false, "0%"],
+    [true, "100%"],
+  ] as const)("la barre indique la proportion réelle, réponse juste=%s", (correct, width) => {
+    dashboard({ overview: overview([record({ correct })]) });
+    const bar = section(p.daily).getByText(correct ? "100 %" : "0 %");
+    expect(bar).toHaveStyle({ "--day-accuracy": width });
+  });
+  it("la période longue replie le tableau accessible au lieu de supprimer des dates", () => {
+    dashboard({ overview: overview(records, "month") });
+    const details = section(p.daily)
+      .getByText(p.daily, { selector: "summary" })
+      .closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    expect(details.querySelectorAll("tbody tr")).toHaveLength(29);
+  });
+  it("l'historique rend les dates réellement jouées, même un seul jour", () => {
+    dashboard({ overview: overview([record()], "all") });
+    expect(section(p.daily).getAllByRole("row")).toHaveLength(2);
+  });
+  it("la fenêtre configurée filtre réellement les réponses et leurs dates", () => {
+    dashboard({
+      overview: overview([record(), record({ createdAt: now - 4 * day })], "recent", 3),
+      sparklineWindowDays: 3,
+    });
+    expect(section(p.daily).getAllByRole("row")).toHaveLength(5);
+    expect(section(p.accuracy).getByText(p.answers(1, 1))).toBeInTheDocument();
+  });
+  it("une période vide affiche un repli accessible sans tableau trompeur", () => {
+    dashboard({ overview: overview([]) });
+    expect(section(p.daily).getByText(p.noAnswers)).toBeInTheDocument();
+    expect(section(p.daily).queryByRole("table")).not.toBeInTheDocument();
+  });
+  it("le temps moyen garde la virgule française et son échantillon sans prétendre mesurer la maîtrise", () => {
+    dashboard();
+    const speed = section(p.speed);
+    expect(speed.getByText("3,1 s")).toBeInTheDocument();
+    expect(speed.getByText(p.sample(100))).toBeInTheDocument();
+    expect(speed.getByText(p.speedHint)).toBeInTheDocument();
+    expect(speed.queryByText(p.stable)).not.toBeInTheDocument();
+  });
+  it("sans temps observé, le temps moyen reste absent", () => {
+    dashboard({ overview: overview([]) });
+    expect(section(p.speed).getByText(p.empty)).toBeInTheDocument();
+    expect(section(p.speed).getByText(p.sample(0))).toBeInTheDocument();
+  });
+});
+
+describe("ParentDashboard — accompagnement et rythme", () => {
+  it("formate les calculs à revoir et explique leur sélection", () => {
+    dashboard();
+    const review = section(p.review);
+    expect(review.getByText("6 × 7 = ?")).toBeInTheDocument();
+    expect(review.getByText("13 − 6 = ?")).toBeInTheDocument();
+    expect(review.getByText(p.reason.wrong)).toBeInTheDocument();
+    expect(review.getByText(p.reason.slow)).toBeInTheDocument();
+    expect(review.getByText(p.reviewHint)).toBeInTheDocument();
+    expect(review.getAllByRole("definition").map((d) => d.textContent)).toEqual(["1", "2", "1"]);
+  });
+  it("une clé malformée est montrée sans faire planter le carnet", () => {
+    dashboard({
+      stats: {
+        ...FULL_STATS,
+        reviewList: [
+          { ...FULL_STATS.reviewList[0], factKey: "legacy-key", reason: "wrong-and-slow" },
         ],
       },
-    };
-    render(<ParentDashboard {...BASE_PROPS} stats={allZero} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText(d.regularity.chartEmpty)).toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: d.regularity.chartLabel })).not.toBeInTheDocument();
-  });
-
-  it("graphique lisible avec un jour à 0 min : ce jour reste au plancher 4 % (jamais 0 %, #170)", () => {
-    const mixed: ParentStats = {
-      ...FULL_STATS,
-      regularity: {
-        ...FULL_STATS.regularity,
-        days: [
-          { dayOrdinal: 50, activeMs: 0, activeMinutes: 0, respect: "under" },
-          { dayOrdinal: 51, activeMs: 5 * 60_000, activeMinutes: 5, respect: "under" },
-        ],
-      },
-    };
-    render(<ParentDashboard {...BASE_PROPS} stats={mixed} progression={FULL_PROGRESSION} />);
-    // Ciblage PRÉCIS du graphique de régularité (`getByRole` par nom, PAS un `querySelector`
-    // générique `[role="img"]` — les 4 barres de justesse portent AUSSI `role="img"` et sont
-    // rendues AVANT dans le DOM, un sélecteur générique ciblerait la mauvaise barre en silence).
-    const chart = screen.getByRole("img", { name: d.regularity.chartLabel });
-    const bars = Array.from(chart.children) as HTMLElement[];
-    expect(bars).toHaveLength(2);
-    expect(bars[0].style.height).toBe("4%"); // jour à 0 min — plancher, jamais invisible
-    expect(bars[1].style.height).toBe("100%"); // jour au maximum de la fenêtre
-  });
-
-  it("aucune barre du graphique lisible n'a une hauteur nulle (rendu ≠ invisible, #170)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    const chart = screen.getByRole("img", { name: d.regularity.chartLabel });
-    const bars = Array.from(chart.children) as HTMLElement[];
-    expect(bars.length).toBeGreaterThan(0);
-    for (const bar of bars) {
-      expect(bar.style.height).not.toBe("0%");
-      expect(bar.style.height).not.toBe("");
-    }
-  });
-});
-
-describe("ParentDashboard — progression", () => {
-  it("monde/niveaux/créatures quand la progression est disponible", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByText("Monde 2")).toBeInTheDocument();
-    expect(screen.getByText("3 / 11 niveaux")).toBeInTheDocument();
-    expect(screen.getByText("5 créatures débloquées")).toBeInTheDocument();
-  });
-
-  it("repli neutre quand le socle n'est pas amorcé (progression null)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={null} />);
-    expect(screen.getByText(d.progression.unavailable)).toBeInTheDocument();
-  });
-
-  it('pluralisation FR (bug PR #239 "0 créatures") : "niveau"/"créature" SINGULIER à 0 et 1, PLURIEL à ≥2', () => {
-    const progressionWith = (totalLevels: number, creaturesCount: number): ProgressionSummary => ({
-      ...FULL_PROGRESSION,
-      levelsCompleted: 0,
-      totalLevels,
-      creaturesCount,
     });
-
-    const { rerender } = render(
-      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={progressionWith(1, 0)} />,
+    expect(section(p.review).getByText("legacy-key")).toBeInTheDocument();
+    expect(section(p.review).getByText(p.reason["wrong-and-slow"])).toBeInTheDocument();
+  });
+  it("une sélection vide et un profil jamais exploré ont des explications distinctes", () => {
+    const view = dashboard({ stats: EMPTY_STATS });
+    expect(section(p.review).getByText(p.reviewEmpty)).toBeInTheDocument();
+    view.rerender(<ParentDashboard {...BASE_PROPS} stats={EMPTY_STATS} overview={overview([])} />);
+    expect(section(p.review).getByText(p.reviewUnseen)).toBeInTheDocument();
+    expect(section(p.review).queryByText(p.reviewEmpty)).not.toBeInTheDocument();
+  });
+  it("les minutes estimées restent disponibles sans progression et leur méthode est liée", () => {
+    dashboard({ progression: null });
+    expect(section(p.today).getByText(p.minutes(18))).toBeInTheDocument();
+    expect(section(p.today).getByRole("link", { name: p.regularity })).toHaveAttribute(
+      "href",
+      "#parent-time-method",
     );
-    expect(screen.getByText("0 / 1 niveau")).toBeInTheDocument();
-    expect(screen.getByText("0 créature débloquée")).toBeInTheDocument();
-
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={progressionWith(1, 1)} />,
+    expect(
+      screen.getByText(
+        p.timeHint(
+          CONFIG_DEFAULTS.regularity.maxDayAmplitudeMinutes,
+          CONFIG_DEFAULTS.regularity.dayTimeZone,
+        ),
+      ),
+    ).toBeInTheDocument();
+    expect(section(p.regularity).getByText(p.rest)).toBeInTheDocument();
+  });
+  it("distingue zéro minute estimée d'une journée sans réponse", () => {
+    const view = dashboard({ stats: EMPTY_STATS });
+    expect(section(p.today).getByText(p.noToday)).toBeInTheDocument();
+    expect(section(p.today).getByText(p.empty)).toBeInTheDocument();
+    view.rerender(
+      <ParentDashboard
+        {...BASE_PROPS}
+        stats={{
+          ...FULL_STATS,
+          regularity: {
+            ...FULL_STATS.regularity,
+            today: { ...FULL_STATS.regularity.today!, activeMinutes: 0 },
+          },
+        }}
+      />,
     );
-    expect(screen.getByText("1 créature débloquée")).toBeInTheDocument();
-
-    rerender(
-      <ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={progressionWith(11, 2)} />,
-    );
-    expect(screen.getByText("0 / 11 niveaux")).toBeInTheDocument();
-    expect(screen.getByText("2 créatures débloquées")).toBeInTheDocument();
+    expect(section(p.today).getByText(p.zeroMinutes)).toBeInTheDocument();
+    expect(section(p.today).queryByText(p.noToday)).not.toBeInTheDocument();
+  });
+  it.each([0, 1, 2])("les jours et compagnons respectent le singulier français à %i", (n) => {
+    dashboard({
+      stats: {
+        ...FULL_STATS,
+        regularity: { ...FULL_STATS.regularity, daysPlayed: n, currentStreakDays: n },
+      },
+      progression: { ...FULL_PROGRESSION, creaturesCount: n },
+      pendingWorldsCount: n,
+    });
+    expect(
+      section(p.regularity).getByText(
+        `${n} jour${n > 1 ? "s" : ""} avec des réponses depuis le début`,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      section(p.regularity).getByText(
+        `${n} jour${n > 1 ? "s" : ""} consécutif${n > 1 ? "s" : ""} actuellement`,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      section(p.adventure).getByText(
+        `${n} compagnon${n > 1 ? "s" : ""} différent${n > 1 ? "s" : ""}`,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      section(p.adventure).getByRole("link", { name: `${n} monde${n > 1 ? "s" : ""} à regarder` }),
+    ).toHaveAttribute("href", "/parent/mondes");
+  });
+  it("montre le monde, les étapes et les compagnons conservés", () => {
+    dashboard();
+    expect(section(p.adventure).getByText(p.world(2))).toBeInTheDocument();
+    expect(section(p.adventure).getByText(p.levels(3, 11))).toBeInTheDocument();
+    expect(section(p.adventure).getByText(p.creatures(5))).toBeInTheDocument();
+  });
+  it("la progression indisponible a un repli neutre et conserve l'accès aux mondes", () => {
+    dashboard({ progression: null });
+    expect(section(p.adventure).getByText(p.adventureEmpty)).toBeInTheDocument();
+    expect(section(p.adventure).getByRole("link", { name: p.pending(0) })).toBeInTheDocument();
   });
 });
 
-describe("ParentDashboard — liens + sortie (repris de 7.1/7.5/7.3, inchangés)", () => {
-  it("expose les liens « Gérer les profils »/« Réglages » vers leurs routes", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByRole("link", { name: d.manageLink })).toHaveAttribute(
-      "href",
-      "/parent/profils",
-    );
-    expect(screen.getByRole("link", { name: d.settingsLink })).toHaveAttribute(
-      "href",
-      "/parent/reglages",
-    );
-  });
-
-  it("expose le lien « Mondes à valider » (story 7.9) — TOUJOURS affiché, même à 0 en attente", () => {
+describe("ParentDashboard — navigation et contraste du carnet", () => {
+  it("le cadre parent garde les accès, le profil suivi et la sortie", () => {
     render(
-      <ParentDashboard
-        {...BASE_PROPS}
-        pendingWorldsCount={0}
-        stats={FULL_STATS}
-        progression={FULL_PROGRESSION}
-      />,
+      <ParentShell>
+        <ParentDashboard {...BASE_PROPS} />
+      </ParentShell>,
     );
-    expect(screen.getByRole("link", { name: d.worldApprovalLink })).toHaveAttribute(
-      "href",
-      "/parent/mondes",
-    );
-    // Aucun repère de compte à 0 (jamais « 0 monde en attente », posture no-fail).
-    expect(screen.queryByText(/en attente/u)).toBeNull();
-  });
-
-  it("MUTATION-PROUVÉ : repère de compte pluralisé (FR EXACTE) quand des mondes attendent", () => {
-    const { rerender } = render(
-      <ParentDashboard
-        {...BASE_PROPS}
-        pendingWorldsCount={1}
-        stats={FULL_STATS}
-        progression={FULL_PROGRESSION}
-      />,
-    );
-    // SINGULIER à 1 (grammaire FR — promotion #239, jamais « 1 mondes »).
-    expect(screen.getByText("1 monde en attente")).toBeInTheDocument();
-
-    rerender(
-      <ParentDashboard
-        {...BASE_PROPS}
-        pendingWorldsCount={3}
-        stats={FULL_STATS}
-        progression={FULL_PROGRESSION}
-      />,
-    );
-    // PLURIEL à ≥2 — retirer `pluralize()` au profit d'un gabarit unique figé romprait ce test.
-    expect(screen.getByText("3 mondes en attente")).toBeInTheDocument();
-    expect(screen.queryByText("3 monde en attente")).toBeNull();
-  });
-
-  it("rend le bouton de sortie (ParentExitButton, testé isolément ailleurs)", () => {
-    render(<ParentDashboard {...BASE_PROPS} stats={FULL_STATS} progression={FULL_PROGRESSION} />);
-    expect(screen.getByRole("button", { name: d.exit })).toBeInTheDocument();
-  });
-});
-
-// ============================================================================
-// Contraste WCAG RÉSOLU (rétro #104/#125/#126 : audit de TOUS les glyphes/traits DISTINCTS de
-// l'écran, valeurs résolues depuis tokens.css — jamais seulement le nom du token). Deux thèmes.
-// ============================================================================
-describe("ParentDashboard — contraste WCAG résolu (tous glyphes/traits rendus)", () => {
-  const THEMES: Theme[] = ["light", "dark"];
-
-  it("texte primary/secondary ≥ 4.5:1 sur --card-bg (titres, valeurs, texte secondaire)", () => {
-    for (const theme of THEMES) {
-      const surface = resolveTokenColor(theme, "color-bg-secondary"); // = --card-bg
-      expect(
-        contrastRatio(resolveTokenColor(theme, "color-text-primary"), surface),
-      ).toBeGreaterThanOrEqual(4.5);
-      expect(
-        contrastRatio(resolveTokenColor(theme, "color-text-secondary"), surface),
-      ).toBeGreaterThanOrEqual(4.5);
+    for (const [label, href] of [
+      [p.dashboard, "/parent?profile=2"],
+      [p.settings, "/parent/reglages?profile=2"],
+      [p.profiles, "/parent/profils"],
+      [p.worlds, "/parent/mondes"],
+      [p.access, "/parent/acces"],
+    ]) {
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
     }
+    expect(screen.getByRole("link", { name: p.dashboard })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: strings.parent.dashboard.exit })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: p.skip })).toHaveAttribute("href", "#parent-content");
   });
-
-  it("carte de maîtrise : les 3 glyphes de statut (✓/~/!) ≥ 4.5:1 sur LEUR fond de badge propre", () => {
-    const pairs = [
-      ["parent-mastery-mastered-glyph", "parent-mastery-mastered-bg"],
-      ["parent-mastery-inprogress-glyph", "parent-mastery-inprogress-bg"],
-      ["parent-mastery-weak-glyph", "parent-mastery-weak-bg"],
-    ] as const;
-    for (const theme of THEMES) {
-      for (const [glyph, bg] of pairs) {
-        expect(
-          contrastRatio(resolveTokenColor(theme, glyph), resolveTokenColor(theme, bg)),
-        ).toBeGreaterThanOrEqual(4.5);
-      }
+  it.each(["light", "dark"] as Theme[])("texte du carnet lisible dans le thème %s", (theme) => {
+    const contrast = (text: string, bg: string) =>
+      contrastRatio(resolveTokenColor(theme, text), resolveTokenColor(theme, bg));
+    for (const text of ["parent-ink", "parent-muted"]) {
+      expect(contrast(text, "parent-paper")).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(text, "parent-soft")).toBeGreaterThanOrEqual(4.5);
     }
-  });
-
-  // NB : la bordure de statut (`--parent-mastery-*-border`) n'est PAS testée indépendamment ici —
-  // même patron que `--map-node-completed-border` (tokens.css) : c'est un renfort DÉCORATIF sur
-  // un badge déjà pleinement porté par le glyphe (✓/~/!, testé ci-dessus ≥4.5:1) ET le mot de
-  // statut affiché en texte à côté (Maîtrisé/En cours/À renforcer) — retirer la bordure ne
-  // réduirait aucune information (contrairement au trait de connexion de la carte, #170, qui LUI
-  // est le SEUL porteur du lien visuel entre nœuds et exige son propre ≥3:1).
-
-  it("barre de justesse : remplissage ≥ 3:1 sur le rail (élément NON-TEXTE, WCAG 1.4.11)", () => {
-    for (const theme of THEMES) {
-      expect(
-        contrastRatio(
-          resolveTokenColor(theme, "parent-bar-fill-bg"),
-          resolveTokenColor(theme, "parent-bar-track-bg"),
-        ),
-      ).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  it("graphique de régularité : remplissage ≥ 3:1 sur le rail (élément NON-TEXTE)", () => {
-    for (const theme of THEMES) {
-      expect(
-        contrastRatio(
-          resolveTokenColor(theme, "parent-chart-fill-bg"),
-          resolveTokenColor(theme, "parent-chart-track-bg"),
-        ),
-      ).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  it("sparkline de justesse quotidienne (#241) : remplissage ≥ 3:1 sur SON rail exact (élément NON-TEXTE)", () => {
-    // Fond de référence = le fond DOM RÉELLEMENT empilé derrière CETTE barre précise
-    // (`--parent-chart-track-bg`, réutilisé par `accuracySparklineTrackStyle`) — jamais supposé
-    // identique à la paire barre-de-justesse déjà testée plus haut (rétro #125 : un frère empilé
-    // n'a pas le fond du médaillon voisin ; chaque paire consommée a sa PROPRE garde).
-    for (const theme of THEMES) {
-      expect(
-        contrastRatio(
-          resolveTokenColor(theme, "parent-accuracy-sparkline-fill-bg"),
-          resolveTokenColor(theme, "parent-chart-track-bg"),
-        ),
-      ).toBeGreaterThanOrEqual(3);
-    }
-  });
-
-  it("puce « à revoir » : texte ≥ 4.5:1 sur son fond de puce propre", () => {
-    for (const theme of THEMES) {
-      expect(
-        contrastRatio(
-          resolveTokenColor(theme, "parent-review-chip-text"),
-          resolveTokenColor(theme, "parent-review-chip-bg"),
-        ),
-      ).toBeGreaterThanOrEqual(4.5);
-    }
+    expect(contrast("parent-accent-ink", "parent-accent")).toBeGreaterThanOrEqual(4.5);
+    expect(contrast("parent-line", "parent-paper")).toBeGreaterThanOrEqual(3);
   });
 });

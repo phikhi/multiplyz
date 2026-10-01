@@ -1,0 +1,107 @@
+{
+  "ok": true,
+  "initial": {
+    "coins": 30,
+    "shards": 10,
+    "eggs": 4
+  },
+  "playedLevels": 14,
+  "playedQuestions": 146,
+  "eggsOpened": 9,
+  "before": {
+    "coins": 60,
+    "shards": 60
+  },
+  "after": {
+    "coins": 60,
+    "shards": 0
+  },
+  "targetedSpends": 1,
+  "creature": "creature:0:0",
+  "art": "/generated/socle/creature/creature_world_0_0.png",
+  "concurrentReplay": true,
+  "geometry": [
+    {
+      "name": "01-not-enough",
+      "box": {
+        "x": 134,
+        "y": 250.296875,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "choice-1280",
+      "box": {
+        "x": 134,
+        "y": 230.390625,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "choice-1024",
+      "box": {
+        "x": 40,
+        "y": 230.15625,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "choice-390",
+      "box": {
+        "x": 16,
+        "y": 207.78125,
+        "width": 358,
+        "height": 358
+      }
+    },
+    {
+      "name": "choice-320",
+      "box": {
+        "x": 16,
+        "y": 207.78125,
+        "width": 288,
+        "height": 288
+      }
+    },
+    {
+      "name": "encounter-1280",
+      "box": {
+        "x": 134,
+        "y": 375.390625,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "encounter-1024",
+      "box": {
+        "x": 40,
+        "y": 363.15625,
+        "width": 440,
+        "height": 440
+      }
+    },
+    {
+      "name": "encounter-390",
+      "box": {
+        "x": 16,
+        "y": 345.1875,
+        "width": 358,
+        "height": 358
+      }
+    },
+    {
+      "name": "encounter-320",
+      "box": {
+        "x": 16,
+        "y": 386.78125,
+        "width": 288,
+        "height": 288
+      }
+    }
+  ],
+  "errors": []
+}

@@ -24,6 +24,7 @@ import { creatureArtRef } from "@/config/creatures";
 import type { AppDatabase } from "@/lib/db";
 import { characters, collection, collectionKey, type Rarity } from "@/lib/db/schema";
 import { strings } from "@/strings";
+import { creatureStageArt } from "./creature-stage-art";
 
 /**
  * Handle accepté par les écritures : la connexion applicative **ou** le handle de
@@ -64,14 +65,7 @@ export interface CollectionEntry {
   readonly stage: number;
   readonly count: number;
   readonly artRef: string;
-  /**
-   * Nombre de stades d'évolution possibles pour cette espèce (`characters.max_stage`, 1-3,
-   * ECONOMY §3.2/§4.4) — borne haute de `stage`. Aujourd'hui **toujours 1** (évolution
-   * différée, R4.4) : la fiche créature (WIREFRAMES §5b, story R3.2) l'utilise pour distinguer
-   * un stade **hors de portée** pour cette espèce (`> maxStage`, roadmap affichée mais
-   * verrouillée) d'un stade simplement pas encore atteint par le joueur — **affichage seul**,
-   * aucune dépense d'évolution ici (R4.4 câblera le bouton « Faire évoluer »).
-   */
+  /** Highest stage published in the catalogue; evolution additionally checks delivered arts. */
   readonly maxStage: number;
 }
 
@@ -254,6 +248,7 @@ export function loadCollection(db: DbHandle, profileId: number): CollectionEntry
         rarity: characters.rarity,
         story: characters.story,
         artRef: characters.artRef,
+        artRefStages: characters.artRefStages,
         maxStage: characters.maxStage,
       })
       .from(characters)
@@ -275,7 +270,7 @@ export function loadCollection(db: DbHandle, profileId: number): CollectionEntry
         stage: row.stage,
         maxStage: cat.maxStage,
         count: row.count,
-        artRef: cat.artRef,
+        artRef: creatureStageArt(cat, row.stage),
       },
     });
   }
@@ -334,6 +329,7 @@ export function loadCollectionEntry(
       rarity: characters.rarity,
       story: characters.story,
       artRef: characters.artRef,
+      artRefStages: characters.artRefStages,
       maxStage: characters.maxStage,
     })
     .from(characters)
@@ -354,7 +350,7 @@ export function loadCollectionEntry(
     stage: owned.stage,
     maxStage: cat.maxStage,
     count: owned.count,
-    artRef: cat.artRef,
+    artRef: creatureStageArt(cat, owned.stage),
   };
 }
 

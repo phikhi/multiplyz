@@ -19,6 +19,9 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
+    // Les scénarios worldgen lourds dépassent 5 s sous V8 coverage sur CI.
+    // Le budget de couverture reste indépendant et inchangé à 100 %.
+    testTimeout: 30_000,
     setupFiles: ["./vitest.setup.ts"],
     include: [
       "src/**/*.{test,spec}.{ts,tsx}",

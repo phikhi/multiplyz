@@ -3,6 +3,8 @@ import { householdExists } from "@/lib/auth/household";
 import { listProfiles } from "@/lib/auth/login";
 import { OnboardingFlow } from "./onboarding/OnboardingFlow";
 import { ProfileSelector } from "@/components/ProfileSelector";
+import { ForestHome } from "@/components/ForestHome";
+import { getCurrentChildSession } from "@/lib/auth/current-session";
 
 // Lecture DB à chaque requête (source de vérité serveur) : jamais prérendu au
 // build (sinon ouverture SQLite au build). Runtime Node explicite — better-sqlite3
@@ -18,10 +20,23 @@ export const runtime = "nodejs";
  *
  * Le styleguide vivant des design tokens a migré vers `/styleguide`.
  */
-export default function HomePage() {
+export default async function HomePage() {
   const db = getDb();
   if (!householdExists(db)) {
-    return <OnboardingFlow />;
+    return (
+      <ForestHome first>
+        <OnboardingFlow />
+      </ForestHome>
+    );
   }
-  return <ProfileSelector profiles={listProfiles(db)} />;
+  const session = await getCurrentChildSession();
+  const profiles = listProfiles(db);
+  return (
+    <ForestHome>
+      <ProfileSelector
+        profiles={profiles}
+        currentProfile={profiles.find((profile) => profile.id === session?.profileId)}
+      />
+    </ForestHome>
+  );
 }

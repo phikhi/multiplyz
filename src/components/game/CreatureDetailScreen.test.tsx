@@ -6,9 +6,7 @@ import { strings } from "@/strings";
 import type { CollectionEntry } from "@/lib/game/collection";
 import {
   contrastRatio,
-  rawTokenValue,
   resolveTokenColor,
-  themeBlock,
   type Theme,
 } from "@/components/game/scaffolds/test-support/tokens-css";
 
@@ -64,7 +62,7 @@ describe("CreatureDetailScreen — affichage (WIREFRAMES §5b)", () => {
 
   it("lien de retour vers la Collection (WIREFRAMES §5b ←)", () => {
     render(<CreatureDetailScreen entry={entry()} />);
-    const link = screen.getByRole("link", { name: strings.creatureDetail.back });
+    const link = screen.getByRole("link", { name: `← ${strings.creatureDetail.back}` });
     expect(link).toHaveAttribute("href", "/collection");
   });
 });
@@ -86,8 +84,8 @@ describe("CreatureDetailScreen — art EN GRAND (#180, story R3.1 note « fiche 
     expect(art).toHaveAttribute("src", "/generated/socle/creature/cloudfox.png");
     expect(art).toHaveAttribute("data-asset-state", "rendered");
     expect(art).toHaveAttribute("alt", "Nuagou");
-    expect(art?.style.width).toBe("var(--creature-detail-art-size)");
-    expect(document.querySelector("[data-creature-detail-placeholder]")).toBeNull();
+    expect(art?.style.width).toBe("var(--companion-art-size)");
+    expect(document.querySelector(".companion-silhouette")).toBeNull();
   });
 
   it("art_ref placeholder:// (état par défaut) ⇒ silhouette de repli EN GRAND, JAMAIS d'<img>", () => {
@@ -96,19 +94,8 @@ describe("CreatureDetailScreen — art EN GRAND (#180, story R3.1 note « fiche 
     expect(fallback?.tagName).toBe("SPAN");
     expect(fallback).toHaveAttribute("data-asset-state", "fallback");
     expect(fallback).toHaveAttribute("aria-label", "Braisille"); // alt consommé (non décoratif)
-    expect(document.querySelector("[data-creature-detail-placeholder]")).not.toBeNull();
+    expect(document.querySelector(".companion-silhouette")).not.toBeNull();
     expect(document.querySelector("img")).toBeNull();
-  });
-
-  it("le token --creature-detail-art-size domine (min(13.5rem, 62vw), responsive-capped) et n'est pas la vignette de grille", () => {
-    const detailSize = rawTokenValue(themeBlock("light"), "--creature-detail-art-size");
-    const collectionSize = rawTokenValue(themeBlock("light"), "--collection-placeholder-size");
-    // Payoff EN GRAND (review R3.2 Frontend/Game-design) : 13.5rem ≈ 216px domine la carte ≤34rem
-    // sur desktop, `62vw` scale-DOWN sur téléphone étroit → jamais de débordement (jsdom ne calcule
-    // pas `min()` : l'effet RENDU réel est prouvé par la garde E2E `artBox.width >= 180`).
-    expect(detailSize).toBe("min(13.5rem, 62vw)");
-    // Nettement au-dessus de la vignette de grille (--space-7, 48px) : jamais la même taille.
-    expect(detailSize).not.toBe(collectionSize);
   });
 });
 
@@ -189,7 +176,7 @@ describe("CreatureDetailScreen — renommage (réutilise RenameForm de Collectio
     render(<CreatureDetailScreen entry={entry({ displayName: "Braisille" })} />);
     renameActionMock.mockResolvedValue({ ok: true, nickname: "Flamme", error: null });
 
-    fireEvent.click(screen.getByRole("button", { name: `✏️ ${strings.collection.rename}` }));
+    fireEvent.click(screen.getByRole("button", { name: strings.collection.rename }));
     const input = screen.getByLabelText(strings.collection.renameLabel);
     fireEvent.change(input, { target: { value: "Flamme" } });
     fireEvent.click(screen.getByRole("button", { name: strings.collection.renameSubmit }));
@@ -203,12 +190,10 @@ describe("CreatureDetailScreen — renommage (réutilise RenameForm de Collectio
 
   it("annuler ferme le formulaire sans renommer", async () => {
     render(<CreatureDetailScreen entry={entry({ displayName: "Braisille" })} />);
-    fireEvent.click(screen.getByRole("button", { name: `✏️ ${strings.collection.rename}` }));
+    fireEvent.click(screen.getByRole("button", { name: strings.collection.rename }));
     fireEvent.click(screen.getByRole("button", { name: strings.collection.renameCancel }));
     await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: `✏️ ${strings.collection.rename}` }),
-      ).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: strings.collection.rename })).toBeInTheDocument(),
     );
     expect(renameActionMock).not.toHaveBeenCalled();
   });
@@ -217,7 +202,7 @@ describe("CreatureDetailScreen — renommage (réutilise RenameForm de Collectio
     render(<CreatureDetailScreen entry={entry({ displayName: "Braisille" })} />);
     renameActionMock.mockResolvedValue({ ok: false, nickname: null, error: "INVALID_NAME" });
 
-    fireEvent.click(screen.getByRole("button", { name: `✏️ ${strings.collection.rename}` }));
+    fireEvent.click(screen.getByRole("button", { name: strings.collection.rename }));
     fireEvent.change(screen.getByLabelText(strings.collection.renameLabel), {
       target: { value: "" },
     });
@@ -240,8 +225,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : le nom (h1, --collection-text) ≥ 4.5:1 sur le fond de carte (--collection-card-bg)",
     (theme) => {
-      const text = resolveTokenColor(theme, "--collection-text");
-      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      const text = resolveTokenColor(theme, "--forest-ink");
+      const bg = resolveTokenColor(theme, "--forest-cream");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -249,8 +234,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : l'histoire (--collection-text-muted) ≥ 4.5:1 sur le fond de carte",
     (theme) => {
-      const text = resolveTokenColor(theme, "--collection-text-muted");
-      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      const text = resolveTokenColor(theme, "--forest-muted");
+      const bg = resolveTokenColor(theme, "--forest-cream");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -258,8 +243,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : le glyphe/label de rareté (--collection-rarity-glyph, RarityBadge réutilisé) ≥ 4.5:1 sur le fond de carte",
     (theme) => {
-      const glyph = resolveTokenColor(theme, "--collection-rarity-glyph");
-      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      const glyph = resolveTokenColor(theme, "--forest-ink");
+      const bg = resolveTokenColor(theme, "--forest-cream");
       expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -267,8 +252,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : le lien retour (--collection-text) ≥ 4.5:1 sur le fond de PAGE (--color-bg-primary)",
     (theme) => {
-      const text = resolveTokenColor(theme, "--collection-text");
-      const bg = resolveTokenColor(theme, "--color-bg-primary");
+      const text = resolveTokenColor(theme, "--forest-mint");
+      const bg = resolveTokenColor(theme, "--forest-bg");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -276,8 +261,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : le bouton « Renommer » (--collection-text) ≥ 4.5:1 sur son fond (--color-bg-tertiary)",
     (theme) => {
-      const text = resolveTokenColor(theme, "--collection-text");
-      const bg = resolveTokenColor(theme, "--color-bg-tertiary");
+      const text = resolveTokenColor(theme, "--forest-ink");
+      const bg = resolveTokenColor(theme, "--forest-gold");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -285,8 +270,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : les pips de stade ATTEINTS/ACTUEL (--collection-text) ≥ 4.5:1 sur le fond de carte",
     (theme) => {
-      const text = resolveTokenColor(theme, "--collection-text");
-      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      const text = resolveTokenColor(theme, "--forest-ink");
+      const bg = resolveTokenColor(theme, "--forest-cream");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -294,8 +279,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : les pips de stade VERROUILLÉS (--collection-text-muted) ≥ 4.5:1 sur le fond de carte",
     (theme) => {
-      const text = resolveTokenColor(theme, "--collection-text-muted");
-      const bg = resolveTokenColor(theme, "--collection-card-bg");
+      const text = resolveTokenColor(theme, "--forest-muted");
+      const bg = resolveTokenColor(theme, "--forest-cream");
       expect(contrastRatio(text, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );
@@ -303,8 +288,8 @@ describe("CreatureDetailScreen — contraste WCAG résolu des glyphes rendus (#1
   it.each(["light", "dark"] as Theme[])(
     "%s : le glyphe de silhouette placeholder (--collection-placeholder-glyph) ≥ 4.5:1 sur son fond (--collection-placeholder-bg)",
     (theme) => {
-      const glyph = resolveTokenColor(theme, "--collection-placeholder-glyph");
-      const bg = resolveTokenColor(theme, "--collection-placeholder-bg");
+      const glyph = resolveTokenColor(theme, "--forest-gold");
+      const bg = resolveTokenColor(theme, "--forest-bg");
       expect(contrastRatio(glyph, bg)).toBeGreaterThanOrEqual(4.5);
     },
   );

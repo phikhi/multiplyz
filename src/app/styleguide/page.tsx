@@ -1,8 +1,9 @@
+import { BRAND_NAME } from "@/config/brand";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 // Scaffold: texte minimal en constante locale. Centralisé en #14 (i18n).
 const COPY = {
-  title: "multiplyz",
+  title: BRAND_NAME,
   subtitle: "Design tokens — scaffold visuel",
   sections: {
     colors: "Couleurs",

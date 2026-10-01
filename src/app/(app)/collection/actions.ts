@@ -2,6 +2,8 @@
 
 import { getDb } from "@/lib/db";
 import { getCurrentChildProfileId } from "@/lib/engine/current-profile";
+import { getMapConfig } from "@/config/server-config";
+import { loadCollectionAlbum } from "@/lib/game/collection-album";
 import {
   loadCollection,
   renameCharacter,
@@ -34,6 +36,13 @@ export async function collectionAction(): Promise<CollectionActionResult> {
     return { entries: null };
   }
   return { entries: loadCollection(getDb(), profileId) };
+}
+
+/** Album uses the authenticated profile; no client-provided world or possession. */
+export async function collectionAlbumAction() {
+  const profileId = await getCurrentChildProfileId();
+  if (profileId === null) return null;
+  return loadCollectionAlbum(getDb(), profileId, getMapConfig().levelsPerWorld);
 }
 
 /** Réponse d'un renommage : succès (nouveau nom) ou refus neutre. */
