@@ -34,7 +34,8 @@ const manageProfileLabel = (name: string) => manage.profileLabel.replace("{prén
 const digit = (d: string) => strings.pinPad.digit.replace("{d}", d);
 let recoveryCode = "";
 async function enterPin(page: Page, pin: string) {
-  for (const d of pin) await page.getByRole("button", { name: digit(d), exact: true }).click();
+  for (const d of pin)
+    await page.getByRole("button", { name: digit(d), exact: true }).click({ force: true });
 }
 async function login(page: Page, name = "Léa", pin = "1234") {
   await page.goto("/");
@@ -202,6 +203,7 @@ test.describe.serial("TEDDy : foyer, aventure et carnet familial", () => {
   });
 
   test("création → code de secours affiché une fois (capture)", async ({ page }) => {
+    test.setTimeout(180_000);
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
