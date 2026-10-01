@@ -96,3 +96,62 @@ it("keeps the original inspection contract for assets not opting into the new ch
     true,
   );
 });
+
+it.each([
+  null,
+  1,
+  {},
+  { candidates: [{ finishReason: "STOP" }] },
+  { candidates: [{ finishReason: "STOP", content: {} }] },
+  { candidates: [{ finishReason: "STOP", content: { parts: [{}] } }] },
+])("rejects incomplete model envelopes: %j", (value) => {
+  expect(() => parseInspection(value)).toThrow();
+});
+it("rejects invalid identity reference combinations before any provider request", async () => {
+  const fetchImpl = vi.fn();
+  const inspect = createVisionInspector({
+    apiKey: "unit",
+    model: "test",
+    style: "soft",
+    readAsset: vi.fn(),
+    readMaster: vi.fn(),
+    fetchImpl,
+  });
+  await expect(
+    inspect({ kind: "background", ref: "x", requireReadableFace: true }),
+  ).rejects.toThrow("réservé aux créatures");
+  for (const asset of [
+    { kind: "creature" as const, ref: "x", stage: 3 as const, babyRef: "b", adultRef: "a" },
+    { kind: "creature" as const, ref: "x", stage: 2 as const, adultRef: "a" },
+    {
+      kind: "creature" as const,
+      ref: "x",
+      stage: 2 as const,
+      babyRef: "b",
+      adultRef: "a",
+      previousRef: "p",
+    },
+  ])
+    await expect(inspect(asset)).rejects.toThrow("Référence adulte");
+  expect(fetchImpl).not.toHaveBeenCalled();
+});
+it.each([
+  "not-json",
+  JSON.stringify({}),
+  JSON.stringify({ error: { message: "unit provider error" } }),
+])("retains safe provider diagnostics: %s", async (body) => {
+  const pixels = await sharp({ create: { width: 2, height: 2, channels: 3, background: "white" } })
+    .png()
+    .toBuffer();
+  const inspect = createVisionInspector({
+    apiKey: "unit",
+    model: "test",
+    style: "soft",
+    readAsset: () => pixels,
+    readMaster: () => pixels,
+    fetchImpl: vi.fn(async () => new Response(body, { status: 503 })),
+  });
+  await expect(inspect({ kind: "background", ref: "x" })).rejects.toThrow(
+    body.includes("provider error") ? "<REDACTED> provider error" : "Réponse sans diagnostic",
+  );
+});

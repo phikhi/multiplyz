@@ -101,3 +101,63 @@ it("refuses to include an approved age in the repair scope", async () => {
     "Une image approuvée ne doit pas être reprise",
   );
 });
+
+it.each([
+  "plan",
+  "summary",
+  "result",
+  "missing-repair",
+  "matte",
+  "prompt",
+  "unknown-status",
+  "extra-repair",
+])("refuses corrupt repair input: %s", async (scenario) => {
+  const f = await setup();
+  const repair = loadBatchRepair(f.directory, f.worlds);
+  if (scenario === "plan") {
+    f.save("renewal-batch-repair-plan.json", { ...f.plan, version: 2 });
+    expect(repair.verify).toThrow("Sources");
+    return;
+  }
+  if (scenario === "summary") {
+    f.save("renewal-batch/summary.json", {});
+    expect(repair.verify).toThrow("Sources");
+    return;
+  }
+  if (scenario === "result") {
+    f.save("renewal-batch/1-0-2/result.json", {});
+    expect(repair.verify).toThrow("Résultat source");
+    return;
+  }
+  if (scenario === "missing-repair") f.plan.repairs.shift();
+  if (scenario === "matte") f.plan.repairs[1].sha256 = "wrong";
+  if (scenario === "prompt") f.plan.repairs[0].prompt = "short";
+  if (scenario === "extra-repair") f.plan.repairs.push({ key: "99-0-1", prompt: "outside" });
+  if (scenario === "unknown-status") {
+    f.save("renewal-batch/1-0-2/result.json", { status: "unknown" });
+    f.plan.results["1-0-2"] = batchHash(
+      readFileSync(join(f.directory, "renewal-batch/1-0-2/result.json")),
+    );
+  }
+  f.save("renewal-batch-repair-plan.json", f.plan);
+  expect(() => loadBatchRepair(f.directory, f.worlds)).toThrow(
+    {
+      "missing-repair": "Réparation manquante",
+      matte: "Détourage local",
+      prompt: "Description",
+      "unknown-status": "Statut source",
+      "extra-repair": "Réparation hors",
+    }[scenario],
+  );
+});
+it("allows an uncertain failed request to be explicitly repaired", async () => {
+  const f = await setup();
+  f.save("renewal-batch/1-0-2/result.json", { status: "uncertain" });
+  f.plan.results["1-0-2"] = batchHash(
+    readFileSync(join(f.directory, "renewal-batch/1-0-2/result.json")),
+  );
+  f.save("renewal-batch-repair-plan.json", f.plan);
+  expect(batchTasks(loadBatchRepair(f.directory, f.worlds).worlds).map((task) => task.key)).toEqual(
+    ["1-0-2"],
+  );
+});

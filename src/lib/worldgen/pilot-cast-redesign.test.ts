@@ -87,3 +87,19 @@ it("does not mix another approved baby group into this correction", () => {
     loadCastRedesign(directory, { ...approved, artRefs: [...approved.artRefs].reverse() }),
   ).toThrow(/identités/);
 });
+
+it.each(["recipe", "hash", "arts"])("rejects invalid redesign evidence: %s", (scenario) => {
+  const path = join(directory, "cast-growth-redesign-plan.json");
+  const recipe = JSON.parse(readFileSync(path, "utf8"));
+  if (scenario === "recipe") recipe.version = 2;
+  if (scenario === "hash") recipe.draftSha256 = "changed";
+  if (scenario === "arts") recipe.sourceArts = [];
+  save(path, recipe);
+  expect(() => loadCastRedesign(directory, approved)).toThrow(
+    {
+      recipe: "Source de refonte",
+      hash: "Résultat de croissance source",
+      arts: "Arts sources incomplets",
+    }[scenario],
+  );
+});

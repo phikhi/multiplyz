@@ -117,3 +117,33 @@ it("requires visual acceptance in addition to positive QA", () => {
   save("validated-cast-approval.json", { ...approval, visualApproved: false });
   expect(() => loadValidatedPilotCast(directory, "unused")).toThrow(/Accord final/);
 });
+it.each(["hash", "completion", "trace"])(
+  "rejects invalid final validation evidence: %s",
+  (scenario) => {
+    if (scenario === "hash") approval.markerSha256 = "changed";
+    if (scenario === "completion") {
+      result.fullValidation = false;
+      save(`arbelune-study-inspections/${run}-result.json`, result);
+      approval.resultSha256 = hash(
+        readFileSync(join(directory, `arbelune-study-inspections/${run}-result.json`)),
+      );
+    }
+    if (scenario === "trace") {
+      const trace = readFileSync(join(directory, "requests.jsonl"), "utf8")
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      trace[1].status = 503;
+      writeFileSync(
+        join(directory, "requests.jsonl"),
+        trace.map((e) => JSON.stringify(e)).join("\n"),
+      );
+      approval.traceSha256 = hash(JSON.stringify(trace));
+    }
+    save("validated-cast-approval.json", approval);
+    expect(() => loadValidatedPilotCast(directory, "unused")).toThrow(
+      { hash: "Source du groupe", completion: "validation complète", trace: "Trace des dix-huit" }[
+        scenario
+      ],
+    );
+  },
+);

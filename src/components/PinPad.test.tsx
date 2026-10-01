@@ -58,3 +58,28 @@ describe("PinPad (pavé partagé, contrôlé)", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 });
+
+it("ignores shortcuts, repeated and consumed keys, and typing in a form field", () => {
+  const onChange = vi.fn();
+  render(
+    <>
+      <input aria-label="name" />
+      <PinPad value="" onChange={onChange} label={LABEL} />
+    </>,
+  );
+  for (const options of [
+    { ctrlKey: true },
+    { altKey: true },
+    { metaKey: true },
+    { repeat: true },
+  ]) {
+    fireEvent.keyDown(window, { key: "1", ...options });
+  }
+  const consumed = new KeyboardEvent("keydown", { key: "1", cancelable: true });
+  consumed.preventDefault();
+  window.dispatchEvent(consumed);
+  fireEvent.keyDown(screen.getByRole("textbox"), { key: "1" });
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.keyDown(window, { key: "2" });
+  expect(onChange).toHaveBeenLastCalledWith("2");
+});

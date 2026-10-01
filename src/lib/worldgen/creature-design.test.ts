@@ -244,3 +244,29 @@ it("records non-Error planner failures and preserves the request marker to preve
   await expect(savedCreatureDesign(directory, input, planner)).rejects.toThrow("déjà demandée");
   expect(planner).toHaveBeenCalledOnce();
 });
+
+it.each([null, false, {}, { creatures: null }])("rejects a missing creature array: %j", (value) => {
+  expect(() => validateCreatureDesign(value, 6, "magic", [])).toThrow(
+    "Conception de créatures absente",
+  );
+});
+it("rejects an unknown habitat and an incomplete cast before reading concepts", () => {
+  expect(() => validateCreatureDesign(testCreatureDesign(), 6, "unknown", [])).toThrow("Milieu");
+  expect(() => validateCreatureDesign({ creatures: [] }, 6, "magic", [])).toThrow("nombre");
+});
+it.each([null, 4])("rejects malformed concepts: %j", (value) => {
+  const plan = testCreatureDesign();
+  const creatures: unknown[] = [...plan.creatures];
+  creatures[0] = value;
+  expect(() => validateCreatureDesign({ creatures }, 6, "magic", [])).toThrow("Concept");
+});
+it.each([undefined, "ab", "a".repeat(701)])("rejects invalid description lengths: %s", (value) => {
+  const plan = testCreatureDesign();
+  const creatures = [{ ...plan.creatures[0], story: value }, ...plan.creatures.slice(1)];
+  expect(() => validateCreatureDesign({ creatures }, 6, "magic", [])).toThrow("Description");
+});
+it("rejects banned content before accepting a complete design", () => {
+  const plan = testCreatureDesign();
+  plan.creatures[0].story = "blood and violence";
+  expect(() => validateCreatureDesign(plan, 6, "magic", [])).toThrow("contenu");
+});

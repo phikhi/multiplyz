@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { testCreatureDesign } from "./creature-design.test-helper";
-import { previewCreatureCast } from "./creature-cast-preview";
+import { previewCreatureCast, repairCreatureCast } from "./creature-cast-preview";
 import { createWorldAssetStore } from "./runtime-assets";
 import { loadWorldGenConfig } from "@/config/server-config";
 
@@ -107,4 +107,43 @@ it("saves each new image before a later interruption", async () => {
   expect(onImage.mock.calls[0][0].artRefs).toHaveLength(1);
   expect(handlers.inspect).not.toHaveBeenCalled();
   expect(readFileSync(join(storage, oldRef))).toEqual(oldBytes);
+});
+
+it("rejects incomplete ecology verdicts", async () => {
+  const handlers = deps();
+  await expect(
+    previewCreatureCast(testCreatureDesign(), storage, {
+      ...handlers,
+      inspect: async () => ({ detectedText: "", unsafeScore: 0, styleScore: 1 }),
+    }),
+  ).rejects.toThrow("Verdict de milieu");
+});
+it("checks repair identity, full budget and repeated pixels before inspecting", async () => {
+  const plan = testCreatureDesign();
+  const source = { plan, artRefs: plan.creatures.map(() => oldRef) };
+  const handlers = deps();
+  await expect(repairCreatureCast(source, plan, -1, storage, handlers)).rejects.toThrow(
+    "Correction limitée",
+  );
+  await expect(
+    repairCreatureCast(source, plan, 0, storage, { ...handlers, remainingUnits: () => 0 }),
+  ).rejects.toThrow("Budget insuffisant");
+  await expect(
+    repairCreatureCast(source, plan, 0, storage, { ...handlers, generate: async () => oldBytes }),
+  ).rejects.toThrow("mêmes pixels");
+  expect(handlers.inspect).not.toHaveBeenCalled();
+});
+it("can repair the legendary without optional image checkpoints", async () => {
+  const plan = testCreatureDesign();
+  const source = { plan, artRefs: plan.creatures.map(() => oldRef) };
+  const handlers = deps();
+  const result = await repairCreatureCast(
+    source,
+    plan,
+    plan.creatures.length - 1,
+    storage,
+    handlers,
+  );
+  expect(result.fullValidation).toBe(true);
+  expect(handlers.onDraft.mock.calls[0][0].artRefs.at(-1)).toContain("legendary.png");
 });

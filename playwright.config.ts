@@ -1,11 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
+import { realpathSync } from "node:fs";
+
+if (process.env.TEDDY_E2E_ROOT !== realpathSync(process.cwd())) {
+  throw new Error("Run pnpm test:e2e: the browser suite requires a fresh isolated checkout.");
+}
 
 const PORT = Number(process.env.PORT) || 3104;
 const baseURL = `http://localhost:${PORT}`;
 
-// Base SQLite dédiée à l'E2E (jamais la base de dev). Wipée à froid par
-// `global-setup.ts` puis migrée au boot du serveur → état « foyer vide »
-// déterministe, requis par le gating 1er usage (#2.2) et le round-trip health.
+// Fresh checkout allocated by scripts/e2e-isolated.mjs; no existing database is removed.
 const E2E_DATABASE_PATH = "data/e2e.sqlite";
 
 export default defineConfig({
@@ -13,11 +16,11 @@ export default defineConfig({
   // E2E uses one shared migrated SQLite fixture; parallel test files race on
   // sessions and seeded profiles. Keep the browser matrix deterministic in CI.
   fullyParallel: false,
-  workers: process.env.CI ? 1 : undefined,
+  workers: 1,
+  timeout: 60_000,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   reporter: process.env.CI ? [["html", { open: "never" }], ["list"]] : "list",
-  globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL,
     trace: "on-first-retry",
@@ -61,9 +64,9 @@ export default defineConfig({
     // E2E `world/e2e/…` (les deux fixtures pointent la même image committée, mais des URLs
     // publiques différentes — les assertions `toContain("world/e2e/…")` attendent précisément
     // celle-ci). `next dev` seul saute ce double-amorçage, la migration ayant déjà tourné ci-dessus.
-    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && tsx e2e/seed-canari.cli.ts && tsx e2e/seed-boss-progress.cli.ts && tsx e2e/seed-boutique.cli.ts && next dev --port ${PORT}`,
+    command: `pnpm db:migrate && tsx e2e/seed-world-assets.ts && tsx e2e/seed-sibling.cli.ts && tsx e2e/seed-pending-worlds.cli.ts && tsx e2e/seed-collection.cli.ts && tsx e2e/seed-map-progress.cli.ts && tsx e2e/seed-accuracy-history.cli.ts && tsx e2e/seed-canari.cli.ts && tsx e2e/seed-boss-progress.cli.ts && tsx e2e/seed-boutique.cli.ts && next dev --webpack --port ${PORT}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     env: { ...process.env, DATABASE_PATH: E2E_DATABASE_PATH },
   },

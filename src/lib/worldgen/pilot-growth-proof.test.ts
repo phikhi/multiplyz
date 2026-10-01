@@ -1565,3 +1565,203 @@ it("rejects full validation when a later peer fails despite a passing priority l
     published: false,
   });
 });
+
+// Stored evidence is untrusted input: exercise the guard behind each hash check as
+// well as a stale hash. All evidence and images below belong to this test's temp dir.
+function revise(path: string, change: (value: ReturnType<typeof JSON.parse>) => void) {
+  const full = join(directory, path),
+    value = JSON.parse(readFileSync(full, "utf8"));
+  change(value);
+  save(full, value);
+  return hash(readFileSync(full));
+}
+it.each(["version", "sources"])("rejects incomplete adult recipe: %s", (field) => {
+  revise("growth-proof-plan.json", (value) => {
+    if (field === "version") value.version = 2;
+    else value.sourceArts = [];
+  });
+  expect(() => loadGrowthProof(directory, cast)).toThrow(
+    field === "version" ? /Essai d’adulte/ : /Arts sources/,
+  );
+});
+it.each(["missing-stage", "duplicate", "missing-signals"])(
+  "rejects adult preview: %s",
+  async (failure) => {
+    const proof = loadGrowthProof(directory, cast),
+      handlers = deps();
+    if (failure === "missing-stage") delete proof.source.stageArt[0][2];
+    if (failure === "duplicate")
+      handlers.generate.mockResolvedValue(
+        createWorldAssetStore(storage).read(proof.source.artRefs[0]),
+      );
+    if (failure === "missing-signals")
+      handlers.inspect.mockResolvedValue({ detectedText: "", unsafeScore: 0, styleScore: 1 });
+    await expect(previewAdultGrowthProof(proof, storage, handlers)).rejects.toThrow(
+      /Stades de comparaison|recopie|Signaux/,
+    );
+  },
+);
+it("rejects a stale adult evidence hash", async () => {
+  await approveAdult();
+  revise("growth-adolescent-approval.json", (value) => {
+    value.draftSha256 = "stale";
+  });
+  expect(() => loadAdolescentProof(directory, cast)).toThrow(/Fichier de l’adulte/);
+});
+it("rejects an invalid adolescent clarification recipe", async () => {
+  await clarifyAfterRefusal();
+  revise("growth-adolescent-clarification.json", (value) => {
+    value.version = 2;
+  });
+  expect(() => loadClarifiedAdolescentProof(directory, cast)).toThrow(/Clarification/);
+});
+it.each(["missing-adult", "duplicate", "missing-signals"])(
+  "rejects adolescent preview: %s",
+  async (failure) => {
+    const proof = await approveAdult(),
+      handlers = adolescentDeps();
+    if (failure === "missing-adult") delete proof.source.stageArt[0][3];
+    if (failure === "duplicate")
+      handlers.generate.mockResolvedValue(
+        createWorldAssetStore(storage).read(proof.source.artRefs[0]),
+      );
+    if (failure === "missing-signals")
+      handlers.inspect.mockResolvedValue({ detectedText: "", unsafeScore: 0, styleScore: 1 });
+    await expect(previewAdolescentGrowthProof(proof, storage, handlers)).rejects.toThrow(
+      /Adulte validé|recopie|Signaux/,
+    );
+  },
+);
+it.each(["hash", "result", "sources", "verdict"])(
+  "rejects cast completion evidence: %s",
+  async (failure) => {
+    await approveLineage();
+    revise("cast-completion-plan.json", (value) => {
+      if (failure === "hash") value.draftSha256 = "stale";
+      if (failure === "sources") value.sourceArts = [];
+      if (failure === "result" || failure === "verdict")
+        value.resultSha256 = revise(
+          `growth-adolescent-clarifications/${value.lineageRun}-result.json`,
+          (result) => {
+            if (failure === "result") result.checks = [];
+            else result.checks[0].inspection.styleScore = 0;
+          },
+        );
+    });
+    expect(() => loadCastCompletion(directory, cast)).toThrow(
+      /Lignée validée modifiée|Lignée différente|Arts sources|Verdict/,
+    );
+  },
+);
+it("rejects duplicate pixels during cast completion", async () => {
+  const proof = await approveLineage(),
+    handlers = completionDeps();
+  handlers.generate.mockResolvedValue(createWorldAssetStore(storage).read(proof.source.artRefs[0]));
+  await expect(previewCastCompletion(proof, storage, handlers)).rejects.toThrow(/recopie/);
+});
+it("rejects missing comparison signals during cast inspection", async () => {
+  const proof = await approveLineage(),
+    handlers = completionDeps();
+  handlers.inspect.mockResolvedValue({ detectedText: "", unsafeScore: 0, styleScore: 1 });
+  await expect(previewCastCompletion(proof, storage, handlers)).rejects.toThrow(/Signaux/);
+});
+it.each(["marker", "result", "trace", "raw", "draft"])(
+  "refuses recovery of altered stopped evidence: %s",
+  async (failure) => {
+    const { completion } = await stoppedCompletion();
+    if (failure === "marker")
+      revise("cast-completion-started.json", (v) => {
+        v.approvedLineageRun = "other";
+      });
+    if (failure === "result")
+      revise(`cast-completions/${run}-result.json`, (v) => {
+        v.outcome = "rejected";
+      });
+    if (failure === "trace") writeFileSync(join(directory, "requests.jsonl"), "");
+    if (failure === "raw")
+      writeFileSync(join(directory, "storage/worldgen/raw/210-1.png"), await pixels(1));
+    if (failure === "draft")
+      revise(`cast-completions/${run}-draft-1.json`, (v) => {
+        v.artRefs[0] = "modified";
+      });
+    await expect(prepareCastRecovery(directory, completion, recoveryCrop)).rejects.toThrow(
+      /Source de récupération|arrêt technique|Trace de génération|Image brute|Brouillon modifié/,
+    );
+  },
+);
+it("refuses an invalid recovery crop", async () => {
+  const { completion } = await stoppedCompletion();
+  await expect(
+    prepareCastRecovery(directory, completion, { ...recoveryCrop, width: 1 }),
+  ).rejects.toThrow(/Rectangle/);
+});
+it.each(["inputs", "path", "hash", "arts"])(
+  "refuses altered prepared recovery: %s",
+  async (failure) => {
+    const { completion } = await stoppedCompletion();
+    await prepareCastRecovery(directory, completion, recoveryCrop);
+    revise("cast-completion-recovery.json", (v) => {
+      if (failure === "inputs") v.inputs = [];
+      if (failure === "path") v.prepared.path = "outside.json";
+      if (failure === "hash") v.prepared.sha256 = "stale";
+      if (failure === "arts") v.arts = [];
+    });
+    expect(() => loadCastRecovery(directory, completion)).toThrow(
+      /Récupération détachée|Chemin du groupe|Groupe récupéré modifié|dix-sept autres/,
+    );
+  },
+);
+it.each(["recipe", "hash", "result", "sources"])("refuses altered study: %s", async (failure) => {
+  const { completion } = await duplicatedArbelunePair();
+  revise("arbelune-study-plan.json", (v) => {
+    if (failure === "recipe") v.version = 2;
+    if (failure === "hash") v.markerSha256 = "stale";
+    if (failure === "sources") v.sourceArts = [];
+    if (failure === "result")
+      v.resultSha256 = revise(`arbelune-adolescents/${v.sourceRun}-result.json`, (r) => {
+        r.outcome = "active";
+      });
+  });
+  expect(() => loadArbeluneStudy(directory, completion)).toThrow(
+    /Étude d’Arbélune|Source ou rejet|Arts sources|résultat terminal/,
+  );
+});
+it("refuses invalid anatomy recipe", async () => {
+  const { completion } = await approvedArbeluneStudy();
+  revise("arbelune-study-anatomy-plan.json", (v) => {
+    v.version = 2;
+  });
+  expect(() => loadArbeluneStudyAnatomy(directory, completion)).toThrow(/Correction anatomique/);
+});
+it.each(["approval", "hash", "result"])(
+  "refuses altered accepted study evidence: %s",
+  async (failure) => {
+    const { completion, crops } = await acceptedAnatomyStudy();
+    revise("arbelune-study-visual-approval.json", (v) => {
+      if (failure === "approval") v.visualApproved = false;
+      if (failure === "hash") v.markerSha256 = "stale";
+      if (failure === "result")
+        v.resultSha256 = revise(`arbelune-study-anatomies/${v.sourceRun}-result.json`, (r) => {
+          r.published = true;
+        });
+    });
+    await expect(prepareStudyStages(directory, completion, crops)).rejects.toThrow(
+      /Accord visuel|Source de l’étude|étude acceptée/,
+    );
+  },
+);
+it.each(["recipe", "hash", "arts"])(
+  "refuses altered extracted stage evidence: %s",
+  async (failure) => {
+    const { completion, crops } = await acceptedAnatomyStudy();
+    await prepareStudyStages(directory, completion, crops);
+    revise("arbelune-study-stages.json", (v) => {
+      if (failure === "recipe") v.sourceRun = "wrong";
+      if (failure === "hash") v.prepared.sha256 = "stale";
+      if (failure === "arts") v.arts = [];
+    });
+    expect(() => loadStudyStages(directory, completion)).toThrow(
+      /Stades détachés|Groupe extrait modifié|seize autres/,
+    );
+  },
+);

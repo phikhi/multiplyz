@@ -153,3 +153,12 @@ it("accepts the authorized 40 EUR ceiling only after the 10 and 30 EUR agreement
   });
   expect(() => pilotCeilingEur(directory)).toThrow(/invalide/);
 });
+it("rejects a rehashed but incomplete approved result", () => {
+  const path = join(directory, "cast-growth-approval.json");
+  const approval = JSON.parse(readFileSync(path, "utf8"));
+  const resultPath = join(directory, "cast-previews", `${id}-result.json`);
+  save(resultPath, { outcome: "rejected", checks: [] });
+  approval.resultSha256 = sha(readFileSync(resultPath));
+  save(path, approval);
+  expect(() => loadApprovedCast(directory, planPath)).toThrow("Aperçu validé incomplet");
+});

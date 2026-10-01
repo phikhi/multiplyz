@@ -63,3 +63,17 @@ it("fails before a resume can make any call if a completed cached image is corru
   writeFileSync(join(directory, "storage/worldgen/raw/1-0.png"), "corrupted");
   await expect(loadPilotImageCache(directory)).rejects.toThrow();
 });
+
+it("returns no cache for a fresh directory or a successful request without archived pixels", async () => {
+  const empty = mkdtempSync(join(tmpdir(), "teddy-empty-cache-"));
+  try {
+    expect((await loadPilotImageCache(empty)).size).toBe(0);
+    writeFileSync(
+      join(empty, "requests.jsonl"),
+      '{"call":1,"type":"image","prompts":["x"],"referenceSha256":[]}\n{"call":1,"status":200}\n',
+    );
+    expect((await loadPilotImageCache(empty)).size).toBe(0);
+  } finally {
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
